@@ -2,21 +2,29 @@ from rest_framework.views import APIView
 from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.pagination import PageNumberPagination
 
 from .models import PasswordResetOTP
 from .utils import generate_otp, send_otp_email
 from django.db.models import Q
-
+from django.utils import timezone
+from datetime import timedelta
+import secrets
+import string
 
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUserRole,IsFarmer,IsVerifiedUser,IsATUser,IsBPUser
-from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile
+from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,PasswordResetOTP
 from rest_framework import serializers 
 from .serializers import (
     FarmerRegisterSerializer,
     FarmerProfileSerializer,
+    FarmerListSerializer,
+    FarmerFullDetailSerializer,
+    OfficialListSerializer,
+    ArchiveUserSerializer,
     AdminCreateUserSerializer,
     AdminCreateATSerializer,
     AdminCreateBPSerializer,
@@ -26,6 +34,9 @@ from .serializers import (
 )
 
 from django.contrib.auth import get_user_model
+
+ALLOWED_ORDERING = ['date_joined', '-date_joined', 'last_name', '-last_name', 'first_name', '-first_name']
+
 
 User = get_user_model()
 
@@ -50,7 +61,7 @@ class LoginView(APIView):
 
             if user is None:
                 return Response({
-                    "error": "User not found"
+                    "error": "Invalid credentials"
                 }, status=404)
 
             # 🔐 Check password manually
@@ -81,6 +92,11 @@ class LoginView(APIView):
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class StandardPagination(PageNumberPagination):
+    page_size            = 10          # 10 records per page
+    page_size_query_param = 'page_size' # allow ?page_size=20 override
+    max_page_size        = 100
 
 # ----------------Admin Views----------------
 class AdminCreateUserView(APIView):
@@ -238,13 +254,13 @@ class FarmerRegisterView(APIView):
             serializer = FarmerRegisterSerializer(data=request.data)
 
             if serializer.is_valid():
-                user = serializer.save() 
+                serializer.save() 
                 
                 return Response({
                     "message": "Farmer registered successfully. Wait for admin approval."
                 }, status=status.HTTP_201_CREATED)
-
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            else:
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             return Response({
@@ -269,18 +285,48 @@ class FarmerProfileView(APIView):
     permission_classes = [IsAuthenticated,IsFarmer]  # Only logged-in users
 
     def get(self, request):
-        profile, created = FarmerProfile.objects.get_or_create(user=request.user)
+        profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         serializer = FarmerProfileSerializer(profile)
-        return Response(serializer.data)
+        return Response({
+            "user": {
+                "first_name":    request.user.first_name,
+                "last_name":     request.user.last_name,
+                "email":         request.user.email,
+                "contact_number": request.user.contact_number,
+                "barangay":      request.user.barangay,
+                "rsbsa_number":  request.user.rsbsa_number,
+            },
+            "profile": serializer.data
+        })
+
 
     def put(self, request):
-        profile, created = FarmerProfile.objects.get_or_create(user=request.user)
+        profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
+
+        # Update User-level fields if provided
+        user_fields = ['first_name', 'last_name', 'email', 'contact_number']
+        user        = request.user
+        updated     = False
+        for field in user_fields:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+                updated = True
+        if updated:
+            user.save()
+
+        # Update FarmerProfile fields
         serializer = FarmerProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response({"message": "Profile updated successfully"})
-        return Response(serializer.errors, status=400)
 
+            # If profile is now complete → update user status to COMPLETE
+            # Admin can then approve/reject
+            if profile.is_complete() and user.status == 'PENDING':
+                User.objects.filter(pk=user.pk).update(status='COMPLETE')
+
+            return Response({"message": "Profile updated successfully"})
+
+        return Response(serializer.errors, status=400)
 
 # List all farmers (Admin)
 # List all farmers (Admin) with optional filtering for inactive users
@@ -365,7 +411,7 @@ class ATProfileView(APIView):
         serializer = AgriculturalTechnicianProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
-            return Response({"message": "Profile updated successfully"})
+            return Response({"message": "Profile updated"})
         return Response(serializer.errors, status=400)
     
 # AT Deactivation
@@ -493,25 +539,40 @@ class BPListView(ListAPIView):
     
 # --------- Forgot Password ---------
 class ForgotPasswordView(APIView):
-    """
-    📧 Step 1: Send OTP to email
-    """
-    
-
     def post(self, request):
         email = request.data.get("email")
 
-        # 🔴 Check user
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
             return Response({"error": "Email not found"}, status=404)
 
+        # ⛔ RATE LIMIT (3 requests per 30 mins)
+        thirty_minutes_ago = timezone.now() - timedelta(minutes=30)
+
+        recent_otps = PasswordResetOTP.objects.filter(
+            user=user,
+            created_at__gte=thirty_minutes_ago
+        )
+
+        if recent_otps.count() >= 3:
+            return Response(
+                {"error": "Too many OTP requests. Try again after 30 minutes."},
+                status=429
+            )
+
+        #  DELETE OLD OTPs (optional cleanup)
+        PasswordResetOTP.objects.filter(user=user).delete()
+
         # 🔢 Generate OTP
         otp = generate_otp()
 
         # 💾 Save OTP
-        PasswordResetOTP.objects.create(user=user, otp=otp)
+        PasswordResetOTP.objects.create(
+            user=user,
+            otp=otp,
+            is_used=False
+        )
 
         # 📧 Send Email
         send_otp_email(user, otp)
@@ -532,7 +593,9 @@ class VerifyOTPView(APIView):
         try:
             user = User.objects.get(email=email)
             otp_obj = PasswordResetOTP.objects.filter(
-                user=user, otp=otp
+                user=user,
+                otp=otp,
+                is_used=False  # ✅ prevent reuse
             ).latest('created_at')
         except:
             return Response({"error": "Invalid OTP"}, status=400)
@@ -570,12 +633,14 @@ class ResetPasswordView(APIView):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return Response({"error": "User not found"}, status=404)
+            return Response({"error": "Invalid Credentials"}, status=404)
 
         # ── Re-verify OTP before allowing reset ──
         try:
             otp_obj = PasswordResetOTP.objects.filter(
-                user=user, otp=otp
+                user=user,
+                otp=otp,
+                is_used=False
             ).latest('created_at')
         except PasswordResetOTP.DoesNotExist:
             return Response({"error": "Invalid OTP"}, status=400)
@@ -586,6 +651,9 @@ class ResetPasswordView(APIView):
         # ── Reset password ──
         user.set_password(new_password)
         user.save()
+
+        otp_obj.is_used = True
+        otp_obj.save()
 
         # ── Clean up all OTPs for this user after successful reset ──
         PasswordResetOTP.objects.filter(user=user).delete()
@@ -603,7 +671,7 @@ class AdminResetRequestView(APIView):
     → admin sees the request in User Management and resets manually
     """
     def post(self, request):
-        contact_number = request.data.get("contact_number")
+        contact_number = request.data.get("contact_number","")
 
         # Validate input
         if not contact_number:
@@ -634,3 +702,441 @@ class AdminResetRequestView(APIView):
         return Response({
             "message": "Request submitted. An admin will reset your password shortly."
         }, status=200)
+    
+class AdminBadgeCountView(APIView):
+    """
+    GET /admin/users/badge-count/
+    Returns count of pending farmer accounts + password reset requests
+    Used by sidebar to show notification badges
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        # Farmers who completed profile and are waiting for approval
+        pending_farmers = User.objects.filter(
+            role='FARMER',
+            status='COMPLETE',   # completed form
+            is_active=True
+        ).count()
+
+        # Users who requested admin password reset
+        reset_requests = User.objects.filter(
+            password_reset_requested=True,
+            is_active=True
+        ).count()
+
+        return Response({
+            "pending_farmers": pending_farmers,
+            "reset_requests":  reset_requests,
+            "total":           pending_farmers + reset_requests
+        })
+
+# ════════════════════════════════════════════
+# ADMIN — FARMER REQUESTS (Tab 1)
+# ════════════════════════════════════════════
+
+class AdminFarmerRequestsView(ListAPIView):
+    """
+    GET /admin/users/farmer-requests/
+    Lists ALL farmers (all statuses) for the Farmer Requests tab
+    Supports: ?status=PENDING|COMPLETE|APPROVED|REJECTED
+              ?barangay=Abang
+              ?search=name/contact/rsbsa
+              ?ordering=date_joined (default newest first)
+    """
+    serializer_class   = FarmerListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class   = StandardPagination
+
+    def get_queryset(self):
+        # Start with all active farmers
+        queryset = User.objects.filter(role='FARMER', is_active=True)
+
+        # Filter by status
+        status_filter = self.request.query_params.get('status')
+        if status_filter and status_filter.upper() != 'ALL':
+            queryset = queryset.filter(status=status_filter.upper())
+
+        # Filter by barangay
+        barangay = self.request.query_params.get('barangay')
+        if barangay:
+            queryset = queryset.filter(barangay=barangay)
+
+        # Search by name, contact, RSBSA
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)  |
+                Q(last_name__icontains=search)   |
+                Q(contact_number__icontains=search) |
+                Q(rsbsa_number__icontains=search)
+            )
+         # ✅ Sorting support — whitelist prevents injection
+        ordering = self.request.query_params.get('ordering', '-date_joined')
+        if ordering not in ALLOWED_ORDERING:
+            ordering = '-date_joined'
+        return queryset.order_by(ordering)
+
+class AdminApproveFarmerView(APIView):
+    """
+    POST /admin/users/farmers/{id}/approve/
+    Body: {"action": "APPROVED" | "REJECTED" | "PENDING"}
+    Admin approves or rejects a farmer after reviewing their profile
+    Only allowed if farmer status is COMPLETE
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, role='FARMER')
+        except User.DoesNotExist:
+            return Response({"error": "Farmer not found"}, status=404)
+
+        action = request.data.get('action', '').upper()
+
+        if action == 'APPROVED':
+            user.status      = 'APPROVED'
+            user.is_verified = True
+            user.save()
+            return Response({"message": "Farmer approved"})
+
+        elif action == 'REJECTED':
+            user.status      = 'REJECTED'
+            user.is_verified = False
+            user.save()
+            return Response({"message": "Farmer rejected"})
+
+        elif action == 'PENDING':
+            user.status      = 'PENDING'
+            user.is_verified = False
+            user.save()
+            return Response({"message": "Farmer set to pending"})
+
+        return Response({"error": "Invalid action"}, status=400)
+
+class AdminFarmerMasterlistView(ListAPIView):
+    """
+    GET /admin/users/farmer-masterlist/
+    Lists only APPROVED active farmers
+    Supports: ?barangay=Abang  ?gender=Male  ?search=  ?ordering=
+    """
+    serializer_class   = FarmerListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class   = StandardPagination
+
+    def get_queryset(self):
+        queryset = User.objects.filter(
+            role='FARMER',
+            status='APPROVED',
+            is_active=True
+        )
+
+        barangay = self.request.query_params.get('barangay')
+        if barangay:
+            queryset = queryset.filter(barangay=barangay)
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)     |
+                Q(last_name__icontains=search)      |
+                Q(contact_number__icontains=search) |
+                Q(rsbsa_number__icontains=search)
+            )
+
+        ordering = self.request.query_params.get('ordering', '-date_joined')
+        if ordering not in ALLOWED_ORDERING:
+            ordering = '-date_joined'
+        return queryset.order_by(ordering)
+
+class AdminFarmerFullProfileView(APIView):
+    """
+    GET /admin/users/farmers/{id}/full-profile/
+    Returns combined User + FarmerProfile for the View Details modal
+
+    PUT /admin/users/farmers/{id}/full-profile/
+    Admin edits farmer's full profile from the modal
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, role='FARMER')
+        except User.DoesNotExist:
+            return Response({"error": "Farmer not found"}, status=404)
+
+        serializer = FarmerFullDetailSerializer(user)
+        return Response(serializer.data)
+
+    def put(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, role='FARMER')
+        except User.DoesNotExist:
+            return Response({"error": "Farmer not found"}, status=404)
+
+        serializer = FarmerFullDetailSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({"message": "Farmer profile updated"})
+        return Response(serializer.errors, status=400)
+
+
+class AdminOfficialsListView(ListAPIView):
+    """
+    GET /admin/users/officials/
+    Lists AT + BRGY + ADMIN users
+    Supports: ?role=AT|BRGY|ADMIN  ?search=  ?ordering=
+    """
+    serializer_class   = OfficialListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class   = StandardPagination
+
+    def get_queryset(self):
+        queryset = User.objects.filter(
+            role__in=['AT', 'BRGY', 'ADMIN'],
+            is_active=True
+        )
+
+        role_filter = self.request.query_params.get('role')
+        if role_filter and role_filter.upper() != 'ALL':
+            queryset = queryset.filter(role=role_filter.upper())
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)     |
+                Q(last_name__icontains=search)      |
+                Q(contact_number__icontains=search) |
+                Q(email__icontains=search)
+            )
+
+        ordering = self.request.query_params.get('ordering', '-date_joined')
+        if ordering not in ALLOWED_ORDERING:
+            ordering = '-date_joined'
+        return queryset.order_by(ordering)
+
+class AdminCreateOfficialView(APIView):
+    """
+    POST /admin/users/officials/create/
+    Admin creates AT, BRGY, or ADMIN account
+    Role is determined by the 'role' field in request body
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request):
+        role = request.data.get('role', '').upper()
+
+        if role == 'AT':
+            serializer = AdminCreateATSerializer(data=request.data)
+        elif role == 'BRGY':
+            serializer = AdminCreateBPSerializer(data=request.data)
+        elif role == 'ADMIN':
+            serializer = AdminUserSimpleSerializer(data=request.data)
+        else:
+            return Response({"error": "Invalid role. Must be AT, BRGY, or ADMIN"}, status=400)
+
+        if serializer.is_valid():
+            user = serializer.save()
+            return Response({
+                "message": f"{role} account created successfully",
+                "user": {
+                    "id":             user.id,
+                    "first_name":     user.first_name,
+                    "last_name":      user.last_name,
+                    "contact_number": user.contact_number,
+                    "role":           user.role,
+                }
+            }, status=201)
+
+        return Response(serializer.errors, status=400)
+
+class AdminDeactivateUserView(APIView):
+    """
+    POST /admin/users/{id}/deactivate/
+    Deactivates any user (soft delete — sets is_active=False)
+    Cannot deactivate the last active admin
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
+
+        # Prevent deactivating the last active admin
+        if user.role == 'ADMIN':
+            active_admins = User.objects.filter(role='ADMIN', is_active=True).exclude(id=user_id)
+            if not active_admins.exists():
+                return Response({"error": "Cannot deactivate the last active admin"}, status=400)
+
+        User.objects.filter(pk=user.pk).update(is_active=False)
+        return Response({"message": f"{user.first_name} {user.last_name} deactivated"})
+
+class AdminResetRequestsListView(ListAPIView):
+    """
+    GET /admin/users/reset-requests/
+    Lists all users who submitted a password reset request
+    (password_reset_requested = True)
+    Supports: ?role=  ?search=
+    """
+    serializer_class   = OfficialListSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class   = StandardPagination
+
+    def get_queryset(self):
+        queryset = User.objects.filter(
+            password_reset_requested=True,
+            is_active=True
+        )
+
+        role_filter = self.request.query_params.get('role')
+        if role_filter and role_filter.upper() != 'ALL':
+            queryset = queryset.filter(role=role_filter.upper())
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)     |
+                Q(last_name__icontains=search)      |
+                Q(contact_number__icontains=search)
+            )
+
+        ordering = self.request.query_params.get('ordering', '-date_joined')
+        if ordering not in ALLOWED_ORDERING:
+            ordering = '-date_joined'
+        return queryset.order_by(ordering)
+    
+class AdminResetUserPasswordView(APIView):
+    """
+    POST /admin/users/{id}/reset-password/
+    Admin resets any user's password
+    Body option 1: {"new_password": "abc123"}  ← manual
+    Body option 2: {"auto_generate": true}      ← system generates temp password
+    After reset → clears password_reset_requested flag
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
+
+        auto_generate = request.data.get('auto_generate', False)
+
+        if auto_generate:
+            # Generate a random 10-character temp password
+            alphabet      = string.ascii_letters + string.digits
+            new_password  = ''.join(secrets.choice(alphabet) for _ in range(10))
+        else:
+            new_password = request.data.get('new_password', '').strip()
+            if not new_password:
+                return Response({"error": "new_password is required"}, status=400)
+            if len(new_password) < 6:
+                return Response({"error": "Password must be at least 6 characters"}, status=400)
+
+        # Reset the password
+        user.set_password(new_password)
+        # Clear the reset request flag
+        user.password_reset_requested = False
+        user.save()
+
+        return Response({
+            "message":      "Password reset successfully",
+            "new_password": new_password  # shown to admin so they can share with user
+        })
+    
+
+class AdminArchiveListView(ListAPIView):
+    """
+    GET /admin/users/archive/
+    Lists ALL deactivated users (all roles)
+    Supports: ?role=  ?search=
+    """
+    serializer_class   = ArchiveUserSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class   = StandardPagination
+
+    def get_queryset(self):
+        # is_active=False means deactivated/archived
+        queryset = User.objects.filter(is_active=False)
+
+        role_filter = self.request.query_params.get('role')
+        if role_filter and role_filter.upper() != 'ALL':
+            queryset = queryset.filter(role=role_filter.upper())
+
+        search = self.request.query_params.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(first_name__icontains=search)     |
+                Q(last_name__icontains=search)      |
+                Q(contact_number__icontains=search)
+            )
+
+        ordering = self.request.query_params.get('ordering', '-date_joined')
+        if ordering not in ALLOWED_ORDERING:
+            ordering = '-date_joined'
+        return queryset.order_by(ordering)
+
+    
+
+class AdminReactivateUserView(APIView):
+    """
+    POST /admin/users/{id}/reactivate/
+    Reactivates a deactivated user from the Archive tab
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, is_active=False)
+        except User.DoesNotExist:
+            return Response({"error": "Archived user not found"}, status=404)
+
+        User.objects.filter(pk=user.pk).update(is_active=True)
+        return Response({"message": f"{user.first_name} {user.last_name} reactivated"})
+
+class AvailableBarangaysView(APIView):
+    """
+    GET /barangays/available/
+    Returns list of barangay names NOT yet assigned to any AT
+    Used by the AT create modal checkbox list
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        from .choices import BARANGAY_CHOICES
+
+        # All barangay names from choices
+        all_barangays = [name for name, _ in BARANGAY_CHOICES]
+
+        # Barangays already assigned to an AT
+        assigned = Barangay.objects.filter(
+            assigned_at__isnull=False
+        ).values_list('name', flat=True)
+
+        # Return only unassigned ones
+        available = [b for b in all_barangays if b not in assigned]
+
+        return Response({"available_barangays": available})
+    
+# views.py — add this new view after AdminResetUserPasswordView
+
+class AdminCancelResetRequestView(APIView):
+    """
+    POST /admin/users/{id}/cancel-reset-request/
+    Admin cancels/dismisses a password reset request
+    Sets password_reset_requested = False without changing password
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=404)
+
+        # Clear the reset request flag
+        User.objects.filter(pk=user.pk).update(password_reset_requested=False)
+        return Response({"message": f"Reset request for {user.first_name} {user.last_name} cancelled"})

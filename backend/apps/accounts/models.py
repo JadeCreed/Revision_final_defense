@@ -113,6 +113,22 @@ class FarmerProfile(models.Model):
     # 🔹 Timestamp
     date_completed = models.DateTimeField(auto_now=True)
 
+    def is_complete(self):
+        """
+        Returns True if farmer filled all required fields.
+        Admin can only approve if this returns True.
+        Required: dob, residency, farm location, gender, contact
+        """
+        return all([
+            self.date_of_birth,
+            self.residency_municipality,
+            self.residency_barangay,
+            self.farm_municipality,
+            self.farm_barangay,
+            self.gender,
+            self.contact_number,
+        ])
+
     def __str__(self):
         return f"{self.user.first_name} {self.user.last_name} Profile"
     
@@ -122,8 +138,43 @@ class AgriculturalTechnicianProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='at_profile')
     assigned_barangay = models.CharField(max_length=50, choices=BARANGAY_CHOICES)
 
+    def get_assigned_barangays(self):
+        """Returns list of barangay names assigned to this AT"""
+        return list(self.barangays.values_list('name', flat=True))
+    
     def __str__(self):
-        return f"AT {self.user.first_name} - Assigned: {self.assigned_barangay}"
+        brgy_list = ', '.join(self.get_assigned_barangays()) or 'None'
+        return f"AT {self.user.first_name} {self.user.last_name} | Barangays: {brgy_list}"
+
+class Barangay(models.Model):
+    name = models.CharField(
+        max_length=100,
+        choices=BARANGAY_CHOICES,
+        unique=True  # each barangay name only exists once in the DB
+    )
+
+    # ForeignKey to AT profile — SET_NULL if AT is deleted
+    # null=True means barangay can be unassigned
+    assigned_at = models.ForeignKey(
+        AgriculturalTechnicianProfile,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='barangays'  # access: at_profile.barangays.all()
+    )
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Barangay'
+        verbose_name_plural = 'Barangays'
+
+    def __str__(self):
+        at_name = (
+            f"{self.assigned_at.user.first_name} {self.assigned_at.user.last_name}"
+            if self.assigned_at else "Unassigned"
+        )
+        return f"{self.name} → {at_name}"
+
 
 # -----------------------
 # Brgy President profile
@@ -132,8 +183,7 @@ class BrgyPresidentProfile(models.Model):
     barangay = models.CharField(max_length=50, choices=BARANGAY_CHOICES)
 
     def __str__(self):
-        return f"BP {self.user.first_name} - Barangay: {self.barangay}"
-    
+        return f"BP {self.user.first_name} {self.user.last_name} | {self.barangay}"
 
 # =========================
 # 🔐 PASSWORD RESET OTP
@@ -143,6 +193,10 @@ class PasswordResetOTP(models.Model):
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # ✅ ADD THIS (fix error safely)
+    is_used = models.BooleanField(default=False)
+
     def is_expired(self):
-        # ⏱ OTP expires in 5 minutes
         return timezone.now() > self.created_at + timedelta(minutes=5)
+    
+    

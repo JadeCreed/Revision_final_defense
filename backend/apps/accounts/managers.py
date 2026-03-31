@@ -31,7 +31,7 @@ class CustomUserManager(BaseUserManager):
         Create and return a superuser (admin)
         """
 
-        # ✅ FORCE REQUIRED ADMIN FIELDS
+        # ✅ FORCE REQUIRED ADMIN FIELDSa
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('role', 'ADMIN')

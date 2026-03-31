@@ -15,6 +15,21 @@ from .views import (
     VerifyOTPView,
     ResetPasswordView,
     AdminResetRequestView,
+    AdminBadgeCountView,
+    AdminFarmerRequestsView,
+    AdminApproveFarmerView,
+    AdminFarmerMasterlistView,
+    AdminFarmerFullProfileView,
+    AdminOfficialsListView,
+    AdminCreateOfficialView,
+    AdminDeactivateUserView,
+    AdminReactivateUserView,
+    AdminResetRequestsListView,
+    AdminResetUserPasswordView,
+    AdminArchiveListView,
+    AvailableBarangaysView,
+    AdminCancelResetRequestView,
+
 )
 
 urlpatterns = [
@@ -25,7 +40,28 @@ urlpatterns = [
     path('verify-otp/', VerifyOTPView.as_view(), name= 'verify-otp'),
     path('reset-password/', ResetPasswordView.as_view(), name='reset-password'),
 
+    path('admin/users/badge-count/', AdminBadgeCountView.as_view(), name='badge-count'),
+    path('admin/users/farmer-requests/',AdminFarmerRequestsView.as_view(),name='farmer-requests'),
+    path('admin/users/farmers/<int:user_id>/approve/', AdminApproveFarmerView.as_view(),name='approve-farmer'),
+    
+    path('admin/users/farmer-masterlist/',AdminFarmerMasterlistView.as_view(),name='farmer-masterlist'),
+    path('admin/users/farmers/<int:user_id>/full-profile/',AdminFarmerFullProfileView.as_view(),name='farmer-full-profile'),
+
+    path('admin/users/officials/',AdminOfficialsListView.as_view(),name='officials-list'),
+    path('admin/users/officials/create/',AdminCreateOfficialView.as_view(), name='create-official'),
+    path('admin/users/<int:user_id>/deactivate/', AdminDeactivateUserView.as_view(), name='deactivate-user'),
+
+    path('admin/users/reset-requests/',AdminResetRequestsListView.as_view(), name='reset-requests'),
+    path('admin/users/<int:user_id>/reset-password/',AdminResetUserPasswordView.as_view(),  name='admin-reset-password'),
+
+    path('admin/users/archive/',AdminArchiveListView.as_view(), name='archive'),
+    path('admin/users/<int:user_id>/reactivate/',AdminReactivateUserView.as_view(), name='reactivate-user'),
+
+    path('barangays/available/', AvailableBarangaysView.as_view(), name='available-barangays'),
+
+
     path('admin-reset-request/', AdminResetRequestView.as_view(), name='admin-reset-request'),
+    path('admin/users/<int:user_id>/cancel-reset-request/', AdminCancelResetRequestView.as_view(), name='cancel-reset-request'),
     path('admin-create-user/', AdminCreateUserView.as_view()),
     path('admin-verify-farmer/<int:user_id>/', AdminVerifyFarmerView.as_view(),name='verify-farmer'),
     path('farmer-profile/', FarmerProfileView.as_view(), name='farmer-profile'),
