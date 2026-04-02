@@ -1,26 +1,23 @@
-// src/components/tables/TableBase.jsx
-// ============================================================
-// Shared utilities for all admin tables
-// - Pagination
-// - SortDropdown
-// - COL_WIDTHS
-// - NewBadge component
-// - useBadgeAwareTable hook (polling + new-row tracking + badge-sync)
-// ============================================================
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// ── PAGINATION ──
+
+// ─────────────────────────────────────────────────────────────
+// PAGINATION
+// ─────────────────────────────────────────────────────────────
 export const Pagination = ({ count, page, pageSize = 10, onPageChange }) => {
+  // Don't render if everything fits on one page
   if (!count || count <= pageSize) return null;
+
   const totalPages = Math.ceil(count / pageSize);
+
+  // Build a window of up to 5 page numbers centered on current page
   const pages = [];
   let start = Math.max(1, page - 2);
   let end   = Math.min(totalPages, start + 4);
   if (end - start < 4) start = Math.max(1, end - 4);
   for (let i = start; i <= end; i++) pages.push(i);
 
-  const btn = (isActive, disabled) => ({
+  const btnStyle = (isActive, disabled) => ({
     padding:         '0.375rem 0.75rem',
     border:          `1.5px solid ${isActive ? '#2d6a2d' : '#d1d5db'}`,
     borderRadius:    '0.375rem',
@@ -34,167 +31,213 @@ export const Pagination = ({ count, page, pageSize = 10, onPageChange }) => {
 
   return (
     <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0.75rem 1rem', borderTop: '1px solid #f3f4f6',
-      flexWrap: 'wrap', gap: '0.5rem',
+      display:        'flex',
+      alignItems:     'center',
+      justifyContent: 'space-between',
+      padding:        '0.75rem 1rem',
+      borderTop:      '1px solid #f3f4f6',
+      flexWrap:       'wrap',
+      gap:            '0.5rem',
     }}>
       <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
         Showing {Math.min((page - 1) * pageSize + 1, count)}–{Math.min(page * pageSize, count)} of {count}
       </span>
+
       <div style={{ display: 'flex', gap: '0.375rem' }}>
-        <button onClick={() => onPageChange(page - 1)} disabled={page === 1} style={btn(false, page === 1)}>‹</button>
-        {pages.map(p => <button key={p} onClick={() => onPageChange(p)} style={btn(p === page, false)}>{p}</button>)}
-        <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} style={btn(false, page === totalPages)}>›</button>
+        <button onClick={() => onPageChange(page - 1)} disabled={page === 1} style={btnStyle(false, page === 1)}>‹</button>
+        {pages.map(p => (
+          <button key={p} onClick={() => onPageChange(p)} style={btnStyle(p === page, false)}>{p}</button>
+        ))}
+        <button onClick={() => onPageChange(page + 1)} disabled={page === totalPages} style={btnStyle(false, page === totalPages)}>›</button>
       </div>
     </div>
   );
 };
 
-// ── SORT DROPDOWN ──
+
+// ─────────────────────────────────────────────────────────────
+// SORT DROPDOWN
+// ─────────────────────────────────────────────────────────────
 export const SortDropdown = ({ value, onChange, options }) => (
   <select
     value={value}
     onChange={e => onChange(e.target.value)}
     style={{
-      padding: '0.5rem 0.875rem', border: '1.5px solid #d1d5db',
-      borderRadius: '0.5rem', fontSize: '0.875rem', cursor: 'pointer', outline: 'none',
+      padding:         '0.5rem 0.875rem',
+      border:          '1.5px solid #d1d5db',
+      borderRadius:    '0.5rem',
+      fontSize:        '0.875rem',
+      cursor:          'pointer',
+      outline:         'none',
+      backgroundColor: 'white',
     }}
   >
-    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    {options.map(o => (
+      <option key={o.value} value={o.value}>{o.label}</option>
+    ))}
   </select>
 );
 
-// ── COLUMN MIN-WIDTHS ──
+
+// ─────────────────────────────────────────────────────────────
+// COLUMN MIN-WIDTHS
+// Use as: <th style={{ minWidth: COL_WIDTHS.name }}>
+// ─────────────────────────────────────────────────────────────
 export const COL_WIDTHS = {
-  rsbsa:   '190px',
-  name:    '170px',
-  contact: '130px',
-  barangay:'140px',
-  status:  '120px',
-  role:    '160px',
-  email:   '190px',
-  date:    '125px',
-  actions: '130px',
-  details: '120px',
+  rsbsa:    '190px',  // fits "04-0432-000-0010" (15 chars + dashes)
+  name:     '170px',  // fits "Juan Dela Cruz"
+  contact:  '130px',  // fits "09123456789"
+  barangay: '140px',  // fits "Mahabang Parang"
+  status:   '120px',  // fits "Complete" badge
+  role:     '160px',  // fits "Brgy President" badge
+  email:    '190px',  // fits email addresses
+  date:     '125px',  // fits "Mar 29, 2026"
+  actions:  '130px',  // fits one action button
+  details:  '120px',  // fits "View Details" button
 };
 
-// ── NEW ROW BADGE ──
-export const NewBadge = ({ isNew }) => {
+
+// ─────────────────────────────────────────────────────────────
+// NEW BADGE
+//
+// Yellow "NEW" pill next to a row name.
+// Admin clicks it → calls `onClick` → badge disappears.
+//
+// Props:
+//   isNew   {boolean} — whether to show the badge
+//   onClick {function} — called when admin clicks to dismiss
+// ─────────────────────────────────────────────────────────────
+export const NewBadge = ({ isNew, onClick }) => {
   if (!isNew) return null;
+
   return (
-    <span style={{
-      display:         'inline-block',
-      backgroundColor: '#f5c842',
-      color:           '#1a1a1a',
-      fontSize:        '0.6rem',
-      fontWeight:      '700',
-      padding:         '1px 6px',
-      borderRadius:    '999px',
-      marginLeft:      '0.4rem',
-      verticalAlign:   'middle',
-      letterSpacing:   '0.05em',
-    }}>
+    <span
+      onClick={e => {
+        e.stopPropagation(); // don't trigger row click
+        if (onClick) onClick();
+      }}
+      title="Click to dismiss"
+      style={{
+        display:         'inline-block',
+        backgroundColor: '#f5c842',
+        color:           '#1a1a1a',
+        fontSize:        '0.6rem',
+        fontWeight:      '700',
+        padding:         '1px 6px',
+        borderRadius:    '999px',
+        marginLeft:      '0.4rem',
+        verticalAlign:   'middle',
+        letterSpacing:   '0.05em',
+        cursor:          'pointer',
+        userSelect:      'none',
+        transition:      'opacity 0.2s',
+      }}
+    >
       NEW
     </span>
   );
 };
 
-// ── useBadgeAwareTable HOOK ──
-// ============================================================
-// This is the main hook for all user management tables.
-// It handles:
-// 1. Data polling every `pollInterval` ms
-// 2. Detecting new rows (IDs not seen before)
-// 3. "NEW" badge on new rows for 10 seconds
-// 4. Badge count for the sidebar (pending_farmers or reset_requests)
-// 5. Badge disappears when admin IS on this page
-//    (isViewingPage = true clears badge immediately)
-// 6. "NEW" indicator disappears after 10s
+
+// ─────────────────────────────────────────────────────────────
+// LOCALSTORAGE HELPERS
+//
+// markTableAsSeen(tableKey, idsSet)
+//   Saves Set of seen IDs to localStorage for a table.
+//   Call when admin clicks a NEW badge to dismiss it.
+//
+// getSeenIds(tableKey)
+//   Reads Set of seen IDs from localStorage.
+//   Call on component mount to detect unseen items.
+// ─────────────────────────────────────────────────────────────
+const LS_NEW_PREFIX = 'agrice_seen_ids_';
+
+export const markTableAsSeen = (tableKey, ids) => {
+  try {
+    localStorage.setItem(
+      LS_NEW_PREFIX + tableKey,
+      JSON.stringify([...ids])
+    );
+  } catch {
+    // Fail silently — badge is non-critical
+  }
+};
+
+export const getSeenIds = (tableKey) => {
+  try {
+    const raw = localStorage.getItem(LS_NEW_PREFIX + tableKey);
+    return new Set(JSON.parse(raw || '[]'));
+  } catch {
+    return new Set();
+  }
+};
+
+
+// ─────────────────────────────────────────────────────────────
+// useBadgeAwareTable HOOK
+//
+// Optional self-contained hook for tables that don't need custom
+// fetch logic. Handles fetch, polling, and NEW badge tracking.
 //
 // Usage:
-//   const { data, count, loading, error, newIds, refetch } = useBadgeAwareTable({
-//     fetchFn: useCallback(() => getFarmerRequests(params), [params]),
-//     pollInterval: 15000,
-//     isViewingPage: true,   // pass true when this page is active
-//   });
-// ============================================================
+//   const { data, count, loading, error, newIds, dismissNew, refetch } =
+//     useBadgeAwareTable({
+//       fetchFn:      useCallback(() => getOfficials(params), [params]),
+//       pollInterval: 15000,
+//       tableKey:     'officials',
+//     });
+//
+//   // In table row:
+//   <NewBadge isNew={newIds.has(row.id)} onClick={() => dismissNew(row.id)} />
+// ─────────────────────────────────────────────────────────────
 export const useBadgeAwareTable = ({
   fetchFn,
   pollInterval = 15000,
-  isViewingPage = true,
+  tableKey,
   idKey = 'id',
 }) => {
   const [data, setData]       = useState([]);
   const [count, setCount]     = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
-
-  // IDs currently marked as "NEW" (shown with yellow badge)
   const [newIds, setNewIds]   = useState(new Set());
 
-  // IDs we've seen at least once
-  const knownIds  = useRef(new Set());
-  // Per-ID timeout handles for removing "NEW" badge after 10s
-  const timeouts  = useRef({});
-  // Whether we've done at least one fetch
-  const didInit   = useRef(false);
+  // IDs from the PREVIOUS successful fetch — used to detect truly new rows
+  const prevIds = useRef(new Set());
+  // Flag: has the first fetch completed?
+  const didInit = useRef(false);
 
-  const fetch = useCallback(async (isInitial = false) => {
+  const doFetch = useCallback(async (isInitial = false) => {
     try {
       const res   = await fetchFn();
       const items = res.data.results || res.data || [];
       const total = res.data.count   || items.length;
 
-      if (!isInitial && didInit.current) {
-        // Find IDs that weren't in the last fetch
-        const freshIds = items
-          .map(item => item[idKey])
-          .filter(id => !knownIds.current.has(id));
+      const currentIds = new Set(items.map(item => item[idKey]));
 
+      if (isInitial) {
+        // ── INITIAL LOAD ──
+        // Compare against localStorage to find items admin hasn't seen yet.
+        // This makes NEW badges survive page refresh and navigation.
+        const alreadySeen = getSeenIds(tableKey);
+        const unseenIds   = [...currentIds].filter(id => !alreadySeen.has(id));
+        if (unseenIds.length > 0) {
+          setNewIds(new Set(unseenIds));
+        }
+      } else if (didInit.current) {
+        // ── POLL UPDATE ──
+        // New = present now but wasn't in the previous poll.
+        const freshIds = [...currentIds].filter(id => !prevIds.current.has(id));
         if (freshIds.length > 0) {
           setNewIds(prev => {
             const next = new Set(prev);
             freshIds.forEach(id => next.add(id));
             return next;
           });
-
-          freshIds.forEach(id => {
-            // Clear existing timeout for this ID
-            if (timeouts.current[id]) clearTimeout(timeouts.current[id]);
-
-            if (isViewingPage) {
-              // Admin IS on this page — remove "NEW" after 10s
-              timeouts.current[id] = setTimeout(() => {
-                setNewIds(prev => {
-                  const next = new Set(prev);
-                  next.delete(id);
-                  return next;
-                });
-              }, 10000);
-            } else {
-              // Admin is NOT on this page — keep "NEW" indefinitely
-              // (will clear when they navigate to this page)
-            }
-          });
         }
       }
 
-      // If admin IS viewing page and there are pending newIds, start clearing them
-      if (isViewingPage && newIds.size > 0 && !isInitial) {
-        newIds.forEach(id => {
-          if (!timeouts.current[id]) {
-            timeouts.current[id] = setTimeout(() => {
-              setNewIds(prev => {
-                const next = new Set(prev);
-                next.delete(id);
-                return next;
-              });
-            }, 10000);
-          }
-        });
-      }
-
-      knownIds.current = new Set(items.map(item => item[idKey]));
+      prevIds.current = currentIds;
       setData(items);
       setCount(total);
       didInit.current = true;
@@ -203,44 +246,35 @@ export const useBadgeAwareTable = ({
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [fetchFn, idKey, isViewingPage, newIds]);
+  }, [fetchFn, idKey, tableKey]);
+  // NOTE: no `newIds` in deps — avoids infinite re-render loop
 
-  // Initial fetch
+  // Initial fetch (re-runs when fetchFn changes, i.e. when filters change)
   useEffect(() => {
     setLoading(true);
-    fetch(true);
-  }, [fetchFn]); // re-fetch when fetchFn changes (i.e., when filters/page/sort changes)
+    doFetch(true);
+  }, [doFetch]);
 
   // Polling
   useEffect(() => {
-    const poll = setInterval(() => fetch(false), pollInterval);
+    const poll = setInterval(() => doFetch(false), pollInterval);
     return () => clearInterval(poll);
-  }, [fetch, pollInterval]);
+  }, [doFetch, pollInterval]);
 
-  // When admin navigates TO this page, start 10s countdown for existing newIds
-  useEffect(() => {
-    if (!isViewingPage) return;
-    newIds.forEach(id => {
-      if (!timeouts.current[id]) {
-        timeouts.current[id] = setTimeout(() => {
-          setNewIds(prev => {
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
-        }, 10000);
-      }
+  // Dismiss a NEW badge for one specific row ID
+  const dismissNew = useCallback((id) => {
+    setNewIds(prev => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
     });
-  }, [isViewingPage]);
+    // Persist dismissal to localStorage
+    const updated = new Set(getSeenIds(tableKey));
+    updated.add(id);
+    markTableAsSeen(tableKey, updated);
+  }, [tableKey]);
 
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      Object.values(timeouts.current).forEach(clearTimeout);
-    };
-  }, []);
+  const refetch = useCallback(() => doFetch(false), [doFetch]);
 
-  const refetch = useCallback(() => fetch(false), [fetch]);
-
-  return { data, count, loading, error, newIds, refetch };
+  return { data, count, loading, error, newIds, dismissNew, refetch };
 };

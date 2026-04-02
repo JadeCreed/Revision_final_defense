@@ -42,6 +42,16 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     'apps.accounts',
+    'apps.crop_monitoring',
+    'apps.crop_phase',
+    'apps.distribution',
+    'apps.gis_map',
+    'apps.production',
+    'apps.reports',
+    'apps.seed_inventory',
+    'apps.seed_poll',
+    'apps.announcements',
+
     'rest_framework',
     'corsheaders',
 ]

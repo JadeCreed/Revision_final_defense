@@ -174,37 +174,6 @@ class AdminVerifyFarmerView(APIView):
         else:
             return Response({"error": "Invalid status"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-class AdminCreateUserSerializer(serializers.ModelSerializer):
-    # Password field should be write-only (not returned in response)
-    password = serializers.CharField(write_only=True)
-    confirm_password = serializers.CharField(write_only=True)
-
-    class Meta:
-        model = User  # Use your User model
-        fields = [
-            'first_name', 'last_name', 'contact_number', 'barangay', 
-            'rsbsa_number', 'role', 'password', 'email', 'is_verified'
-        ]
-
-    # Validate that contact_number is exactly 11 digits
-    def validate_contact_number(self, value):
-        if len(value) != 11 or not value.isdigit():
-            raise serializers.ValidationError("Contact number must be 11 digits")
-        return value
-
-    # Create a new user and hash the password
-    def create(self, validated_data):
-        validated_data.pop('confirm_password')
-        password = validated_data.pop('password')  # Remove password from dict
-        user = User(**validated_data)  # Create user object
-        user.set_password(password)    # Hash password
-        user.is_verified = True  # Admin-created internal users are trusted
-        user.save()                    # Save to database
-        
-        return user
-    
-
 # If there are other active admins, allow deactivation.
 # If this is the last active admin, block it and return an error.
 class AdminDeactivateView(APIView):
@@ -697,7 +666,7 @@ class AdminResetRequestView(APIView):
         # Flag this user as needing admin password reset
         # Use queryset .update() to bypass your model's full_clean() / save()
         # This directly updates only this one field in the database
-        User.objects.filter(pk=user.pk).update(password_reset_requested=True)
+        User.objects.filter(pk=user.pk).update(password_reset_requested_at=timezone.now())
 
         return Response({
             "message": "Request submitted. An admin will reset your password shortly."
@@ -721,7 +690,7 @@ class AdminBadgeCountView(APIView):
 
         # Users who requested admin password reset
         reset_requests = User.objects.filter(
-            password_reset_requested=True,
+            password_reset_requested_at__isnull=False,
             is_active=True
         ).count()
 
@@ -986,9 +955,10 @@ class AdminResetRequestsListView(ListAPIView):
 
     def get_queryset(self):
         queryset = User.objects.filter(
-            password_reset_requested=True,
+            password_reset_requested_at__isnull=False,
             is_active=True
         )
+        
 
         role_filter = self.request.query_params.get('role')
         if role_filter and role_filter.upper() != 'ALL':
@@ -1002,9 +972,14 @@ class AdminResetRequestsListView(ListAPIView):
                 Q(contact_number__icontains=search)
             )
 
-        ordering = self.request.query_params.get('ordering', '-date_joined')
-        if ordering not in ALLOWED_ORDERING:
-            ordering = '-date_joined'
+        ordering = self.request.query_params.get('ordering', '-password_reset_requested_at')
+        allowed  = [
+            'password_reset_requested_at', '-password_reset_requested_at',
+            'date_joined', '-date_joined',
+            'last_name', '-last_name',
+        ]
+        if ordering not in allowed:
+            ordering = '-password_reset_requested_at'
         return queryset.order_by(ordering)
     
 class AdminResetUserPasswordView(APIView):
@@ -1040,6 +1015,7 @@ class AdminResetUserPasswordView(APIView):
         user.set_password(new_password)
         # Clear the reset request flag
         user.password_reset_requested = False
+        user.password_reset_requested_at = None
         user.save()
 
         return Response({
@@ -1138,5 +1114,5 @@ class AdminCancelResetRequestView(APIView):
             return Response({"error": "User not found"}, status=404)
 
         # Clear the reset request flag
-        User.objects.filter(pk=user.pk).update(password_reset_requested=False)
+        User.objects.filter(pk=user.pk).update(password_reset_requested=False,password_reset_requested_at=None)
         return Response({"message": f"Reset request for {user.first_name} {user.last_name} cancelled"})

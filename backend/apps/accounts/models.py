@@ -56,7 +56,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         default='PENDING'
     )
 
-    password_reset_requested = models.BooleanField(default=False)
+    password_reset_requested_at = models.DateTimeField(null=True, blank=True)
     
     # 🔹 Timestamps
     date_joined = models.DateTimeField(auto_now_add=True)

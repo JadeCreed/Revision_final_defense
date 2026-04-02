@@ -311,13 +311,14 @@ class OfficialListSerializer(serializers.ModelSerializer):
     assigned_barangays = serializers.SerializerMethodField()
     # For BRGY: show their single barangay
     brgy_barangay = serializers.SerializerMethodField()
+    password_reset_requested_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model  = User
         fields = [
             'id', 'first_name', 'last_name', 'email',
             'contact_number', 'role', 'is_active',
-            'date_joined', 'assigned_barangays', 'brgy_barangay'
+            'date_joined', 'assigned_barangays', 'brgy_barangay','password_reset_requested_at',
         ]
 
     def get_assigned_barangays(self, obj):

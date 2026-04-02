@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // ✅ added useCallback
 import { useAuth } from '../../auth/AuthContext';
 import API from '../../api/axios';
 
@@ -23,14 +23,12 @@ const FarmerProfile = () => {
 
   // Form state — combines User fields + FarmerProfile fields
   const [form, setForm] = useState({
-    // User-level fields (editable)
-    first_name:   '',
-    last_name:    '',
-    email:        '',
-    contact_number: '',
-    barangay:     '',
-    rsbsa_number: '',
-    // FarmerProfile fields
+    first_name:             '',
+    last_name:              '',
+    email:                  '',
+    contact_number:         '',
+    barangay:               '',
+    rsbsa_number:           '',
     middle_name:            '',
     ext_name:               '',
     date_of_birth:          '',
@@ -49,46 +47,54 @@ const FarmerProfile = () => {
   const [fieldErrors, setFieldErrors] = useState({});
 
   // ── LOAD EXISTING PROFILE ──
+  // ✅ useCallback: stable reference — doesn't recreate on every render
+  // ✅ empty deps: only uses stable setters (setUserStatus, setForm, setError, setLoading)
+  const loadProfile = useCallback(async () => {
+    try {
+      const res = await API.get('/farmer-profile/');
+      const { user, profile } = res.data;
+
+      setUserStatus(user.status || 'PENDING');
+
+      setForm({
+        first_name:             user.first_name             || '',
+        last_name:              user.last_name              || '',
+        email:                  user.email                  || '',
+        contact_number:         user.contact_number         || '',
+        barangay:               user.barangay               || '',
+        rsbsa_number:           user.rsbsa_number           || '',
+        middle_name:            profile.middle_name         || '',
+        ext_name:               profile.ext_name            || '',
+        date_of_birth:          profile.date_of_birth       || '',
+        gender:                 profile.gender              || '',
+        residency_municipality: profile.residency_municipality || '',
+        residency_barangay:     profile.residency_barangay  || '',
+        farm_municipality:      profile.farm_municipality   || '',
+        farm_barangay:          profile.farm_barangay       || '',
+        ip:             profile.ip             || false,
+        senior_citizen: profile.senior_citizen || false,
+        pwd:            profile.pwd            || false,
+        arbs:           profile.arbs           || false,
+        four_ps:        profile.four_ps        || false,
+      });
+    } catch {
+      setError('Failed to load your profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []); // ✅ empty deps — all used values are stable setState functions
+
+  // ── INITIAL LOAD ──
   useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const res = await API.get('/farmer-profile/');
-        const { user, profile } = res.data;
-
-        setUserStatus(user.status || 'PENDING');
-
-        setForm({
-          // Pre-fill from User model
-          first_name:     user.first_name     || '',
-          last_name:      user.last_name      || '',
-          email:          user.email          || '',
-          contact_number: user.contact_number || '',
-          barangay:       user.barangay       || '',
-          rsbsa_number:   user.rsbsa_number   || '',
-          // Pre-fill from FarmerProfile model
-          middle_name:            profile.middle_name            || '',
-          ext_name:               profile.ext_name               || '',
-          date_of_birth:          profile.date_of_birth          || '',
-          gender:                 profile.gender                 || '',
-          residency_municipality: profile.residency_municipality || '',
-          residency_barangay:     profile.residency_barangay     || '',
-          farm_municipality:      profile.farm_municipality      || '',
-          farm_barangay:          profile.farm_barangay          || '',
-          ip:             profile.ip             || false,
-          senior_citizen: profile.senior_citizen || false,
-          pwd:            profile.pwd            || false,
-          arbs:           profile.arbs           || false,
-          four_ps:        profile.four_ps        || false,
-        });
-      } catch {
-        setError('Failed to load your profile. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadProfile();
-  }, []);
+  }, [loadProfile]); // ✅ safe to include now that loadProfile is stable
+
+  // ── RELOAD ON WINDOW FOCUS (e.g. user switches tabs and comes back) ──
+  useEffect(() => {
+    const handleFocus = () => loadProfile();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, [loadProfile]); // ✅ safe to include
 
   const handleChange = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -120,7 +126,6 @@ const FarmerProfile = () => {
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       setError('Please fill in all required fields.');
-      // Scroll to top to show error
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -130,23 +135,20 @@ const FarmerProfile = () => {
     setSuccess('');
 
     try {
-      // The backend FarmerProfileView PUT handles:
-      // 1. Updating User fields (first_name, last_name, email, contact_number)
-      // 2. Updating FarmerProfile fields
-      // 3. If profile is now complete AND status=PENDING → sets status=COMPLETE
       await API.put('/farmer-profile/', form);
 
-      // Refresh to get updated status
-      const res = await API.get('/farmer-profile/');
-      setUserStatus(res.data.user.status || 'PENDING');
+      // Re-fetch to get the LATEST status from server
+      const refreshed = await API.get('/farmer-profile/');
+      const newStatus = refreshed.data.user.status;
+      setUserStatus(newStatus);
 
-      if (userStatus === 'PENDING') {
-        setSuccess('Profile submitted successfully! The admin will review and approve your account soon.');
-      } else {
+      if (newStatus === 'COMPLETE') {
+        setSuccess('Profile submitted! Waiting for admin approval.');
+      } else if (newStatus === 'APPROVED') {
         setSuccess('Profile updated successfully!');
+      } else {
+        setSuccess('Profile saved.');
       }
-
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       const data = err.response?.data;
       if (data && typeof data === 'object') {
@@ -174,11 +176,11 @@ const FarmerProfile = () => {
   });
 
   const labelStyle = {
-    fontSize:    '0.8rem',
-    fontWeight:  '600',
-    color:       '#374151',
-    marginBottom:'0.25rem',
-    display:     'block',
+    fontSize:     '0.8rem',
+    fontWeight:   '600',
+    color:        '#374151',
+    marginBottom: '0.25rem',
+    display:      'block',
   };
 
   const sectionTitle = {
@@ -192,6 +194,8 @@ const FarmerProfile = () => {
     borderBottom:  '1px solid #e5e7eb',
   };
 
+  // ✅ Field component handles its own error display
+  // DO NOT add a manual error span inside children — it will show twice
   const Field = ({ label, fieldKey, type = 'text', required = false, children }) => (
     <div style={{ marginBottom: '0.75rem' }}>
       <label style={labelStyle}>
@@ -205,6 +209,7 @@ const FarmerProfile = () => {
           style={inputStyle(!!fieldErrors[fieldKey])}
         />
       )}
+      {/* ✅ Field handles error here — don't repeat this inside children */}
       {fieldErrors[fieldKey] && (
         <span style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', display: 'block' }}>
           {fieldErrors[fieldKey]}
@@ -289,11 +294,13 @@ const FarmerProfile = () => {
       )}
 
       <form onSubmit={handleSubmit}>
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
 
-          {/* ── SECTION 1: Basic Information ── */}
+        {/* ── SECTION 1: Basic Information ── */}
+        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
           <p style={sectionTitle}>Basic Information</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+
+            {/* ✅ FIXED: no manual error span inside — Field handles it */}
             <Field label="First Name" fieldKey="first_name" required>
               <input
                 type="text"
@@ -301,9 +308,9 @@ const FarmerProfile = () => {
                 onChange={e => handleChange('first_name', e.target.value)}
                 style={inputStyle(!!fieldErrors.first_name)}
               />
-              {fieldErrors.first_name && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.first_name}</span>}
             </Field>
 
+            {/* ✅ FIXED: no manual error span inside — Field handles it */}
             <Field label="Last Name" fieldKey="last_name" required>
               <input
                 type="text"
@@ -311,42 +318,69 @@ const FarmerProfile = () => {
                 onChange={e => handleChange('last_name', e.target.value)}
                 style={inputStyle(!!fieldErrors.last_name)}
               />
-              {fieldErrors.last_name && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.last_name}</span>}
             </Field>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Middle Name</label>
-              <input value={form.middle_name} onChange={e => handleChange('middle_name', e.target.value)} style={inputStyle(false)} placeholder="Optional" />
+              <input
+                value={form.middle_name}
+                onChange={e => handleChange('middle_name', e.target.value)}
+                style={inputStyle(false)}
+                placeholder="Optional"
+              />
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Suffix / Ext. Name</label>
-              <input value={form.ext_name} onChange={e => handleChange('ext_name', e.target.value)} style={inputStyle(false)} placeholder="Jr., Sr., III, etc." />
+              <input
+                value={form.ext_name}
+                onChange={e => handleChange('ext_name', e.target.value)}
+                style={inputStyle(false)}
+                placeholder="Jr., Sr., III, etc."
+              />
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Date of Birth <span style={{ color: '#dc2626' }}>*</span></label>
-              <input type="date" value={form.date_of_birth} onChange={e => handleChange('date_of_birth', e.target.value)} style={inputStyle(!!fieldErrors.date_of_birth)} />
-              {fieldErrors.date_of_birth && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.date_of_birth}</span>}
+              <input
+                type="date"
+                value={form.date_of_birth}
+                onChange={e => handleChange('date_of_birth', e.target.value)}
+                style={inputStyle(!!fieldErrors.date_of_birth)}
+              />
+              {fieldErrors.date_of_birth && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.date_of_birth}
+                </span>
+              )}
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Gender <span style={{ color: '#dc2626' }}>*</span></label>
-              <select value={form.gender} onChange={e => handleChange('gender', e.target.value)} style={inputStyle(!!fieldErrors.gender)}>
+              <select
+                value={form.gender}
+                onChange={e => handleChange('gender', e.target.value)}
+                style={inputStyle(!!fieldErrors.gender)}
+              >
                 <option value="">Select gender</option>
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
-              {fieldErrors.gender && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.gender}</span>}
+              {fieldErrors.gender && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.gender}
+                </span>
+              )}
             </div>
+
           </div>
         </div>
 
+        {/* ── SECTION 2: Contact Information ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-
-          {/* ── SECTION 2: Contact Information ── */}
           <p style={sectionTitle}>Contact Information</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Contact Number <span style={{ color: '#dc2626' }}>*</span></label>
               <input
@@ -357,93 +391,152 @@ const FarmerProfile = () => {
                 placeholder="09XXXXXXXXX"
                 maxLength={11}
               />
-              {fieldErrors.contact_number && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.contact_number}</span>}
+              {fieldErrors.contact_number && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.contact_number}
+                </span>
+              )}
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Email Address</label>
-              <input type="email" value={form.email} onChange={e => handleChange('email', e.target.value)} style={inputStyle(false)} placeholder="Optional" />
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => handleChange('email', e.target.value)}
+                style={inputStyle(false)}
+                placeholder="Optional"
+              />
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>RSBSA Number</label>
-              <input value={form.rsbsa_number} onChange={e => handleChange('rsbsa_number', e.target.value)} style={inputStyle(false)} placeholder="e.g. 04-0432-000-0010" />
+              <input
+                value={form.rsbsa_number}
+                onChange={e => handleChange('rsbsa_number', e.target.value)}
+                style={inputStyle(false)}
+                placeholder="e.g. 04-0432-000-0010"
+              />
             </div>
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Barangay</label>
-              <select value={form.barangay} onChange={e => handleChange('barangay', e.target.value)} style={inputStyle(false)}>
+              <select
+                value={form.barangay}
+                onChange={e => handleChange('barangay', e.target.value)}
+                style={inputStyle(false)}
+              >
                 <option value="">Select Barangay</option>
                 {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
+
           </div>
         </div>
 
+        {/* ── SECTION 3: Residency Address ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-
-          {/* ── SECTION 3: Residency ── */}
           <p style={sectionTitle}>Residency Address</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Municipality <span style={{ color: '#dc2626' }}>*</span></label>
-              <input value={form.residency_municipality} onChange={e => handleChange('residency_municipality', e.target.value)} style={inputStyle(!!fieldErrors.residency_municipality)} placeholder="e.g. Lucban" />
-              {fieldErrors.residency_municipality && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.residency_municipality}</span>}
+              <input
+                value={form.residency_municipality}
+                onChange={e => handleChange('residency_municipality', e.target.value)}
+                style={inputStyle(!!fieldErrors.residency_municipality)}
+                placeholder="e.g. Lucban"
+              />
+              {fieldErrors.residency_municipality && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.residency_municipality}
+                </span>
+              )}
             </div>
+
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Barangay <span style={{ color: '#dc2626' }}>*</span></label>
-              <input value={form.residency_barangay} onChange={e => handleChange('residency_barangay', e.target.value)} style={inputStyle(!!fieldErrors.residency_barangay)} placeholder="e.g. Abang" />
-              {fieldErrors.residency_barangay && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.residency_barangay}</span>}
+              <input
+                value={form.residency_barangay}
+                onChange={e => handleChange('residency_barangay', e.target.value)}
+                style={inputStyle(!!fieldErrors.residency_barangay)}
+                placeholder="e.g. Abang"
+              />
+              {fieldErrors.residency_barangay && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.residency_barangay}
+                </span>
+              )}
             </div>
+
           </div>
         </div>
 
+        {/* ── SECTION 4: Farm Location ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-
-          {/* ── SECTION 4: Farm Location ── */}
           <p style={sectionTitle}>Farm Location</p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Municipality <span style={{ color: '#dc2626' }}>*</span></label>
-              <input value={form.farm_municipality} onChange={e => handleChange('farm_municipality', e.target.value)} style={inputStyle(!!fieldErrors.farm_municipality)} placeholder="e.g. Lucban" />
-              {fieldErrors.farm_municipality && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.farm_municipality}</span>}
+              <input
+                value={form.farm_municipality}
+                onChange={e => handleChange('farm_municipality', e.target.value)}
+                style={inputStyle(!!fieldErrors.farm_municipality)}
+                placeholder="e.g. Lucban"
+              />
+              {fieldErrors.farm_municipality && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.farm_municipality}
+                </span>
+              )}
             </div>
+
             <div style={{ marginBottom: '0.75rem' }}>
               <label style={labelStyle}>Barangay <span style={{ color: '#dc2626' }}>*</span></label>
-              <input value={form.farm_barangay} onChange={e => handleChange('farm_barangay', e.target.value)} style={inputStyle(!!fieldErrors.farm_barangay)} placeholder="e.g. Ayuti" />
-              {fieldErrors.farm_barangay && <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>{fieldErrors.farm_barangay}</span>}
+              <input
+                value={form.farm_barangay}
+                onChange={e => handleChange('farm_barangay', e.target.value)}
+                style={inputStyle(!!fieldErrors.farm_barangay)}
+                placeholder="e.g. Ayuti"
+              />
+              {fieldErrors.farm_barangay && (
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
+                  {fieldErrors.farm_barangay}
+                </span>
+              )}
             </div>
+
           </div>
         </div>
 
+        {/* ── SECTION 5: Demographics ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.5rem' }}>
-
-          {/* ── SECTION 5: Demographics ── */}
           <p style={sectionTitle}>Demographics</p>
           <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem' }}>
             Check all that apply to you:
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
             {[
-              { label: 'Indigenous Person (IP)', key: 'ip' },
-              { label: 'Senior Citizen',         key: 'senior_citizen' },
-              { label: 'Person with Disability (PWD)', key: 'pwd' },
+              { label: 'Indigenous Person (IP)',            key: 'ip' },
+              { label: 'Senior Citizen',                    key: 'senior_citizen' },
+              { label: 'Person with Disability (PWD)',      key: 'pwd' },
               { label: 'Agrarian Reform Beneficiary (ARB)', key: 'arbs' },
-              { label: '4Ps Beneficiary',        key: 'four_ps' },
+              { label: '4Ps Beneficiary',                   key: 'four_ps' },
             ].map(({ label, key }) => (
               <label key={key} style={{
-                display:      'flex',
-                alignItems:   'center',
-                gap:          '0.625rem',
-                padding:      '0.625rem 0.875rem',
-                borderRadius: '0.5rem',
-                border:       `1.5px solid ${form[key] ? '#2d6a2d' : '#e5e7eb'}`,
+                display:         'flex',
+                alignItems:      'center',
+                gap:             '0.625rem',
+                padding:         '0.625rem 0.875rem',
+                borderRadius:    '0.5rem',
+                border:          `1.5px solid ${form[key] ? '#2d6a2d' : '#e5e7eb'}`,
                 backgroundColor: form[key] ? '#f0fdf4' : 'white',
-                cursor:       'pointer',
-                fontSize:     '0.85rem',
-                fontWeight:   form[key] ? '600' : '400',
-                color:        form[key] ? '#2d6a2d' : '#374151',
-                transition:   'all 0.15s',
+                cursor:          'pointer',
+                fontSize:        '0.85rem',
+                fontWeight:      form[key] ? '600' : '400',
+                color:           form[key] ? '#2d6a2d' : '#374151',
+                transition:      'all 0.15s',
               }}>
                 <input
                   type="checkbox"
@@ -459,13 +552,11 @@ const FarmerProfile = () => {
 
         {/* ── SUBMIT BUTTON ── */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', alignItems: 'center' }}>
-          {/* Show what will happen */}
           {userStatus === 'PENDING' && (
             <p style={{ fontSize: '0.8rem', color: '#6b7280', textAlign: 'right', flex: 1 }}>
               Submitting will send your profile to the admin for approval.
             </p>
           )}
-
           <button
             type="submit"
             disabled={saving}
@@ -491,6 +582,7 @@ const FarmerProfile = () => {
             }
           </button>
         </div>
+
       </form>
     </div>
   );

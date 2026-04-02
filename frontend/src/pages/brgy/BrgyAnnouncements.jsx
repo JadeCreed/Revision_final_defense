@@ -1,8 +1,8 @@
 // src/pages/brgy/BrgyAnnouncements.jsx
+import AnnouncementsListPage from '../../components/announcements/AnnouncementsListPage';
+
 const BrgyAnnouncements = () => (
-  <div>
-    <h1 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '0.5rem' }}>Announcements</h1>
-    <p style={{ color: '#6b7280' }}>View announcements from the MAO here.</p>
-  </div>
+  <AnnouncementsListPage basePath="/brgy/announcements" />
 );
+
 export default BrgyAnnouncements;

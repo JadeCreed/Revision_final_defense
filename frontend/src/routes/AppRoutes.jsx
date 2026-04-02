@@ -52,10 +52,16 @@ import ATAnnouncements  from '../pages/at/ATAnnouncements'
 // ── BRGY pages ──
 import BPDashboard          from '../pages/brgy/BPDashboard';
 import BrgyFarmers          from '../pages/brgy/BrgyFarmers';
+import BrgyHarvest          from '../pages/brgy/BrgyHarvest';
 import BrgyCropPhase        from '../pages/brgy/BrgyCropPhase';
 import BrgyAnnouncements    from '../pages/brgy/BrgyAnnouncements';
 import BrgyReports          from '../pages/brgy/BrgyReports';
 
+// ── ANNOUNCEMENTS(SHARED PAGES) ──
+import AnnouncementDetail   from '../components/announcements/AnnouncementDetail';
+import AnnouncementCard     from '../components/announcements/AnnouncementCard';
+
+import UserLayout from '../layouts/UserLayout';
 
 
 const AppRoutes = () => (
@@ -105,37 +111,43 @@ const AppRoutes = () => (
       </Route>
     </Route>
 
-    {/* FARMER */}
+     {/* ── FARMER ── uses UserLayout (mobile-first) */}
     <Route element={<ProtectedRoute allowedRole="FARMER" />}>
-      <Route element={<DashboardLayout />}>
-        <Route path="/farmer"                element={<FarmerDashboard />} />
-        <Route path="/farmer/profile"        element={<FarmerProfile />} />
-        <Route path="/farmer/crops"          element={<YieldEncode />} />
-        <Route path="/farmer/announcements"  element={<FarmerAnnouncements />} />
-        <Route path="/farmer/poll"           element={<FarmerPoll />} />
+      <Route element={<UserLayout />}>
+        <Route path="/farmer"               element={<FarmerDashboard />} />
+        <Route path="/farmer/profile"       element={<FarmerProfile />} />
+        <Route path="/farmer/harvest"       element={<YieldEncode />} />
+        <Route path="/farmer/announcements" element={<FarmerAnnouncements />} />
+        <Route path="/farmer/poll"          element={<FarmerPoll />} />
+        <Route path="/farmer/announcements/:id" element={<AnnouncementDetail />} />
       </Route>
     </Route>
 
-    {/* AT */}
+        {/* // ── AT ── uses UserLayout */}
     <Route element={<ProtectedRoute allowedRole="AT" />}>
-      <Route element={<DashboardLayout />}>
+      <Route element={<UserLayout />}>
         <Route path="/at"                  element={<ATDashboard />} />
         <Route path="/at/crop-monitoring"  element={<CropMonitoring />} />
         <Route path="/at/farmers"          element={<ATFarmers />} />
         <Route path="/at/gis"              element={<ATGisMap />} />
         <Route path="/at/reports"          element={<ATReports />} />
         <Route path="/at/announcements"    element={<ATAnnouncements />} />
+        <Route path="/at/profile"          element={<FarmerProfile />} />
+        <Route path="/at/announcements/:id" element={<AnnouncementDetail />} />
       </Route>
     </Route>
 
-    {/* BRGY */}
+        {/* // ── BRGY ── uses UserLayout */}
     <Route element={<ProtectedRoute allowedRole="BRGY" />}>
-      <Route element={<DashboardLayout />}>
-        <Route path="/brgy"                 element={<BPDashboard />} />
-        <Route path="/brgy/farmers"         element={<BrgyFarmers />} />
-        <Route path="/brgy/crop-phase"      element={<BrgyCropPhase />} />
-        <Route path="/brgy/announcements"   element={<BrgyAnnouncements />} />
-        <Route path="/brgy/reports"         element={<BrgyReports />} />
+      <Route element={<UserLayout />}>
+        <Route path="/brgy"                element={<BPDashboard />} />
+        <Route path="/brgy/farmers"        element={<BrgyFarmers />} />
+        <Route path="/brgy/harvest"        element={<BrgyHarvest />} />
+        <Route path="/brgy/crop-phase"     element={<BrgyCropPhase />} />
+        <Route path="/brgy/announcements"  element={<BrgyAnnouncements />} />
+        <Route path="/brgy/reports"        element={<BrgyReports />} />
+        <Route path="/brgy/profile"        element={<FarmerProfile />} />
+        <Route path="/brgy/announcements/:id" element={<AnnouncementDetail />} />
       </Route>
     </Route>
 
