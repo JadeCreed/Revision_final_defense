@@ -251,9 +251,15 @@ class FarmerDashboardView(APIView):
 
 
 class FarmerProfileView(APIView):
-    permission_classes = [IsAuthenticated,IsFarmer]  # Only logged-in users
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        # Block non-farmers only
+        if request.user.role != 'FARMER':
+            return Response(
+                {"error": "Access denied. Farmers only."},
+                status=status.HTTP_403_FORBIDDEN
+            )
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         serializer = FarmerProfileSerializer(profile)
         return Response({
@@ -264,34 +270,49 @@ class FarmerProfileView(APIView):
                 "contact_number": request.user.contact_number,
                 "barangay":      request.user.barangay,
                 "rsbsa_number":  request.user.rsbsa_number,
+                "status":        request.user.status,
             },
             "profile": serializer.data
         })
 
 
     def put(self, request):
+        if request.user.role != 'FARMER':
+            return Response({"error": "Access denied."}, status=status.HTTP_403_FORBIDDEN)
+
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
+        user = request.user
+        user_data = request.data.get("user", {})
 
-        # Update User-level fields if provided
-        user_fields = ['first_name', 'last_name', 'email', 'contact_number']
-        user        = request.user
-        updated     = False
-        for field in user_fields:
-            if field in request.data:
-                setattr(user, field, request.data[field])
-                updated = True
-        if updated:
-            user.save()
+        # ── UPDATE USER FIELDS ──
+        # Use queryset.update() to bypass full_clean() / save() validation issues
+        # full_clean() was causing silent failures on contact number uniqueness check
+        user_update_fields = {}
+        allowed_user_fields = ['first_name', 'last_name', 'email', 'contact_number', 'barangay', 'rsbsa_number']
+        for field in allowed_user_fields:
+            if field in user_data:
+                user_update_fields[field] = user_data[field]
 
-        # Update FarmerProfile fields
-        serializer = FarmerProfileSerializer(profile, data=request.data, partial=True)
+        if user_update_fields:
+            User.objects.filter(pk=user.pk).update(**user_update_fields)
+            # Refresh user object so status check below is accurate
+            user.refresh_from_db()
+
+        # ── UPDATE FARMER PROFILE ──
+        profile_data = request.data.get("profile", {})
+        serializer = FarmerProfileSerializer(profile, data=profile_data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            # Reload profile to check completeness
+            profile.refresh_from_db()
 
-            # If profile is now complete → update user status to COMPLETE
-            # Admin can then approve/reject
-            if profile.is_complete() and user.status == 'PENDING':
-                User.objects.filter(pk=user.pk).update(status='COMPLETE')
+            # ── STATUS UPGRADE ──
+            # If profile is now complete AND status is PENDING → set to COMPLETE
+            # COMPLETE = admin can now review and approve
+            user.refresh_from_db()
+            if profile.is_complete():
+                if user.status in ('PENDING', 'REJECTED'):
+                    User.objects.filter(pk=user.pk).update(status='COMPLETE')
 
             return Response({"message": "Profile updated successfully"})
 

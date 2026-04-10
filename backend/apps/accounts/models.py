@@ -126,7 +126,7 @@ class FarmerProfile(models.Model):
             self.farm_municipality,
             self.farm_barangay,
             self.gender,
-            self.contact_number,
+            self.user.contact_number,
         ])
 
     def __str__(self):

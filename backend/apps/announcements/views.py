@@ -55,26 +55,38 @@ def get_visible_announcements(user):
         Q(target_role='ALL') | Q(target_role=user.role)
     )
 
+    if user.role == 'AT':
+        try:
+            # Get all barangay names assigned to this AT
+            user_barangays = list(
+                user.at_profile.barangays.values_list('name', flat=True)
+            )
+        except Exception:
+            user_barangays = []
+    else:
+        # FARMER and BRGY — single barangay on User model
+        single = getattr(user, 'barangay', '') or ''
+        user_barangays = [single] if single else []
+
     # Filter by barangay
     # An announcement is visible if:
     #   - target_barangays is empty (means ALL barangays) OR
     #   - user's barangay is in the target_barangays list
-    user_barangay = getattr(user, 'barangay', '') or ''
 
-    # We use Python filtering here because barangays are stored
-    # as comma-separated strings — harder to do in pure SQL
     visible_ids = []
     for ann in qs.only('id', 'target_barangays'):
         target_list = ann.get_target_barangays()
+
         if not target_list:
-            # Empty = ALL barangays → show to everyone
+            # Empty target = ALL barangays → always visible
             visible_ids.append(ann.id)
-        elif user_barangay and user_barangay in target_list:
-            # User's barangay is in the target list
-            visible_ids.append(ann.id)
+        elif user_barangays:
+            # Check if ANY of user's barangays match the target list
+            if any(brgy in target_list for brgy in user_barangays):
+                visible_ids.append(ann.id)
+        # If user has no barangay at all → only sees ALL-barangay announcements
 
     return Announcement.objects.filter(id__in=visible_ids).order_by('-created_at')
-
 
 # ═══════════════════════════════════════════════════════════
 # ADMIN VIEWS

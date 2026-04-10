@@ -50,6 +50,7 @@ class AnnouncementAdminSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'content',
+            'announced_date',
             'target_role',
             'target_barangays_list',    # write: frontend sends list
             'target_barangays_display', # read: frontend receives list
@@ -134,6 +135,7 @@ class AnnouncementListSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'content',
+            'announced_date',
             'target_role',
             'target_barangays_list',
             'posted_by_name',
@@ -216,7 +218,11 @@ class AnnouncementListSerializer(serializers.ModelSerializer):
             return f"{months} month{'s' if months > 1 else ''} ago"
 
     def get_day_number(self, obj):
-        return obj.created_at.strftime('%d').lstrip('0')  # "25" not "05"
-
+        display_date = obj.announced_date or obj.created_at.date()
+        # lstrip('0') removes leading zero: "05" → "5"
+        return display_date.strftime('%d').lstrip('0')
+    
     def get_formatted_date(self, obj):
-        return obj.created_at.strftime('%b %d, %Y')
+        display_date = obj.announced_date or obj.created_at.date()
+        # Returns "Jan 25, 2026"
+        return display_date.strftime('%b %d, %Y')

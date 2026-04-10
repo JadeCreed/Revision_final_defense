@@ -1,5 +1,8 @@
-from django.apps import AppConfig
+# from django.apps import AppConfig
 
 
-class AccountsConfig(AppConfig):
-    name = 'apps.accounts'
+# class AccountsConfig(AppConfig):
+#     name = 'apps.accounts'
+
+#     def ready(self):
+#         import apps.accounts.signals
