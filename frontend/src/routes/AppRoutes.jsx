@@ -53,6 +53,7 @@ import ATAnnouncements  from '../pages/at/ATAnnouncements'
 import BPDashboard          from '../pages/brgy/BPDashboard';
 import BrgyFarmers          from '../pages/brgy/BrgyFarmers';
 import BrgyHarvest          from '../pages/brgy/BrgyHarvest';
+import BrgyDistribution from '../pages/brgy/BrgyDistribution';
 import BrgyCropPhase        from '../pages/brgy/BrgyCropPhase';
 import BrgyAnnouncements    from '../pages/brgy/BrgyAnnouncements';
 import BrgyReports          from '../pages/brgy/BrgyReports';
@@ -60,6 +61,8 @@ import BrgyReports          from '../pages/brgy/BrgyReports';
 // ── ANNOUNCEMENTS(SHARED PAGES) ──
 import AnnouncementDetail   from '../components/announcements/AnnouncementDetail';
 import AnnouncementCard     from '../components/announcements/AnnouncementCard';
+
+import BrgyPoll from '../pages/brgy/BrgyPoll';
 
 import UserLayout from '../layouts/UserLayout';
 
@@ -140,14 +143,17 @@ const AppRoutes = () => (
         {/* // ── BRGY ── uses UserLayout */}
     <Route element={<ProtectedRoute allowedRole="BRGY" />}>
       <Route element={<UserLayout />}>
-        <Route path="/brgy"                element={<BPDashboard />} />
-        <Route path="/brgy/farmers"        element={<BrgyFarmers />} />
-        <Route path="/brgy/harvest"        element={<BrgyHarvest />} />
-        <Route path="/brgy/crop-phase"     element={<BrgyCropPhase />} />
-        <Route path="/brgy/announcements"  element={<BrgyAnnouncements />} />
-        <Route path="/brgy/reports"        element={<BrgyReports />} />
-        <Route path="/brgy/profile"        element={<FarmerProfile />} />
-        <Route path="/brgy/announcements/:id" element={<AnnouncementDetail />} />
+        <Route path="/brgy"                      element={<BPDashboard />} />
+        <Route path="/brgy/harvest"              element={<BrgyHarvest />} />
+        <Route path="/brgy/farmers"              element={<BrgyFarmers />} />
+        <Route path="/brgy/distribution"         element={<BrgyDistribution />} />
+        <Route path="/brgy/crop-phase"           element={<BrgyCropPhase />} />
+        <Route path="/brgy/announcements"        element={<BrgyAnnouncements />} />
+        <Route path="/brgy/reports"              element={<BrgyReports />} />
+        <Route path="/brgy/profile"              element={<FarmerProfile />} />
+        <Route path="/brgy/announcements/:id"    element={<AnnouncementDetail />} />
+        <Route path="/brgy/poll"                 element={<BrgyPoll />} /> 
+        
       </Route>
     </Route>
 

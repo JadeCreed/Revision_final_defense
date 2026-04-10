@@ -1,5 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'; // ✅ added useCallback
+// src/pages/farmer/FarmerProfile.jsx
+// ============================================================
+// Farmer profile page.
+// Pre-fills from registration data on first load.
+// Submit → sends to admin for approval.
+// After approval → button changes to "Update Profile".
+// Icons: lucide-react only (no emojis in UI elements).
+// ============================================================
+
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../auth/AuthContext';
+import {
+  User, Phone, MapPin, FileText,
+  CheckCircle, Clock, AlertCircle,
+  XCircle, Save, Send, ChevronRight,
+} from 'lucide-react';
 import API from '../../api/axios';
 
 const BARANGAYS = [
@@ -9,26 +23,88 @@ const BARANGAYS = [
   'Tiawe','Tinamnan'
 ];
 
+// ── LABEL STYLE (constant — defined outside prevents recreation) ──
+const labelStyle = {
+  fontSize:     '0.8rem',
+  fontWeight:   '600',
+  color:        '#374151',
+  marginBottom: '0.25rem',
+  display:      'block',
+};
+
+// ── FIELD COMPONENT ──
+// MUST be defined OUTSIDE FarmerProfile.
+// If defined inside, React recreates it on every render,
+// unmounting/remounting the input and losing keyboard focus.
+const Field = ({ label, required, error, children }) => (
+  <div style={{ marginBottom: '0.75rem' }}>
+    <label style={labelStyle}>
+      {label}
+      {required && <span style={{ color: '#dc2626', marginLeft: '2px' }}>*</span>}
+    </label>
+    {children}
+    {error && (
+      <span style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', display: 'block' }}>
+        {error}
+      </span>
+    )}
+  </div>
+);
+
+// ── SECTION WRAPPER ──
+// Also outside to prevent recreation
+const Section = ({ icon: Icon, title, children }) => (
+  <div style={{
+    backgroundColor: 'white',
+    borderRadius:    '0.875rem',
+    padding:         '1.5rem',
+    boxShadow:       '0 1px 4px rgba(0,0,0,0.06)',
+    marginBottom:    '1rem',
+  }}>
+    <p style={{
+      fontSize:      '0.75rem',
+      fontWeight:    '700',
+      color:         '#2d6a2d',
+      textTransform: 'uppercase',
+      letterSpacing: '0.05em',
+      marginBottom:  '1rem',
+      paddingBottom: '0.5rem',
+      borderBottom:  '1px solid #e5e7eb',
+      display:       'flex',
+      alignItems:    'center',
+      gap:           '0.5rem',
+      margin:        '0 0 1rem',
+    }}>
+      <Icon size={15} />
+      {title}
+    </p>
+    {children}
+  </div>
+);
+
+// ── MAIN COMPONENT ──
 const FarmerProfile = () => {
-  const { firstName, lastName } = useAuth();
 
-  // Page state
-  const [loading, setLoading]   = useState(true);
-  const [saving, setSaving]     = useState(false);
-  const [error, setError]       = useState('');
-  const [success, setSuccess]   = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState('');
+  const [success, setSuccess]         = useState('');
+  const [userStatus, setUserStatus]   = useState('PENDING');
+  const [fieldErrors, setFieldErrors] = useState({});
 
-  // User status — controls button label and messaging
-  const [userStatus, setUserStatus] = useState('PENDING');
+  // Inline confirmation state — shown before first-time submit
+  // Gives user a chance to review before sending to admin
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  // Form state — combines User fields + FarmerProfile fields
   const [form, setForm] = useState({
-    first_name:             '',
-    last_name:              '',
-    email:                  '',
-    contact_number:         '',
-    barangay:               '',
-    rsbsa_number:           '',
+    // User model fields (pre-filled from registration)
+    first_name:     '',
+    last_name:      '',
+    email:          '',
+    contact_number: '',
+    barangay:       '',
+    rsbsa_number:   '',
+    // FarmerProfile fields (filled here)
     middle_name:            '',
     ext_name:               '',
     date_of_birth:          '',
@@ -44,57 +120,71 @@ const FarmerProfile = () => {
     four_ps:        false,
   });
 
-  const [fieldErrors, setFieldErrors] = useState({});
+  // ── INPUT STYLE (function, stable since it's defined in component scope correctly) ──
+  const inputStyle = (hasError) => ({
+    padding:      '0.625rem 0.875rem',
+    border:       `1.5px solid ${hasError ? '#dc2626' : '#d1d5db'}`,
+    borderRadius: '0.5rem',
+    fontSize:     '0.9rem',
+    width:        '100%',
+    outline:      'none',
+    transition:   'border-color 0.15s',
+    boxSizing:    'border-box',
+    fontFamily:   'inherit',
+    backgroundColor: 'white',
+  });
 
-  // ── LOAD EXISTING PROFILE ──
-  // ✅ useCallback: stable reference — doesn't recreate on every render
-  // ✅ empty deps: only uses stable setters (setUserStatus, setForm, setError, setLoading)
+  // ── LOAD PROFILE ──
   const loadProfile = useCallback(async () => {
     try {
-      const res = await API.get('/farmer-profile/');
+      setLoading(true);
+      const res = await API.get('/accounts/farmer-profile/');
       const { user, profile } = res.data;
 
       setUserStatus(user.status || 'PENDING');
 
       setForm({
-        first_name:             user.first_name             || '',
-        last_name:              user.last_name              || '',
-        email:                  user.email                  || '',
-        contact_number:         user.contact_number         || '',
-        barangay:               user.barangay               || '',
-        rsbsa_number:           user.rsbsa_number           || '',
-        middle_name:            profile.middle_name         || '',
-        ext_name:               profile.ext_name            || '',
-        date_of_birth:          profile.date_of_birth       || '',
-        gender:                 profile.gender              || '',
+        // Pre-fill from User model (registration data)
+        first_name:     user.first_name     || '',
+        last_name:      user.last_name      || '',
+        email:          user.email          || '',
+        contact_number: user.contact_number || '',
+        barangay:       user.barangay       || '',
+        rsbsa_number:   user.rsbsa_number   || '',
+        // FarmerProfile fields
+        middle_name:            profile.middle_name            || '',
+        ext_name:               profile.ext_name               || '',
+        date_of_birth:          profile.date_of_birth          || '',
+        gender:                 profile.gender                 || '',
         residency_municipality: profile.residency_municipality || '',
-        residency_barangay:     profile.residency_barangay  || '',
-        farm_municipality:      profile.farm_municipality   || '',
-        farm_barangay:          profile.farm_barangay       || '',
-        ip:             profile.ip             || false,
-        senior_citizen: profile.senior_citizen || false,
-        pwd:            profile.pwd            || false,
-        arbs:           profile.arbs           || false,
-        four_ps:        profile.four_ps        || false,
+        residency_barangay:     profile.residency_barangay     || '',
+        farm_municipality:      profile.farm_municipality      || '',
+        farm_barangay:          profile.farm_barangay          || '',
+        ip:             profile.ip             ?? false,
+        senior_citizen: profile.senior_citizen ?? false,
+        pwd:            profile.pwd            ?? false,
+        arbs:           profile.arbs           ?? false,
+        four_ps:        profile.four_ps        ?? false,
       });
-    } catch {
-      setError('Failed to load your profile. Please try again.');
+    } catch (err) {
+      setError(
+        err.response?.status === 403
+          ? 'Access denied. Please log in as a farmer.'
+          : 'Failed to load your profile. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
-  }, []); // ✅ empty deps — all used values are stable setState functions
+  }, []);
 
-  // ── INITIAL LOAD ──
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]); // ✅ safe to include now that loadProfile is stable
+  useEffect(() => { loadProfile(); }, [loadProfile]);
 
-  // ── RELOAD ON WINDOW FOCUS (e.g. user switches tabs and comes back) ──
+  // Reload when user returns to the tab
   useEffect(() => {
     const handleFocus = () => loadProfile();
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
-  }, [loadProfile]); // ✅ safe to include
+  }, [loadProfile]);
 
   const handleChange = (key, value) => {
     setForm(prev => ({ ...prev, [key]: value }));
@@ -103,7 +193,7 @@ const FarmerProfile = () => {
     setSuccess('');
   };
 
-  // ── VALIDATE REQUIRED FIELDS ──
+  // ── VALIDATE ──
   const validate = () => {
     const errs = {};
     if (!form.first_name.trim())             errs.first_name             = 'Required';
@@ -119,36 +209,89 @@ const FarmerProfile = () => {
     return errs;
   };
 
-  // ── SUBMIT PROFILE ──
-  const handleSubmit = async (e) => {
+  // ── HANDLE SUBMIT BUTTON CLICK ──
+  // For PENDING: validate first, then show confirmation
+  // For APPROVED: save directly without confirmation
+  const handleSubmitClick = (e) => {
     e.preventDefault();
+    setError('');
+    setSuccess('');
+
     const errs = validate();
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
-      setError('Please fill in all required fields.');
+      setError('Please fill in all required fields before submitting.');
       window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
+    // If APPROVED → save directly (no confirmation needed for updates)
+    if (userStatus === 'APPROVED') {
+      doSave();
+      return;
+    }
+
+    // If PENDING or COMPLETE → show inline confirmation card
+    setShowConfirm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ── ACTUAL SAVE ──
+  // Called after confirmation (or directly for APPROVED updates)
+  const doSave = async () => {
     setSaving(true);
+    setShowConfirm(false);
     setError('');
     setSuccess('');
 
     try {
-      await API.put('/farmer-profile/', form);
+      await API.put('/accounts/farmer-profile/', {
+        // Backend FarmerProfileView.put() reads request.data["user"] and request.data["profile"]
+        user: {
+          first_name:     form.first_name,
+          last_name:      form.last_name,
+          email:          form.email || null,
+          contact_number: form.contact_number,
+          barangay:       form.barangay,
+          rsbsa_number:   form.rsbsa_number,
+        },
+        profile: {
+          middle_name:            form.middle_name,
+          ext_name:               form.ext_name,
+          date_of_birth:          form.date_of_birth,
+          gender:                 form.gender,
+          residency_municipality: form.residency_municipality,
+          residency_barangay:     form.residency_barangay,
+          farm_municipality:      form.farm_municipality,
+          farm_barangay:          form.farm_barangay,
+          contact_number:     form.contact_number,
+          ip:                 form.ip,
+          senior_citizen:     form.senior_citizen,
+          pwd:                form.pwd,
+          arbs:               form.arbs,
+          four_ps:            form.four_ps,
+        },
+      });
 
-      // Re-fetch to get the LATEST status from server
-      const refreshed = await API.get('/farmer-profile/');
+      // Re-fetch to get the latest status from server
+      const refreshed = await API.get('/accounts/farmer-profile/');
       const newStatus = refreshed.data.user.status;
       setUserStatus(newStatus);
 
       if (newStatus === 'COMPLETE') {
-        setSuccess('Profile submitted! Waiting for admin approval.');
+        setSuccess('✅ Profile submitted! The admin will review your information soon.');
       } else if (newStatus === 'APPROVED') {
-        setSuccess('Profile updated successfully!');
+        setSuccess('✅ Profile updated successfully!');
+      } else if (newStatus === 'PENDING') {
+        // This should only show if profile is truly incomplete (missing required fields)
+        // After the backend fix, this should NOT appear when all fields are filled
+        setSuccess('Profile partially saved. Please fill all required fields and submit again.');
       } else {
         setSuccess('Profile saved.');
       }
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+
     } catch (err) {
       const data = err.response?.data;
       if (data && typeof data === 'object') {
@@ -157,206 +300,290 @@ const FarmerProfile = () => {
           flatErrs[k] = Array.isArray(v) ? v[0] : String(v);
         });
         setFieldErrors(flatErrs);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       }
-      setError('Failed to save profile. Please check the form and try again.');
+      setError('Failed to save profile. Please check the highlighted fields and try again.');
     } finally {
       setSaving(false);
     }
   };
 
-  // ── STYLES ──
-  const inputStyle = (hasError) => ({
-    padding:      '0.625rem 0.875rem',
-    border:       `1.5px solid ${hasError ? '#dc2626' : '#d1d5db'}`,
-    borderRadius: '0.5rem',
-    fontSize:     '0.9rem',
-    width:        '100%',
-    outline:      'none',
-    transition:   'border-color 0.15s',
-  });
-
-  const labelStyle = {
-    fontSize:     '0.8rem',
-    fontWeight:   '600',
-    color:        '#374151',
-    marginBottom: '0.25rem',
-    display:      'block',
+  // ── STATUS BANNER CONFIG ──
+  const statusBanners = {
+    PENDING: {
+      bg: '#fef9c3', color: '#854d0e', border: '#fde047',
+      Icon: Clock,
+      text: 'Your account is pending. Complete and submit your profile below for admin approval.',
+    },
+    COMPLETE: {
+      bg: '#dbeafe', color: '#1e40af', border: '#93c5fd',
+      Icon: FileText,
+      text: 'Your profile has been submitted and is awaiting admin review.',
+    },
+    APPROVED: {
+      bg: '#dcfce7', color: '#166534', border: '#86efac',
+      Icon: CheckCircle,
+      text: 'Your account is approved. You can update your information anytime.',
+    },
+    REJECTED: {
+      bg: '#fee2e2', color: '#991b1b', border: '#fca5a5',
+      Icon: XCircle,
+      text: 'Your account was not approved. Please contact the MAO office for assistance.',
+    },
   };
+  const banner = statusBanners[userStatus];
 
-  const sectionTitle = {
-    fontSize:      '0.75rem',
-    fontWeight:    '700',
-    color:         '#2d6a2d',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    marginBottom:  '0.875rem',
-    paddingBottom: '0.5rem',
-    borderBottom:  '1px solid #e5e7eb',
-  };
-
-  // ✅ Field component handles its own error display
-  // DO NOT add a manual error span inside children — it will show twice
-  const Field = ({ label, fieldKey, type = 'text', required = false, children }) => (
-    <div style={{ marginBottom: '0.75rem' }}>
-      <label style={labelStyle}>
-        {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
-      </label>
-      {children || (
-        <input
-          type={type}
-          value={form[fieldKey]}
-          onChange={e => handleChange(fieldKey, e.target.value)}
-          style={inputStyle(!!fieldErrors[fieldKey])}
-        />
-      )}
-      {/* ✅ Field handles error here — don't repeat this inside children */}
-      {fieldErrors[fieldKey] && (
-        <span style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', display: 'block' }}>
-          {fieldErrors[fieldKey]}
-        </span>
-      )}
-    </div>
-  );
-
+  // ── LOADING ──
   if (loading) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem', color: '#9ca3af' }}>
-        Loading your profile...
+      <div style={{ padding: '2rem', textAlign: 'center' }}>
+        <Clock size={32} color="#d1d5db" style={{ margin: '0 auto 0.75rem', display: 'block' }} />
+        <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Loading your profile...</p>
       </div>
     );
   }
 
-  // ── STATUS BANNER ──
-  const StatusBanner = () => {
-    const banners = {
-      PENDING: {
-        bg: '#fef9c3', color: '#854d0e', border: '#fde047',
-        text: '⏳ Your account is pending. Please complete and submit your profile below for admin approval.',
-      },
-      COMPLETE: {
-        bg: '#dbeafe', color: '#1e40af', border: '#93c5fd',
-        text: '📋 Your profile has been submitted and is awaiting admin review.',
-      },
-      APPROVED: {
-        bg: '#dcfce7', color: '#166534', border: '#86efac',
-        text: '✅ Your account is approved. You can update your information anytime.',
-      },
-      REJECTED: {
-        bg: '#fee2e2', color: '#991b1b', border: '#fca5a5',
-        text: '❌ Your account was not approved. Please contact the MAO office for assistance.',
-      },
-    };
-
-    const banner = banners[userStatus];
-    if (!banner) return null;
-
-    return (
-      <div style={{
-        backgroundColor: banner.bg,
-        color:           banner.color,
-        border:          `1px solid ${banner.border}`,
-        borderRadius:    '0.75rem',
-        padding:         '0.875rem 1.25rem',
-        marginBottom:    '1.5rem',
-        fontSize:        '0.875rem',
-        lineHeight:      1.5,
-      }}>
-        {banner.text}
-      </div>
-    );
-  };
-
   return (
-    <div>
-      {/* Page header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1a1a1a' }}>
+    <div style={{ padding: '1.25rem', paddingBottom: '2rem' }}>
+
+      {/* ── PAGE HEADER ── */}
+      <div style={{ marginBottom: '1.25rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1a1a1a', margin: 0 }}>
           My Profile
         </h1>
-        <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+        <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
           Complete your information so the admin can verify and approve your account.
         </p>
       </div>
 
-      {/* Status banner */}
-      <StatusBanner />
+      {/* ── STATUS BANNER ── */}
+      {banner && (
+        <div style={{
+          backgroundColor: banner.bg,
+          color:           banner.color,
+          border:          `1px solid ${banner.border}`,
+          borderRadius:    '0.875rem',
+          padding:         '0.875rem 1.25rem',
+          marginBottom:    '1.25rem',
+          fontSize:        '0.875rem',
+          lineHeight:      1.5,
+          display:         'flex',
+          alignItems:      'flex-start',
+          gap:             '0.75rem',
+        }}>
+          <banner.Icon size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
+          <span>{banner.text}</span>
+        </div>
+      )}
 
-      {/* Success/Error messages */}
+      {/* ── SUCCESS ── */}
       {success && (
-        <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.875rem', borderRadius: '0.75rem', marginBottom: '1.25rem', fontSize: '0.875rem' }}>
+        <div style={{
+          backgroundColor: '#dcfce7', color: '#166534',
+          border: '1px solid #bbf7d0',
+          padding: '0.875rem 1.25rem', borderRadius: '0.875rem',
+          marginBottom: '1.25rem', fontSize: '0.875rem',
+          display: 'flex', alignItems: 'center', gap: '0.625rem',
+        }}>
+          <CheckCircle size={18} style={{ flexShrink: 0 }} />
           {success}
         </div>
       )}
+
+      {/* ── ERROR ── */}
       {error && (
-        <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.875rem', borderRadius: '0.75rem', marginBottom: '1.25rem', fontSize: '0.875rem' }}>
+        <div style={{
+          backgroundColor: '#fee2e2', color: '#991b1b',
+          border: '1px solid #fca5a5',
+          padding: '0.875rem 1.25rem', borderRadius: '0.875rem',
+          marginBottom: '1.25rem', fontSize: '0.875rem',
+          display: 'flex', alignItems: 'flex-start', gap: '0.625rem',
+        }}>
+          <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
           {error}
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      {/* ── INLINE CONFIRMATION CARD ──
+          Shows before first-time profile submission.
+          Mobile-friendly — no browser confirm() dialog.
+          Only appears for PENDING or COMPLETE status. */}
+      {showConfirm && (
+        <div style={{
+          backgroundColor: 'white',
+          border:          '2px solid #2d6a2d',
+          borderRadius:    '1rem',
+          padding:         '1.5rem',
+          marginBottom:    '1.25rem',
+          boxShadow:       '0 4px 16px rgba(0,0,0,0.1)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <div style={{
+              width: '40px', height: '40px',
+              backgroundColor: '#f0fdf4',
+              borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <Send size={20} color="#2d6a2d" />
+            </div>
+            <div>
+              <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0, fontSize: '1rem' }}>
+                Submit profile for approval?
+              </p>
+              <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: '0.125rem 0 0' }}>
+                Your information will be sent to the MAO admin for review.
+              </p>
+            </div>
+          </div>
 
-        {/* ── SECTION 1: Basic Information ── */}
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-          <p style={sectionTitle}>Basic Information</p>
+          <div style={{
+            backgroundColor: '#f9fafb',
+            borderRadius:    '0.75rem',
+            padding:         '0.875rem',
+            marginBottom:    '1.25rem',
+            fontSize:        '0.8rem',
+            color:           '#374151',
+          }}>
+            <p style={{ fontWeight: 600, margin: '0 0 0.375rem', color: '#1a1a1a' }}>
+              What happens next:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+              {[
+                'Your profile is submitted to the admin for review',
+                'Admin will verify your information and RSBSA number',
+                'You will see your status change to "Approved" once verified',
+                'Approved farmers can access the full AGRICE system',
+              ].map((step, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <span style={{
+                    width:           '18px',
+                    height:          '18px',
+                    backgroundColor: '#2d6a2d',
+                    color:           'white',
+                    borderRadius:    '50%',
+                    fontSize:        '0.65rem',
+                    fontWeight:      700,
+                    display:         'flex',
+                    alignItems:      'center',
+                    justifyContent:  'center',
+                    flexShrink:      0,
+                    marginTop:       '1px',
+                  }}>
+                    {i + 1}
+                  </span>
+                  <span>{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <button
+              onClick={() => setShowConfirm(false)}
+              style={{
+                flex:            1,
+                padding:         '0.75rem',
+                backgroundColor: 'white',
+                color:           '#374151',
+                border:          '1.5px solid #d1d5db',
+                borderRadius:    '0.5rem',
+                fontWeight:      600,
+                fontSize:        '0.9rem',
+                cursor:          'pointer',
+              }}
+            >
+              Review Again
+            </button>
+            <button
+              onClick={doSave}
+              disabled={saving}
+              style={{
+                flex:            2,
+                padding:         '0.75rem',
+                backgroundColor: '#2d6a2d',
+                color:           'white',
+                border:          'none',
+                borderRadius:    '0.5rem',
+                fontWeight:      700,
+                fontSize:        '0.9rem',
+                cursor:          saving ? 'not-allowed' : 'pointer',
+                display:         'flex',
+                alignItems:      'center',
+                justifyContent:  'center',
+                gap:             '0.5rem',
+                opacity:         saving ? 0.7 : 1,
+              }}
+            >
+              {saving ? (
+                <><Clock size={16} /> Submitting...</>
+              ) : (
+                <><Send size={16} /> Yes, Submit Profile</>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════
+          FORM SECTIONS
+      ════════════════════════════ */}
+      <form onSubmit={handleSubmitClick}>
+
+        {/* SECTION 1: Basic Information */}
+        <Section icon={User} title="Basic Information">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
 
-            {/* ✅ FIXED: no manual error span inside — Field handles it */}
-            <Field label="First Name" fieldKey="first_name" required>
+            <Field label="First Name" required error={fieldErrors.first_name}>
               <input
                 type="text"
                 value={form.first_name}
                 onChange={e => handleChange('first_name', e.target.value)}
                 style={inputStyle(!!fieldErrors.first_name)}
+                placeholder="Juan"
               />
             </Field>
 
-            {/* ✅ FIXED: no manual error span inside — Field handles it */}
-            <Field label="Last Name" fieldKey="last_name" required>
+            <Field label="Last Name" required error={fieldErrors.last_name}>
               <input
                 type="text"
                 value={form.last_name}
                 onChange={e => handleChange('last_name', e.target.value)}
                 style={inputStyle(!!fieldErrors.last_name)}
+                placeholder="Dela Cruz"
               />
             </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Middle Name</label>
+            <Field label="Middle Name" error={fieldErrors.middle_name}>
               <input
+                type="text"
                 value={form.middle_name}
                 onChange={e => handleChange('middle_name', e.target.value)}
                 style={inputStyle(false)}
                 placeholder="Optional"
               />
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Suffix / Ext. Name</label>
+            <Field label="Suffix / Ext. Name" error={fieldErrors.ext_name}>
               <input
+                type="text"
                 value={form.ext_name}
                 onChange={e => handleChange('ext_name', e.target.value)}
                 style={inputStyle(false)}
                 placeholder="Jr., Sr., III, etc."
               />
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Date of Birth <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Date of Birth" required error={fieldErrors.date_of_birth}>
               <input
                 type="date"
                 value={form.date_of_birth}
                 onChange={e => handleChange('date_of_birth', e.target.value)}
                 style={inputStyle(!!fieldErrors.date_of_birth)}
               />
-              {fieldErrors.date_of_birth && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.date_of_birth}
-                </span>
-              )}
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Gender <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Gender" required error={fieldErrors.gender}>
               <select
                 value={form.gender}
                 onChange={e => handleChange('gender', e.target.value)}
@@ -366,23 +593,16 @@ const FarmerProfile = () => {
                 <option value="Male">Male</option>
                 <option value="Female">Female</option>
               </select>
-              {fieldErrors.gender && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.gender}
-                </span>
-              )}
-            </div>
+            </Field>
 
           </div>
-        </div>
+        </Section>
 
-        {/* ── SECTION 2: Contact Information ── */}
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-          <p style={sectionTitle}>Contact Information</p>
+        {/* SECTION 2: Contact Information */}
+        <Section icon={Phone} title="Contact Information">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Contact Number <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Contact Number" required error={fieldErrors.contact_number}>
               <input
                 type="text"
                 value={form.contact_number}
@@ -391,15 +611,9 @@ const FarmerProfile = () => {
                 placeholder="09XXXXXXXXX"
                 maxLength={11}
               />
-              {fieldErrors.contact_number && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.contact_number}
-                </span>
-              )}
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Email Address</label>
+            <Field label="Email Address" error={fieldErrors.email}>
               <input
                 type="email"
                 value={form.email}
@@ -407,20 +621,18 @@ const FarmerProfile = () => {
                 style={inputStyle(false)}
                 placeholder="Optional"
               />
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>RSBSA Number</label>
+            <Field label="RSBSA Number" error={fieldErrors.rsbsa_number}>
               <input
                 value={form.rsbsa_number}
                 onChange={e => handleChange('rsbsa_number', e.target.value)}
                 style={inputStyle(false)}
                 placeholder="e.g. 04-0432-000-0010"
               />
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Barangay</label>
+            <Field label="Barangay" error={fieldErrors.barangay}>
               <select
                 value={form.barangay}
                 onChange={e => handleChange('barangay', e.target.value)}
@@ -429,94 +641,67 @@ const FarmerProfile = () => {
                 <option value="">Select Barangay</option>
                 {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
-            </div>
+            </Field>
 
           </div>
-        </div>
+        </Section>
 
-        {/* ── SECTION 3: Residency Address ── */}
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-          <p style={sectionTitle}>Residency Address</p>
+        {/* SECTION 3: Residency Address */}
+        <Section icon={MapPin} title="Residency Address">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Municipality <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Municipality" required error={fieldErrors.residency_municipality}>
               <input
                 value={form.residency_municipality}
                 onChange={e => handleChange('residency_municipality', e.target.value)}
                 style={inputStyle(!!fieldErrors.residency_municipality)}
                 placeholder="e.g. Lucban"
               />
-              {fieldErrors.residency_municipality && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.residency_municipality}
-                </span>
-              )}
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Barangay <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Barangay" required error={fieldErrors.residency_barangay}>
               <input
                 value={form.residency_barangay}
                 onChange={e => handleChange('residency_barangay', e.target.value)}
                 style={inputStyle(!!fieldErrors.residency_barangay)}
                 placeholder="e.g. Abang"
               />
-              {fieldErrors.residency_barangay && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.residency_barangay}
-                </span>
-              )}
-            </div>
+            </Field>
 
           </div>
-        </div>
+        </Section>
 
-        {/* ── SECTION 4: Farm Location ── */}
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
-          <p style={sectionTitle}>Farm Location</p>
+        {/* SECTION 4: Farm Location */}
+        <Section icon={MapPin} title="Farm Location">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Municipality <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Municipality" required error={fieldErrors.farm_municipality}>
               <input
                 value={form.farm_municipality}
                 onChange={e => handleChange('farm_municipality', e.target.value)}
                 style={inputStyle(!!fieldErrors.farm_municipality)}
                 placeholder="e.g. Lucban"
               />
-              {fieldErrors.farm_municipality && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.farm_municipality}
-                </span>
-              )}
-            </div>
+            </Field>
 
-            <div style={{ marginBottom: '0.75rem' }}>
-              <label style={labelStyle}>Barangay <span style={{ color: '#dc2626' }}>*</span></label>
+            <Field label="Barangay" required error={fieldErrors.farm_barangay}>
               <input
                 value={form.farm_barangay}
                 onChange={e => handleChange('farm_barangay', e.target.value)}
                 style={inputStyle(!!fieldErrors.farm_barangay)}
                 placeholder="e.g. Ayuti"
               />
-              {fieldErrors.farm_barangay && (
-                <span style={{ fontSize: '0.75rem', color: '#dc2626', display: 'block', marginTop: '0.25rem' }}>
-                  {fieldErrors.farm_barangay}
-                </span>
-              )}
-            </div>
+            </Field>
 
           </div>
-        </div>
+        </Section>
 
-        {/* ── SECTION 5: Demographics ── */}
-        <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.5rem' }}>
-          <p style={sectionTitle}>Demographics</p>
-          <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem' }}>
+        {/* SECTION 5: Demographics */}
+        <Section icon={FileText} title="Demographics">
+          <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem', marginTop: 0 }}>
             Check all that apply to you:
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.5rem' }}>
             {[
               { label: 'Indigenous Person (IP)',            key: 'ip' },
               { label: 'Senior Citizen',                    key: 'senior_citizen' },
@@ -542,46 +727,70 @@ const FarmerProfile = () => {
                   type="checkbox"
                   checked={!!form[key]}
                   onChange={e => handleChange(key, e.target.checked)}
-                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2d6a2d' }}
                 />
                 {label}
               </label>
             ))}
           </div>
-        </div>
+        </Section>
 
-        {/* ── SUBMIT BUTTON ── */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', alignItems: 'center' }}>
-          {userStatus === 'PENDING' && (
-            <p style={{ fontSize: '0.8rem', color: '#6b7280', textAlign: 'right', flex: 1 }}>
-              Submitting will send your profile to the admin for approval.
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              padding:         '0.75rem 2rem',
-              backgroundColor: '#2d6a2d',
-              color:           'white',
-              border:          'none',
-              borderRadius:    '0.5rem',
-              fontWeight:      '700',
-              fontSize:        '0.95rem',
-              cursor:          saving ? 'not-allowed' : 'pointer',
-              opacity:         saving ? 0.7 : 1,
-              minWidth:        '180px',
-              transition:      'opacity 0.15s',
-            }}
-          >
-            {saving
-              ? 'Saving...'
-              : userStatus === 'PENDING' || userStatus === 'REJECTED'
-                ? '📤 Submit Profile'
-                : '💾 Update Profile'
-            }
-          </button>
-        </div>
+        {/* ── SUBMIT / UPDATE BUTTON ── */}
+        {!showConfirm && (
+          <div style={{ marginTop: '1.5rem' }}>
+            {/* Helper text for pending users */}
+            {(userStatus === 'PENDING' || userStatus === 'COMPLETE') && (
+              <div style={{
+                backgroundColor: '#f9fafb',
+                border:          '1px solid #e5e7eb',
+                borderRadius:    '0.75rem',
+                padding:         '0.875rem 1.25rem',
+                marginBottom:    '1rem',
+                fontSize:        '0.8rem',
+                color:           '#374151',
+                display:         'flex',
+                alignItems:      'center',
+                gap:             '0.625rem',
+              }}>
+                <AlertCircle size={16} color="#6b7280" style={{ flexShrink: 0 }} />
+                {userStatus === 'PENDING'
+                  ? 'All required fields must be filled before you can submit for admin approval.'
+                  : 'Your profile is under review. You can still edit and resubmit.'
+                }
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={saving}
+              style={{
+                width:           '100%',
+                padding:         '0.875rem',
+                backgroundColor: '#2d6a2d',
+                color:           'white',
+                border:          'none',
+                borderRadius:    '0.75rem',
+                fontWeight:      700,
+                fontSize:        '1rem',
+                cursor:          saving ? 'not-allowed' : 'pointer',
+                opacity:         saving ? 0.7 : 1,
+                display:         'flex',
+                alignItems:      'center',
+                justifyContent:  'center',
+                gap:             '0.5rem',
+                transition:      'opacity 0.15s',
+              }}
+            >
+              {saving ? (
+                <><Clock size={18} /> Saving...</>
+              ) : userStatus === 'APPROVED' ? (
+                <><Save size={18} /> Update Profile</>
+              ) : (
+                <><Send size={18} /> Submit Profile</>
+              )}
+            </button>
+          </div>
+        )}
 
       </form>
     </div>

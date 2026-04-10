@@ -8,7 +8,7 @@ import {
   Tractor,
   ClipboardList,
   FileText,
-  MapPin,
+  Package,
 } from 'lucide-react';
 
 // ── FARMER: 5 nav items ──
@@ -25,6 +25,7 @@ const FARMER_NAV = [
 // Home → Farmers → Monitor (crop monitoring) → Reports
 const AT_NAV = [
   { label: 'Home',    path: '/at',                   icon: Home        },
+  { label: 'News',    path: '/at/announcements',     icon: Megaphone   }, 
   { label: 'Farmers', path: '/at/farmers',           icon: Users       },
   { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor     },
   { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
@@ -36,8 +37,10 @@ const BRGY_NAV = [
   { label: 'Home',    path: '/brgy',                 icon: Home        },
   { label: 'News',    path: '/brgy/announcements',   icon: Megaphone   },
   { label: 'Farmers', path: '/brgy/farmers',         icon: Users       },
+  { label: 'Poll',    path: '/brgy/poll',            icon: Sprout      },
   { label: 'Harvest', path: '/brgy/harvest',         icon: Wheat       },
   { label: 'Reports', path: '/brgy/reports',         icon: FileText    },
+  { label: 'Beneficiaries', path: '/brgy/distribution', icon: Package },
 ];
 
 // ── EXPORTED MAP: role string → nav array ──

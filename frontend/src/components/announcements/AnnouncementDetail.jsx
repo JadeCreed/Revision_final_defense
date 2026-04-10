@@ -1,45 +1,45 @@
-import { useState, useEffect, useRef } from 'react';
+// src/components/announcements/AnnouncementDetail.jsx
+// ============================================================
+// OPTION A: Full screen overlay — covers UserLayout completely
+// Uses React Portal to render outside the layout DOM tree
+// 
+// CHANGES:
+// 1. Uses createPortal to render over everything including navbar
+// 2. Farmers/AT/BRGY don't see target role or barangay info
+// 3. Better visual design
+// 4. Slide animation preserved
+// ============================================================
+
+import { useState, useEffect }  from 'react';
+import { createPortal }         from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../auth/AuthContext';
+import { useAuth }              from '../../auth/AuthContext';
 import { getAnnouncementDetail } from '../../api/axios';
-import { ROLE_COLORS } from '../navigation/UserNavConfig';
+import { ROLE_COLORS }          from '../navigation/UserNavConfig';
 
 const AnnouncementDetail = () => {
-  const { id }       = useParams();     // announcement ID from URL
-  const navigate     = useNavigate();
-  const location     = useLocation();
-  const { role }     = useAuth();
+  const { id }    = useParams();
+  const navigate  = useNavigate();
+  const location  = useLocation();
+  const { role }  = useAuth();
 
   const colors = ROLE_COLORS[role] || ROLE_COLORS.FARMER;
 
   const [announcement, setAnnouncement] = useState(null);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState('');
+  const [slideClass, setSlideClass]     = useState('ann-slide-enter');
 
-  // ── SLIDE ANIMATION ──
-  // We use a CSS class toggle to trigger slide in/out.
-  // On mount: slides in from right
-  // On back: slides out to right then navigates
-  const [slideClass, setSlideClass] = useState('slide-enter');
-
-  // Where to go back — determined by referrer
-  // If user came from dashboard → go back to dashboard
-  // If user came from announcements list → go back to list
+  // Determine back path from navigation state
   const getBackPath = () => {
-    const role_lower = role?.toLowerCase();
-    // location.state.from is set when navigating to detail
     if (location.state?.from) return location.state.from;
-    // Default fallback: go to announcements list
-    return `/${role_lower}/announcements`;
+    return `/${role?.toLowerCase()}/announcements`;
   };
 
-  // ── FETCH ANNOUNCEMENT ──
-  // Calling this endpoint also marks the announcement as READ
-  // (handled automatically in UserAnnouncementDetailView)
+  // Fetch announcement — this also auto-marks as READ on the backend
   useEffect(() => {
-    const fetchDetail = async () => {
+    const fetch = async () => {
       try {
-        setLoading(true);
         const res = await getAnnouncementDetail(id);
         setAnnouncement(res.data);
       } catch {
@@ -48,67 +48,65 @@ const AnnouncementDetail = () => {
         setLoading(false);
       }
     };
-    fetchDetail();
+    fetch();
   }, [id]);
 
-  // ── TRIGGER SLIDE IN on mount ──
+  // Slide in on mount
   useEffect(() => {
-    // Small delay so the browser renders the initial state first
-    const timer = setTimeout(() => {
-      setSlideClass('slide-enter-active');
-    }, 10);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => setSlideClass('ann-slide-enter-active'), 10);
+    return () => clearTimeout(t);
   }, []);
 
-  // ── HANDLE BACK ──
-  // Trigger slide-out animation THEN navigate
+  // Back with slide out animation
   const handleBack = () => {
-    setSlideClass('slide-exit-active'); // trigger slide out
-    setTimeout(() => {
-      navigate(getBackPath());
-    }, 280); // wait for animation to finish (matches CSS duration)
+    setSlideClass('ann-slide-exit-active');
+    setTimeout(() => navigate(getBackPath()), 280);
   };
 
-  // Format role label for display
-  const roleLabels = {
-    ALL:    'All Users',
-    FARMER: 'Farmers',
-    AT:     'Agricultural Technicians',
-    BRGY:   'Barangay Presidents',
-  };
-
-  return (
+  // ── PORTAL CONTENT ──
+  // Rendered into document.body so it sits ABOVE everything
+  // including UserLayout's sticky header
+  const content = (
     <>
-      {/* ── SLIDE ANIMATION STYLES ── */}
-      {/* Injected as a style tag so no extra CSS file needed */}
       <style>{`
-        .slide-enter {
+        /* Slide in from right */
+        .ann-slide-enter {
+          position: fixed;
+          inset: 0;
           transform: translateX(100%);
           opacity: 0;
+          z-index: 999;
+          background: #f8fafc;
+          overflow-y: auto;
         }
-        .slide-enter-active {
+        .ann-slide-enter-active {
+          position: fixed;
+          inset: 0;
           transform: translateX(0);
           opacity: 1;
+          z-index: 999;
+          background: #f8fafc;
+          overflow-y: auto;
           transition: transform 280ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
                       opacity 280ms ease;
         }
-        .slide-exit-active {
+        /* Slide out to right */
+        .ann-slide-exit-active {
+          position: fixed;
+          inset: 0;
           transform: translateX(100%);
           opacity: 0;
+          z-index: 999;
+          background: #f8fafc;
+          overflow-y: auto;
           transition: transform 280ms cubic-bezier(0.55, 0.055, 0.675, 0.19),
-                      opacity 280ms ease;
+                      opacity 200ms ease;
         }
       `}</style>
 
-      <div
-        className={slideClass}
-        style={{
-          minHeight:       '100vh',
-          backgroundColor: '#f8fafc',
-        }}
-      >
+      <div className={slideClass}>
 
-        {/* ── STICKY HEADER with back arrow ── */}
+        {/* ── STICKY HEADER ── */}
         <div style={{
           position:        'sticky',
           top:             0,
@@ -119,88 +117,83 @@ const AnnouncementDetail = () => {
           gap:             '0.75rem',
           zIndex:          10,
           boxShadow:       '0 2px 8px rgba(0,0,0,0.15)',
+          // Max width for mobile-first consistency
+          maxWidth:        '480px',
+          margin:          '0 auto',
+          // Full width on desktop
+          width:           '100%',
+          boxSizing:       'border-box',
         }}>
-          {/* Back arrow button */}
           <button
             onClick={handleBack}
             style={{
-              background:  'none',
-              border:      'none',
-              cursor:      'pointer',
-              padding:     '0.25rem',
-              display:     'flex',
-              alignItems:  'center',
-              borderRadius:'50%',
-              transition:  'background 0.15s',
+              background:   'none',
+              border:       'none',
+              cursor:       'pointer',
+              padding:      '0.375rem',
+              borderRadius: '50%',
+              display:      'flex',
+              alignItems:   'center',
+              transition:   'background 0.15s',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.2)'}
             onMouseLeave={e => e.currentTarget.style.background = 'none'}
           >
-            {/* Left arrow SVG */}
-            <svg
-              width="22" height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="white"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            {/* Left arrow */}
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+              stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
             </svg>
           </button>
-
-          <span style={{
-            color:      'white',
-            fontWeight: 700,
-            fontSize:   '1rem',
-          }}>
+          <span style={{ color: 'white', fontWeight: 700, fontSize: '1rem' }}>
             Announcement
           </span>
         </div>
 
-        {/* ── CONTENT ── */}
-        <div style={{ padding: '1.25rem' }}>
+        {/* ── PAGE CONTENT — centered for mobile ── */}
+        <div style={{
+          maxWidth: '480px',
+          margin:   '0 auto',
+          padding:  '1.25rem',
+        }}>
 
-          {/* Loading state */}
+          {/* Loading */}
           {loading && (
-            <div style={{
-              display:        'flex',
-              alignItems:     'center',
-              justifyContent: 'center',
-              padding:        '4rem',
-              color:          '#9ca3af',
-            }}>
+            <div style={{ padding: '4rem', textAlign: 'center', color: '#9ca3af' }}>
               Loading...
             </div>
           )}
 
-          {/* Error state */}
+          {/* Error */}
           {error && (
             <div style={{
               backgroundColor: '#fee2e2',
               color:           '#991b1b',
               padding:         '1rem',
               borderRadius:    '0.75rem',
-              fontSize:        '0.875rem',
               textAlign:       'center',
+              fontSize:        '0.875rem',
             }}>
               {error}
             </div>
           )}
 
-          {/* Announcement content */}
+          {/* Content */}
           {!loading && !error && announcement && (
             <div>
 
-              {/* Day + Month header */}
+              {/* ── DATE HEADER CARD ── */}
               <div style={{
-                display:        'flex',
-                alignItems:     'center',
-                gap:            '1rem',
-                marginBottom:   '1.25rem',
+                backgroundColor: 'white',
+                borderRadius:    '1rem',
+                padding:         '1.25rem',
+                boxShadow:       '0 1px 4px rgba(0,0,0,0.06)',
+                marginBottom:    '1rem',
+                display:         'flex',
+                alignItems:      'center',
+                gap:             '1rem',
               }}>
-                {/* Large day box */}
+                {/* Day box */}
                 <div style={{
                   width:           '64px',
                   height:          '64px',
@@ -222,7 +215,7 @@ const AnnouncementDetail = () => {
                   </span>
                   <span style={{
                     fontSize:      '0.6rem',
-                    color:         'rgba(255,255,255,0.75)',
+                    color:         'rgba(255,255,255,0.8)',
                     fontWeight:    600,
                     textTransform: 'uppercase',
                   }}>
@@ -230,109 +223,74 @@ const AnnouncementDetail = () => {
                   </span>
                 </div>
 
-                {/* Date + meta info */}
+                {/* Date meta */}
                 <div>
                   <p style={{
-                    fontSize:   '0.8rem',
-                    color:      '#6b7280',
+                    fontWeight: 700,
+                    color:      '#1a1a1a',
                     margin:     0,
+                    fontSize:   '0.9rem',
                   }}>
                     {announcement.formatted_date}
                   </p>
-                  <p style={{
-                    fontSize:   '0.75rem',
-                    color:      '#9ca3af',
-                    margin:     '0.2rem 0 0',
-                  }}>
+                  <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: '0.2rem 0 0' }}>
                     {announcement.time_ago}
                   </p>
-                  <p style={{
-                    fontSize:   '0.75rem',
-                    color:      '#9ca3af',
-                    margin:     '0.2rem 0 0',
-                  }}>
-                    Posted by: {announcement.posted_by_name}
+                  <p style={{ color: '#9ca3af', fontSize: '0.75rem', margin: '0.2rem 0 0' }}>
+                    Posted by {announcement.posted_by_name}
                   </p>
                 </div>
               </div>
 
-              {/* Title */}
-              <h1 style={{
-                fontSize:     '1.25rem',
-                fontWeight:   800,
-                color:        '#1a1a1a',
-                marginBottom: '0.5rem',
-                lineHeight:   1.3,
-              }}>
-                {announcement.title}
-              </h1>
-
-              {/* Target info pills */}
+              {/* ── TITLE + CONTENT CARD ── */}
               <div style={{
-                display:      'flex',
-                gap:          '0.5rem',
-                flexWrap:     'wrap',
-                marginBottom: '1.25rem',
+                backgroundColor: 'white',
+                borderRadius:    '1rem',
+                padding:         '1.25rem',
+                boxShadow:       '0 1px 4px rgba(0,0,0,0.06)',
+                marginBottom:    '1rem',
               }}>
-                {/* Target role pill */}
-                <span style={{
-                  backgroundColor: '#f0fdf4',
-                  color:           colors.primary,
-                  fontSize:        '0.72rem',
-                  fontWeight:      600,
-                  padding:         '3px 10px',
-                  borderRadius:    '999px',
-                  border:          `1px solid ${colors.primary}30`,
+                {/* Title */}
+                <h1 style={{
+                  fontSize:     '1.2rem',
+                  fontWeight:   800,
+                  color:        '#1a1a1a',
+                  marginBottom: '1rem',
+                  lineHeight:   1.3,
+                  paddingBottom:'0.875rem',
+                  borderBottom: '1px solid #f3f4f6',
                 }}>
-                  {roleLabels[announcement.target_role] || announcement.target_role}
-                </span>
+                  {announcement.title}
+                </h1>
 
-                {/* Barangay pills */}
-                {announcement.target_barangays_list?.length > 0
-                  ? announcement.target_barangays_list.map(b => (
-                    <span key={b} style={{
-                      backgroundColor: '#f9fafb',
-                      color:           '#6b7280',
-                      fontSize:        '0.72rem',
-                      fontWeight:      500,
-                      padding:         '3px 10px',
-                      borderRadius:    '999px',
-                      border:          '1px solid #e5e7eb',
-                    }}>
-                      {b}
-                    </span>
-                  ))
-                  : (
-                    <span style={{
-                      backgroundColor: '#f9fafb',
-                      color:           '#6b7280',
-                      fontSize:        '0.72rem',
-                      fontWeight:      500,
-                      padding:         '3px 10px',
-                      borderRadius:    '999px',
-                      border:          '1px solid #e5e7eb',
-                    }}>
-                      All Barangays
-                    </span>
-                  )
-                }
+                {/* Full content — preserves line breaks */}
+                <div style={{
+                  fontSize:   '0.9rem',
+                  color:      '#374151',
+                  lineHeight: 1.75,
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {announcement.content}
+                </div>
               </div>
 
-              {/* Divider */}
+              {/* ── READ STATUS BADGE ── */}
+              {/* Small subtle indicator at the bottom */}
               <div style={{
-                height:       '1px',
-                backgroundColor: '#e5e7eb',
-                marginBottom: '1.25rem',
-              }} />
-
-              {/* Full content */}
-              <div style={{
-                fontSize:   '0.9rem',
-                color:      '#374151',
-                lineHeight: 1.7,
-                whiteSpace: 'pre-wrap', // preserves line breaks from admin input
+                textAlign: 'center',
+                padding:   '0.5rem',
               }}>
-                {announcement.content}
+                <span style={{
+                  backgroundColor: '#f0fdf4',
+                  color:           '#166534',
+                  fontSize:        '0.72rem',
+                  fontWeight:      600,
+                  padding:         '4px 12px',
+                  borderRadius:    '999px',
+                  border:          '1px solid #bbf7d0',
+                }}>
+                  ✓ Marked as read
+                </span>
               </div>
 
             </div>
@@ -341,6 +299,10 @@ const AnnouncementDetail = () => {
       </div>
     </>
   );
+
+  // Render into document.body via Portal
+  // This ensures it sits ABOVE the UserLayout navbar
+  return createPortal(content, document.body);
 };
 
 export default AnnouncementDetail;

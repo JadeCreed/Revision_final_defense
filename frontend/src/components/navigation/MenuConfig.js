@@ -12,7 +12,7 @@ export const MENU_CONFIG = {
     { label: 'Seed Poll',      path: '/admin/seed-poll',   icon: Sprout },
     { label: 'Announcement',   path: '/admin/announcement',icon: Megaphone },
     { label: 'Seed Inventory', path: '/admin/inventory',   icon: Archive },
-    { label: 'Distribution',   path: '/admin/distribution',icon: Package },
+    { label: 'Beneficiaries',   path: '/admin/distribution',icon: Package },
     { label: 'Crop Phase',     path: '/admin/crop-phase',  icon: Wheat },
     { label: 'Production',     path: '/admin/production',  icon: BarChart3 },
     { label: 'GIS Map',        path: '/admin/gis',         icon: Map },

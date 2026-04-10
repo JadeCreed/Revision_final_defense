@@ -24,6 +24,7 @@ const SORT_OPTIONS = [
 const EMPTY_FORM = {
   title:                 '',
   content:               '',
+  announced_date:        new Date().toISOString().split('T')[0],
   target_role:           'ALL',
   target_barangays_list: [],
   is_active:             true,
@@ -94,6 +95,8 @@ const Announcement = () => {
     setForm({
       title:                 ann.title,
       content:               ann.content,
+      announced_date:        ann.announced_date
+      || new Date(ann.created_at).toISOString().split('T')[0],
       target_role:           ann.target_role,
       target_barangays_list: ann.target_barangays_display || [],
       is_active:             ann.is_active,
@@ -262,6 +265,55 @@ const Announcement = () => {
           </span>
         )}
       </div>
+      {/* Announcement Date */}
+<div style={{ marginBottom: '0.875rem' }}>
+  <label style={labelStyle}>
+    Announcement Date *
+    <span style={{
+      fontWeight:   400,
+      color:        '#9ca3af',
+      marginLeft:   '0.5rem',
+      fontSize:     '0.72rem',
+    }}>
+      (defaults to today — change if needed)
+    </span>
+  </label>
+  <input
+    type="date"
+    value={form.announced_date}
+    onChange={e => handleField('announced_date', e.target.value)}
+    style={inputStyle(!!fieldErrors.announced_date)}
+    // min and max are optional — remove if admin should pick any date
+    // min="2020-01-01"
+  />
+  {/* Show formatted preview so admin can confirm the date */}
+  {form.announced_date && (
+    <p style={{
+      fontSize:  '0.75rem',
+      color:     '#6b7280',
+      marginTop: '0.25rem',
+    }}>
+      Will show as:{' '}
+      <strong>
+        {new Date(form.announced_date + 'T00:00:00')
+          .toLocaleDateString('en-PH', {
+            year: 'numeric', month: 'long', day: 'numeric'
+          })
+        }
+      </strong>
+    </p>
+  )}
+  {fieldErrors.announced_date && (
+    <span style={{
+      fontSize:  '0.72rem',
+      color:     '#dc2626',
+      marginTop: '0.2rem',
+      display:   'block',
+    }}>
+      {fieldErrors.announced_date}
+    </span>
+      )}
+    </div>
 
       {/* Target Role */}
       <div style={{ marginBottom: '0.875rem' }}>
