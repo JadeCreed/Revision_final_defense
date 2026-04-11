@@ -13,7 +13,8 @@ from .views import (
     FarmerVoteView,
     BrgyPollResultsView,
     SeedVarietyListView,
-    test_view
+    DeletePollView,
+    FinalSeedListCreateView,
 )
 
 urlpatterns = [
@@ -42,6 +43,6 @@ urlpatterns = [
     # BRGY
     path('<int:pk>/brgy-results/', BrgyPollResultsView.as_view(), name='brgy-poll-results'),
 
-    # TEST
-    path('test/', test_view, name='test-view'),
+    path('polls/<int:pk>/delete/',  DeletePollView.as_view(),            name='poll-delete'),
+    path('final-seeds/',            FinalSeedListCreateView.as_view(),   name='final-seeds'),
 ]

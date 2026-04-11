@@ -18,6 +18,8 @@ from .views import (
     DistributionAuditView,
     BrgyDistributionContextView,
     AdminConfirmSeedDeliveryView,
+    BrgyRequestDeleteEventView,
+    AdminConfirmDeleteEventView,
 )
 
 urlpatterns = [
@@ -84,4 +86,11 @@ urlpatterns = [
      path('events/<int:pk>/confirm-delivery/',
      AdminConfirmSeedDeliveryView.as_view(),
      name='confirm-delivery'),
+
+     path('events/<int:pk>/request-delete/',
+     BrgyRequestDeleteEventView.as_view(),
+     name='event-request-delete'),
+     path('events/<int:pk>/confirm-delete/',
+     AdminConfirmDeleteEventView.as_view(),
+     name='event-confirm-delete'),
 ]

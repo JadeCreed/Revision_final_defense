@@ -109,12 +109,18 @@ export const getAdminSeedTypes  = ()         => API.get('/seed-poll/admin/types/
 export const createSeedType     = (data)     => API.post('/seed-poll/admin/types/', data);
 export const updateSeedType     = (id, data) => API.put(`/seed-poll/admin/types/${id}/`, data);
 export const deleteSeedType     = (id)       => API.delete(`/seed-poll/admin/types/${id}/`);
+export const deletePoll = (pollId)           => API.delete(`/seed-poll/polls/${pollId}/delete/`);
+export const getFinalSeeds = (params = {})   => API.get('/seed-poll/final-seeds/', { params });
+export const saveFinalSeeds = (data)         => API.post('/seed-poll/final-seeds/', data);
 
 // ── DISTRIBUTION ──
 // Farmer search
 export const searchFarmers = (params) =>
   API.get('/distribution/farmers/search/', { params });
-
+// ── DISTRIBUTION: BRGY requests program deletion ──
+export const requestDeleteEvent = (eventId, data)       => API.post(`/distribution/events/${eventId}/request-delete/`, data);
+// ── DISTRIBUTION: Admin confirms program deletion ──
+export const adminConfirmDeleteEvent = (eventId)        => API.delete(`/distribution/events/${eventId}/event-confirm-delete/`);
 // Events
 export const getDistributionEvents   = (params) => API.get('/distribution/events/', { params });
 export const createDistributionEvent = (data)   => API.post('/distribution/events/', data);

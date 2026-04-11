@@ -113,6 +113,11 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
 class DistributionEntrySerializer(serializers.ModelSerializer):
     """Full entry with farmer info."""
     farmer_detail = FarmerSearchSerializer(source='farmer', read_only=True)
+    farmer_name = serializers.SerializerMethodField()
+    farmer_rsbsa = serializers.SerializerMethodField()
+    farmer_contact = serializers.SerializerMethodField()
+    farmer_barangay = serializers.SerializerMethodField()
+    variety_name = serializers.SerializerMethodField()
     has_signature = serializers.SerializerMethodField()
     crop_establishment_display = serializers.CharField(
         source='get_crop_establishment_display', read_only=True
@@ -122,7 +127,9 @@ class DistributionEntrySerializer(serializers.ModelSerializer):
         model  = DistributionEntry
         fields = [
             'id', 'row_number', 'farmer', 'farmer_detail',
+            'farmer_name', 'farmer_rsbsa', 'farmer_contact', 'farmer_barangay',
             'farm_area_ha', 'crop_establishment', 'crop_establishment_display',
+            'variety', 'variety_name', 'data_sharing',
             'qty_bags', 'date_received',
             'area_planted', 'expected_yield',
             'signature', 'has_signature', 'signed_at',
@@ -130,8 +137,24 @@ class DistributionEntrySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'encoded_at', 'updated_at', 'farmer_detail']
 
+    def get_variety_name(self, obj):
+        return obj.variety.name if obj.variety else ''
+
     def get_has_signature(self, obj):
         return bool(obj.signature)
+
+    def get_farmer_name(self, obj):
+        f = obj.farmer
+        return f"{f.last_name}, {f.first_name}"
+
+    def get_farmer_rsbsa(self, obj):
+        return obj.farmer.rsbsa_number or ''
+
+    def get_farmer_contact(self, obj):
+        return obj.farmer.contact_number or ''
+
+    def get_farmer_barangay(self, obj):
+        return obj.farmer.barangay or ''
 
 
 class DistributionEntryListSerializer(serializers.ModelSerializer):
@@ -144,6 +167,7 @@ class DistributionEntryListSerializer(serializers.ModelSerializer):
     farmer_rsbsa   = serializers.SerializerMethodField()
     farmer_contact = serializers.SerializerMethodField()
     farmer_barangay = serializers.SerializerMethodField()
+    variety_name   = serializers.SerializerMethodField()
     has_signature  = serializers.SerializerMethodField()
     crop_establishment_display = serializers.CharField(
         source='get_crop_establishment_display', read_only=True
@@ -156,6 +180,7 @@ class DistributionEntryListSerializer(serializers.ModelSerializer):
             'farmer', 'farmer_name', 'farmer_rsbsa',
             'farmer_contact', 'farmer_barangay',
             'farm_area_ha', 'crop_establishment', 'crop_establishment_display',
+            'variety_name',
             'qty_bags', 'date_received',
             'has_signature', 'signed_at',
         ]
@@ -271,6 +296,7 @@ class DistributionEventSerializer(serializers.ModelSerializer):
             'total_encoded', 'total_approved', 'total_remaining',
             'batch_count', 'batches',
             'created_by_name', 'created_at', 'updated_at',
+            'delete_requested', 'delete_request_note', 'delete_requested_at',
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at',
@@ -331,6 +357,7 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
             'seed_delivered', 'seed_delivered_at',
             'total_encoded', 'total_approved', 'total_remaining',
             'batch_count', 'created_at',
+            'delete_requested', 'delete_request_note', 'delete_requested_at',
         ]
 
     def get_seed_type_name(self, obj):

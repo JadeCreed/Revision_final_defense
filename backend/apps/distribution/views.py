@@ -465,6 +465,28 @@ class DistributionEntryCreateView(APIView):
                 "error": f"{farmer.first_name} {farmer.last_name} is already in this batch."
             }, status=400)
 
+        # Validate variety selection
+        variety_id = request.data.get('variety_id')
+        variety = None
+        if variety_id:
+            from apps.seed_poll.models import SeedVariety
+            try:
+                variety = SeedVariety.objects.get(id=variety_id, seed_type=event.seed_type)
+            except SeedVariety.DoesNotExist:
+                return Response({"error": "Selected variety is invalid for this program."}, status=400)
+            if event.variety and variety.id != event.variety.id:
+                return Response({"error": "Selected variety must match the program variety."}, status=400)
+        elif event.variety:
+            variety = event.variety
+        else:
+            return Response({"error": "Variety selection is required for this program."}, status=400)
+
+        data_sharing = request.data.get('data_sharing', False)
+        if data_sharing is None:
+            data_sharing = False
+        if isinstance(data_sharing, str):
+            data_sharing = data_sharing.lower() in ('true', '1', 'yes', 'y')
+
         # Auto row number
         row_number = batch.entries.count() + 1
 
@@ -474,6 +496,11 @@ class DistributionEntryCreateView(APIView):
             row_number=row_number,
             farm_area_ha=request.data.get('farm_area_ha'),
             crop_establishment=request.data.get('crop_establishment'),
+            qty_bags=request.data.get('qty_bags'),
+            area_planted=request.data.get('area_planted'),
+            expected_yield=request.data.get('expected_yield'),
+            variety=variety,
+            data_sharing=data_sharing,
             encoded_by=request.user,
         )
 
@@ -502,7 +529,7 @@ class DistributionEntryDetailView(APIView):
             return Response({"error": "Cannot edit entries in a SUBMITTED batch."}, status=400)
 
         allowed = ['farm_area_ha', 'crop_establishment', 'qty_bags', 'date_received',
-                   'area_planted', 'expected_yield']
+                   'area_planted', 'expected_yield', 'variety', 'data_sharing']
         data = {k: v for k, v in request.data.items() if k in allowed}
 
         serializer = DistributionEntrySerializer(entry, data=data, partial=True)
@@ -663,7 +690,7 @@ class BrgyDistributionContextView(APIView):
         # Auto-close expired polls
         Poll.objects.filter(status='OPEN', end_date__lte=tz.now()).update(status='CLOSED')
         current_poll = Poll.objects.filter(
-            status__in=['OPEN', 'LOCKED']
+            status__in=['OPEN', 'LOCKED', 'CLOSED']
         ).order_by('-created_at').first()
 
         current_season = None
@@ -726,5 +753,47 @@ class DistributionAuditView(APIView):
         logs  = batch.audit_logs.all().order_by('-timestamp')
         serializer = DistributionAuditSerializer(logs, many=True)
         return Response(serializer.data)
+    
+class BrgyRequestDeleteEventView(APIView):
+    """
+    POST /api/distribution/events/<id>/request-delete/
+    BRGY requests deletion of a program. Goes to admin for approval.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        event = get_object_or_404(DistributionEvent, pk=pk)
+
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if event.barangay != brgy:
+                return Response({"error": "Access denied."}, status=403)
+
+        event.delete_requested    = True
+        event.delete_requested_at = timezone.now()
+        event.delete_requested_by = request.user
+        event.delete_request_note = request.data.get('note', '')
+        event.save()
+
+        return Response({
+            "message": "Deletion request submitted. Admin will review.",
+        })
+
+
+class AdminConfirmDeleteEventView(APIView):
+    """
+    DELETE /api/distribution/events/<id>/confirm-delete/
+    Admin permanently deletes a program that a BRGY requested to delete.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def delete(self, request, pk):
+        event = get_object_or_404(DistributionEvent, pk=pk)
+
+        if not event.delete_requested:
+            return Response({"error": "No deletion request for this event."}, status=400)
+
+        event.delete()
+        return Response({"message": "Program permanently deleted."})
     
 

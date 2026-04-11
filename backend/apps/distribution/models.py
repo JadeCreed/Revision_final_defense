@@ -91,6 +91,15 @@ class DistributionEvent(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+        # ADD these fields to the DistributionEvent model
+    delete_requested         = models.BooleanField(default=False)
+    delete_requested_at      = models.DateTimeField(null=True, blank=True)
+    delete_requested_by      = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='delete_requests'
+    )
+    delete_request_note      = models.TextField(blank=True, default='')
+
     class Meta:
         ordering = ['-created_at']
 
@@ -209,6 +218,13 @@ class DistributionEntry(models.Model):
         on_delete=models.PROTECT,
         related_name='distribution_entries'
     )
+    variety    = models.ForeignKey(
+        'seed_poll.SeedVariety',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='distribution_entries'
+    )
     row_number = models.PositiveIntegerField(
         help_text='Position in the batch: 1 to 10'
     )
@@ -247,6 +263,10 @@ class DistributionEntry(models.Model):
     expected_yield = models.DecimalField(
         max_digits=8, decimal_places=2,
         null=True, blank=True
+    )
+    data_sharing = models.BooleanField(
+        default=False,
+        help_text='Farmer agreed to data sharing with PhilRice'
     )
 
     # ── E-SIGNATURE ──

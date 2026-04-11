@@ -9,7 +9,7 @@ from django.shortcuts           import get_object_or_404
 from django.utils               import timezone
 
 from apps.accounts.permissions  import IsAdminUserRole, IsBPUser
-from .models      import SeedType, SeedVariety, Poll, PollVote
+from .models      import SeedType, SeedVariety, Poll, PollVote,FinalSeed
 from .serializers import (
     SeedTypeSerializer,
     SeedVarietySerializer,
@@ -431,6 +431,147 @@ class SeedVarietyListView(APIView):
         return Response(serializer.data)
     
 
-@api_view(['GET'])
-def test_view(request):
-    return Response({"message": "Seed-poll API is working!"})
+class DeletePollView(APIView):
+    """
+    DELETE /api/seed-poll/polls/<id>/delete/
+    Permanently deletes a past poll.
+    Cannot delete OPEN polls.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def delete(self, request, pk):
+        from .models import Poll
+        poll = get_object_or_404(Poll, pk=pk)
+        if poll.status == 'OPEN':
+            return Response(
+                {"error": "Cannot delete an active/open poll. Close it first."},
+                status=400
+            )
+        poll.delete()
+        return Response({"message": "Poll deleted permanently."}, status=200)
+
+
+class FinalSeedListCreateView(APIView):
+    """
+    GET  /api/seed-poll/final-seeds/
+         Returns the current final seeds (latest season/year).
+         Used by BrgyDistribution to show intervention choices.
+         Used by home pages to show final seed announcement.
+
+    POST /api/seed-poll/final-seeds/
+         Admin saves/updates the finalized seed types and varieties.
+         Body: [
+           { "seed_type_id": 1, "variety_ids": [2, 3], "source": "REGION" },
+           { "seed_type_id": 2, "variety_ids": [5],    "source": "PHILRICE" },
+         ]
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Always get from latest closed/locked poll unless specific params given
+        season = request.query_params.get('season')
+        year   = request.query_params.get('year')
+
+        qs = FinalSeed.objects.select_related('seed_type', 'confirmed_by').prefetch_related('varieties')
+
+        if season and year:
+            qs = qs.filter(season=season, year=int(year))
+        else:
+            # Get season/year from latest closed poll
+            latest_poll = Poll.objects.filter(
+                status__in=['CLOSED', 'LOCKED']
+            ).order_by('-year', '-created_at').first()
+
+            if latest_poll:
+                qs = qs.filter(season=latest_poll.season, year=latest_poll.year)
+            else:
+                # Fallback: latest year
+                from django.db.models import Max
+                latest_year = qs.aggregate(Max('year'))['year__max']
+                if latest_year:
+                    qs = qs.filter(year=latest_year)
+
+        result = []
+        for fs in qs:
+            result.append({
+                'id':           fs.id,
+                'season':       fs.season,
+                'season_display': fs.get_season_display(),
+                'year':         fs.year,
+                'source':       fs.source,
+                'seed_type': {
+                    'id':   fs.seed_type.id,
+                    'name': fs.seed_type.name,
+                },
+                'varieties': [
+                    {'id': v.id, 'name': v.name}
+                    for v in fs.varieties.all()
+                ],
+                'confirmed_at': fs.confirmed_at,
+                'confirmed_by': f"{fs.confirmed_by.first_name} {fs.confirmed_by.last_name}" if fs.confirmed_by else '',
+            })
+        return Response(result)
+
+    def post(self, request):
+        if request.user.role != 'ADMIN':
+            return Response({"error": "Access denied."}, status=403)
+
+        from .models import Poll, SeedType, SeedVariety
+        # Get season/year from latest closed/locked poll
+        latest_poll = Poll.objects.filter(
+            status__in=['CLOSED', 'LOCKED']
+        ).order_by('-year', '-created_at').first()
+
+        if not latest_poll:
+            return Response(
+                {"error": "No closed poll found. Close a poll before finalizing seeds."},
+                status=400
+            )
+
+        entries = request.data  # list of { seed_type_id, variety_ids, source }
+        if not isinstance(entries, list) or len(entries) == 0:
+            return Response({"error": "Expected a list of seed type entries."}, status=400)
+
+        # ── DELETE ALL EXISTING FINAL SEEDS for this season/year before saving new ones ──
+        # This ensures overwrite behavior, not accumulation
+        FinalSeed.objects.filter(season=latest_poll.season, year=latest_poll.year).delete()
+
+        saved = []
+        for entry in entries:
+            seed_type_id = entry.get('seed_type_id')
+            variety_ids  = entry.get('variety_ids', [])
+            source       = entry.get('source', 'REGION')
+
+            try:
+                seed_type = SeedType.objects.get(id=seed_type_id)
+            except SeedType.DoesNotExist:
+                return Response({"error": f"SeedType {seed_type_id} not found."}, status=404)
+
+            # Auto-assign source based on seed type name (fixed relationship)
+            # HYBRID → REGION, INBRED → PHILRICE
+            type_name_upper = seed_type.name.upper()
+            if type_name_upper == 'INBRED':
+                auto_source = 'PHILRICE'
+            elif type_name_upper == 'HYBRID':
+                auto_source = 'REGION'
+            else:
+                auto_source = source  # fallback for custom types
+
+            final_seed = FinalSeed.objects.create(
+                season=latest_poll.season,
+                year=latest_poll.year,
+                seed_type=seed_type,
+                source=auto_source,
+                confirmed_by=request.user,
+            )
+            varieties = SeedVariety.objects.filter(id__in=variety_ids, seed_type=seed_type)
+            final_seed.varieties.set(varieties)
+            saved.append(final_seed)
+
+        return Response({
+            "message": f"Final seeds saved for {latest_poll.get_season_display()} {latest_poll.year}.",
+            "count": len(saved),
+            "season": latest_poll.season,
+            "year": latest_poll.year,
+        }, status=201)
+    

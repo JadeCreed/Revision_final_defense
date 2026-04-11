@@ -183,3 +183,32 @@ class PollVote(models.Model):
             f"{self.farmer.first_name} {self.farmer.last_name} "
             f"voted in {self.poll}"
         )
+    
+class FinalSeed(models.Model):
+    """
+    Admin-confirmed final seed varieties for the current season.
+    Created after poll closes. One record per season/year.
+    Replaces previous record when admin updates.
+    """
+    season        = models.CharField(max_length=10, choices=[('WET','Wet Season'),('DRY','Dry Season')])
+    year          = models.IntegerField()
+    seed_type     = models.ForeignKey('SeedType', on_delete=models.CASCADE, related_name='final_seeds')
+    varieties     = models.ManyToManyField('SeedVariety', related_name='final_selections', blank=True)
+    source        = models.CharField(
+        max_length=20,
+        choices=[('REGION', 'Region'), ('PHILRICE', 'PhilRice')],
+        default='REGION'
+    )
+    confirmed_by  = models.ForeignKey(
+        'accounts.User', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='confirmed_seeds'
+    )
+    confirmed_at  = models.DateTimeField(auto_now=True)
+    notes         = models.TextField(blank=True, default='')
+
+    class Meta:
+        unique_together = ('season', 'year', 'seed_type')
+        ordering = ['-year', 'seed_type__name']
+
+    def __str__(self):
+        return f"{self.seed_type.name} — {self.get_season_display()} {self.year}"

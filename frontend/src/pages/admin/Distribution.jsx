@@ -109,6 +109,9 @@ const Distribution = () => {
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState({});
 
+  // ── Confirm action snackbar ──
+  const [confirmAction, setConfirmAction] = useState(null);
+
   // ── Unlock modal ──
   const [unlockModal,  setUnlockModal]  = useState(null);
   const [unlockReason, setUnlockReason] = useState('');
@@ -172,18 +175,27 @@ const Distribution = () => {
   })();
 
   // Better grouping: match batches to events using events.batches
-  const pendingByEvent = (() => {
-    const result = [];
-    events.forEach(ev => {
-      const evBatches = (ev.batches || [])
-        .filter(b => b.status === 'SUBMITTED')
-        .map(b => pending.find(p => p.id === b.id))
-        .filter(Boolean);
-      if (evBatches.length > 0) {
-        result.push({ event: ev, batches: evBatches });
+  const pendingByBrgy = (() => {
+    const groups = {};
+    pending.forEach(batch => {
+      const event = events.find(ev => ev.id === batch.event);
+      if (!event) return;
+      const key = event.barangay;
+      if (!groups[key]) {
+        groups[key] = {
+          barangay: event.barangay,
+          organization_name: event.organization_name,
+          intervention: event.intervention,
+          season_display: event.season_display,
+          year: event.year,
+          variety_name: event.variety_name,
+          batches: [],
+          firstEvent: event,
+        };
       }
+      groups[key].batches.push(batch);
     });
-    return result;
+    return Object.values(groups);
   })();
 
   // All events filtered
@@ -218,6 +230,10 @@ const Distribution = () => {
     return { brgyList, completed, total: brgyList.length };
   })();
 
+  const selectedPendingCount = selectedEvent
+    ? pending.filter(batch => batch.event === selectedEvent.id).length
+    : 0;
+
   // ─────────────────────────
   // ACTIONS
   // ─────────────────────────
@@ -248,6 +264,28 @@ const Distribution = () => {
       showToast('error', err.response?.data?.error || 'Failed to approve.');
     } finally {
       setActionLoading(prev => ({ ...prev, [batchId]: null }));
+    }
+  };
+
+  const requestActionConfirm = (type, batch) => {
+    const message = type === 'approve'
+      ? `Confirm approval of batch ${batch.batch_number}?`
+      : `Confirm rejection of batch ${batch.batch_number}?`;
+    const details = type === 'approve'
+      ? 'This will lock the submitted batch and send approval to BRGY.'
+      : 'This will send the batch back to BRGY for correction with a rejection note.';
+    setConfirmAction({ type, batch, message, details });
+  };
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return;
+    const { type, batch } = confirmAction;
+    setConfirmAction(null);
+    if (type === 'approve') {
+      await handleApprove(batch.id);
+    } else if (type === 'reject') {
+      setRejectModal(batch.id);
+      setRejectReason('');
     }
   };
 
@@ -309,6 +347,35 @@ const Distribution = () => {
     <div>
       <style>{STYLES}</style>
       <Toast toast={toast} />
+      {confirmAction && (
+        <div style={{ position: 'fixed', left: '50%', bottom: '1rem', transform: 'translateX(-50%)', zIndex: 650, width: 'min(100%, 440px)', animation: 'slideUp 0.25s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 14px 40px rgba(0,0,0,0.18)', padding: '1rem', border: '1px solid #e5e7eb' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <div style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <AlertCircle size={20} color="#1e40af" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontWeight: 800, fontSize: '0.95rem', margin: 0, color: '#111827' }}>{confirmAction.message}</p>
+                <p style={{ margin: '0.35rem 0 0', color: '#6b7280', fontSize: '0.82rem', lineHeight: 1.5 }}>{confirmAction.details}</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
+              <button
+                onClick={() => setConfirmAction(null)}
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmAction}
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', backgroundColor: '#1e40af', color: 'white', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── PAGE HEADER ── */}
       <div style={{ marginBottom: '1.5rem' }}>
@@ -556,19 +623,22 @@ const Distribution = () => {
           {/* ── BRGY LIST VIEW ── */}
           {pendingView === 'brgy_list' && (
             <>
-              {pendingByEvent.length === 0 ? (
+              {pendingByBrgy.length === 0 ? (
                 <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
                   <CheckCircle size={40} color="#d1d5db" style={{ margin: '0 auto 1rem', display: 'block' }} />
                   <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No pending batches</p>
                   <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>All submitted batches have been reviewed.</p>
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {pendingByEvent.map(({ event, batches: evBatches }, idx) => (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+                  {pendingByBrgy.map((group, idx) => (
                     <div
-                      key={event.id}
+                      key={group.barangay}
                       className="brgy-card"
-                      onClick={() => { setSelectedEvent(event); setPendingView('batch_list'); }}
+                      onClick={() => {
+                        setSelectedEvent(group.firstEvent);
+                        setPendingView('batch_list');
+                      }}
                       style={{
                         backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem',
                         boxShadow: '0 1px 4px rgba(0,0,0,0.06)', cursor: 'pointer',
@@ -578,39 +648,35 @@ const Distribution = () => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <div>
-                          {/* BRGY name as title */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
                             <MapPin size={14} color="#1e40af" />
                             <h3 style={{ fontWeight: 800, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>
-                              Brgy. {event.barangay}
+                              Brgy. {group.barangay}
                             </h3>
                           </div>
                           <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0 }}>
-                            {event.organization_name}
+                            {group.organization_name}
                           </p>
                           <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: '0.25rem 0 0' }}>
-                            {event.intervention} · {event.season_display} {event.year}
-                            {event.variety_name && ` · ${event.variety_name}`}
+                            {group.intervention} · {group.season_display} {group.year}
+                            {group.variety_name ? ` · ${group.variety_name}` : ''}
                           </p>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
-                          {/* Batch count badge */}
                           <div style={{ textAlign: 'right' }}>
                             <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e40af', margin: 0, lineHeight: 1 }}>
-                              {evBatches.length}
+                              {group.batches.length}
                             </p>
                             <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>
-                              batch{evBatches.length !== 1 ? 'es' : ''} pending
+                              batch{group.batches.length !== 1 ? 'es' : ''} pending
                             </p>
                           </div>
                           <ChevronRight size={20} color="#9ca3af" />
                         </div>
                       </div>
-
-                      {/* Farmer count from pending batches */}
-                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '1.25rem', fontSize: '0.72rem', color: '#9ca3af' }}>
-                        <span>Total farmers: {evBatches.reduce((s, b) => s + (b.entry_count || 0), 0)}</span>
-                        <span>Submitted: {evBatches.map(b => b.submitted_at ? new Date(b.submitted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : '').filter(Boolean).join(', ') || '—'}</span>
+                      <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f3f4f6', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem', fontSize: '0.72rem', color: '#9ca3af' }}>
+                        <span>Total farmers: {group.batches.reduce((sum, b) => sum + (b.entry_count || 0), 0)}</span>
+                        <span>Submitted by: {group.batches[0]?.encoded_by_name || '—'}</span>
                       </div>
                     </div>
                   ))}
@@ -624,13 +690,27 @@ const Distribution = () => {
             <div style={{ animation: 'fadeIn 0.2s ease' }}>
               {/* Event info header */}
               <div style={{ backgroundColor: '#1e40af', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', color: 'white' }}>
-                <p style={{ fontSize: '0.72rem', opacity: 0.75, margin: '0 0 0.25rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  {selectedEvent.intervention} · {selectedEvent.season_display} {selectedEvent.year}
-                </p>
-                <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{selectedEvent.organization_name}</h2>
-                <p style={{ fontSize: '0.72rem', opacity: 0.7, margin: '0.25rem 0 0' }}>
-                  Brgy. {selectedEvent.barangay}{selectedEvent.variety_name ? ` · ${selectedEvent.variety_name}` : ''}
-                </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div>
+                    <p style={{ fontSize: '0.72rem', opacity: 0.75, margin: '0 0 0.25rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      {selectedEvent.intervention} · {selectedEvent.season_display} {selectedEvent.year}
+                    </p>
+                    <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{selectedEvent.organization_name}</h2>
+                    <p style={{ fontSize: '0.72rem', opacity: 0.7, margin: '0.25rem 0 0' }}>
+                      Brgy. {selectedEvent.barangay}{selectedEvent.variety_name ? ` · ${selectedEvent.variety_name}` : ''}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: '999px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                      {selectedPendingCount} pending batch{selectedPendingCount !== 1 ? 'es' : ''}
+                    </span>
+                    {selectedEvent.delete_requested && (
+                      <span style={{ backgroundColor: '#fde68a', color: '#92400e', borderRadius: '999px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                        Delete Request Pending
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* Submitted batches list */}
@@ -682,7 +762,7 @@ const Distribution = () => {
                             <Eye size={14} /> View Details
                           </button>
                           <button
-                            onClick={() => handleApprove(batch.id)}
+                            onClick={() => requestActionConfirm('approve', batch)}
                             disabled={actionLoading[batch.id] === 'approve'}
                             style={{ padding: '0.5rem 1rem', backgroundColor: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem', opacity: actionLoading[batch.id] === 'approve' ? 0.7 : 1 }}
                           >
@@ -690,7 +770,7 @@ const Distribution = () => {
                             {actionLoading[batch.id] === 'approve' ? 'Approving...' : 'Approve'}
                           </button>
                           <button
-                            onClick={() => { setRejectModal(batch.id); setRejectReason(''); }}
+                            onClick={() => requestActionConfirm('reject', batch)}
                             style={{ padding: '0.5rem 1rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
                           >
                             <XCircle size={14} /> Reject
@@ -767,7 +847,7 @@ const Distribution = () => {
                     {batchDetail.status === 'SUBMITTED' && (
                       <>
                         <button
-                          onClick={() => handleApprove(batchDetail.id)}
+                          onClick={() => requestActionConfirm('approve', batchDetail)}
                           disabled={actionLoading[batchDetail.id] === 'approve'}
                           style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
                         >
@@ -775,7 +855,7 @@ const Distribution = () => {
                           {actionLoading[batchDetail.id] === 'approve' ? 'Approving...' : 'Approve Batch'}
                         </button>
                         <button
-                          onClick={() => { setRejectModal(batchDetail.id); setRejectReason(''); }}
+                          onClick={() => requestActionConfirm('reject', batchDetail)}
                           style={{ padding: '0.5rem 1.25rem', backgroundColor: 'white', color: '#dc2626', border: '1.5px solid #dc2626', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
                         >
                           <XCircle size={16} /> Reject Batch

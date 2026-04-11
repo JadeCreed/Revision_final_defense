@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate }         from 'react-router-dom';
 import { useAuth }             from '../../auth/AuthContext';
-import { getAnnouncements }    from '../../api/axios';
+import { getAnnouncements,getFinalSeeds }    from '../../api/axios';
 import AnnouncementCard        from '../../components/announcements/AnnouncementCard';
 import {
   Users, Megaphone, Wheat, FileText,
@@ -72,6 +72,13 @@ const BPDashboard = () => {
       .catch(() => {})
       .finally(() => setAnnLoading(false));
   }, []); // empty deps — only runs once on mount
+
+  const [finalSeeds, setFinalSeeds] = useState([]);
+  useEffect(() => {
+  getFinalSeeds()
+    .then(res => setFinalSeeds(res.data || []))
+    .catch(() => {});
+  }, []);
 
   return (
     <div style={{ padding: '1.25rem' }}>
@@ -173,6 +180,52 @@ const BPDashboard = () => {
           })}
         </div>
       </div>
+
+      {/* ── CONFIRMED SEED VARIETIES ── */}
+        {finalSeeds.length > 0 && (
+          <div style={{
+            backgroundColor: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '1rem',
+            padding: '1.25rem',
+            marginBottom: '1.25rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.875rem' }}>
+              <div style={{ width: '36px', height: '36px', backgroundColor: '#dcfce7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.125rem' }}>
+                🌾
+              </div>
+              <div>
+                <h3 style={{ fontWeight: 800, fontSize: '0.95rem', color: '#166534', margin: 0 }}>
+                  Confirmed Seed Varieties — {finalSeeds[0]?.season_display} {finalSeeds[0]?.year}
+                </h3>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              {finalSeeds.map(fs => (
+                <div key={fs.id} style={{
+                  backgroundColor: 'white',
+                  borderRadius: '0.875rem',
+                  padding: '0.875rem 1rem',
+                  border: '1px solid #bbf7d0',
+                }}>
+                  <p style={{ fontWeight: 800, fontSize: '0.85rem', color: '#166534' }}>
+                    {fs.seed_type.name}
+                  </p>
+
+                  {fs.varieties.map(v => (
+                    <span key={v.id} style={{
+                      marginRight: '5px',
+                      fontSize: '0.75rem'
+                    }}>
+                      {v.name}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
       {/* ── UPDATES & REMINDERS ──
           Same pattern as FarmerDashboard and ATDashboard.
