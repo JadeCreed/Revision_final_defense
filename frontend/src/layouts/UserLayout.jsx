@@ -53,7 +53,7 @@ const UserLayout = () => {
   }, []);
 
   // ── INITIAL FETCH + POLL every 60s ──
-  // ✅ fetchUnreadCount is defined above so no reference error
+  //  fetchUnreadCount is defined above so no reference error
   useEffect(() => {
     fetchUnreadCount();
     unreadPollRef.current = setInterval(fetchUnreadCount, 60000);

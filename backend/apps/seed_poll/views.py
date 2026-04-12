@@ -8,8 +8,8 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts           import get_object_or_404
 from django.utils               import timezone
 
-from apps.accounts.permissions  import IsAdminUserRole, IsBPUser
-from .models      import SeedType, SeedVariety, Poll, PollVote,FinalSeed
+from apps.accounts.permissions  import IsAdminUserRole, IsBPUser, IsFarmer
+from .models      import SeedType, SeedVariety, Poll, PollVote, FinalSeed
 from .serializers import (
     SeedTypeSerializer,
     SeedVarietySerializer,
@@ -335,15 +335,9 @@ class FarmerVoteView(APIView):
     Uses get_or_create so same endpoint handles both submit and update.
     Blocked if poll is LOCKED or CLOSED or end_date passed.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFarmer]
 
     def post(self, request, pk):
-        # Role check
-        if request.user.role != 'FARMER':
-            return Response(
-                {"error": "Only farmers can vote."},
-                status=status.HTTP_403_FORBIDDEN
-            )
         # Approval check
         if request.user.status != 'APPROVED':
             return Response(
@@ -403,15 +397,9 @@ class BrgyPollResultsView(APIView):
     BRGY president sees results for their barangay only.
     Shows how many of their farmers voted and what they chose.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsBPUser]
 
     def get(self, request, pk):
-        if request.user.role != 'BRGY':
-            return Response(
-                {"error": "Only Barangay Presidents can access this."},
-                status=status.HTTP_403_FORBIDDEN
-            )
-
         poll       = get_object_or_404(Poll, pk=pk)
         serializer = BrgyPollResultsSerializer(poll, context={'request': request})
         return Response(serializer.data)

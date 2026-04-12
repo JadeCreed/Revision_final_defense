@@ -95,7 +95,7 @@ const BPDashboard = () => {
           margin:     '0.125rem 0 0.25rem',
           lineHeight: 1.2,
         }}>
-          {firstName || 'President'} 🏛️
+          {firstName || 'President'}
         </h1>
         <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: 0 }}>
           Barangay President — AGRICE Lucban
@@ -116,7 +116,7 @@ const BPDashboard = () => {
         <ClipboardList size={24} color="#166534" />
         <div>
           <p style={{ fontWeight: 700, color: '#166534', margin: 0, fontSize: '0.875rem' }}>
-            📋 Distribution Season
+            Distribution Season
           </p>
           <p style={{ color: '#166534', opacity: 0.8, margin: '0.125rem 0 0', fontSize: '0.78rem' }}>
             Confirm seed receipts and facilitate farmer signing.

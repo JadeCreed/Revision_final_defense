@@ -61,6 +61,8 @@ export const AuthProvider = ({ children }) => {
     setLastName('');
   };
 
+  const isLoggedIn = !!token && !isTokenExpired(token);
+
   return (
     <AuthContext.Provider value={{
       token,
@@ -68,7 +70,7 @@ export const AuthProvider = ({ children }) => {
       firstName,
       lastName,
       isVerified,
-      isLoggedIn: !!token,  // true only if token exists AND is not expired
+      isLoggedIn,
       login,
       logout,
     }}>

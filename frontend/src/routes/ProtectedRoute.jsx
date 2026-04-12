@@ -15,12 +15,13 @@ const ROLE_REDIRECT = {
 
 const ProtectedRoute = ({ allowedRole }) => {
   const { isLoggedIn, role } = useAuth();
+  const allowedRoles = Array.isArray(allowedRole) ? allowedRole : [allowedRole].filter(Boolean);
 
   if (!isLoggedIn) {
     return <Navigate to="/" replace />;
   }
 
-  if (allowedRole && role !== allowedRole) {
+  if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
     return <Navigate to={ROLE_REDIRECT[role]} replace />;
   }
 

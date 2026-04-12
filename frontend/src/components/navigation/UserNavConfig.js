@@ -9,6 +9,7 @@ import {
   ClipboardList,
   FileText,
   Package,
+  Truck,
 } from 'lucide-react';
 
 // ── FARMER: 5 nav items ──
@@ -40,7 +41,8 @@ const BRGY_NAV = [
   { label: 'Poll',    path: '/brgy/poll',            icon: Sprout      },
   { label: 'Harvest', path: '/brgy/harvest',         icon: Wheat       },
   { label: 'Reports', path: '/brgy/reports',         icon: FileText    },
-  { label: 'Beneficiaries', path: '/brgy/distribution', icon: Package },
+  { label: 'Beneficiaries', path: '/brgy/beneficiaries', icon: Package },
+  { label: 'Distribution', path: '/brgy/distribution', icon: Truck   },
 ];
 
 // ── EXPORTED MAP: role string → nav array ──

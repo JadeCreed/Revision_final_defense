@@ -279,9 +279,9 @@ const FarmerProfile = () => {
       setUserStatus(newStatus);
 
       if (newStatus === 'COMPLETE') {
-        setSuccess('✅ Profile submitted! The admin will review your information soon.');
+        setSuccess('Profile submitted! The admin will review your information soon.');
       } else if (newStatus === 'APPROVED') {
-        setSuccess('✅ Profile updated successfully!');
+        setSuccess('Profile updated successfully!');
       } else if (newStatus === 'PENDING') {
         // This should only show if profile is truly incomplete (missing required fields)
         // After the backend fix, this should NOT appear when all fields are filled

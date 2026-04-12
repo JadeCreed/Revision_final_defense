@@ -59,13 +59,7 @@ class LoginView(APIView):
             else:
                 user = User.objects.filter(contact_number=login_value).first()
 
-            if user is None:
-                return Response({
-                    "error": "Invalid credentials"
-                }, status=404)
-
-            # 🔐 Check password manually
-            if not user.check_password(password):
+            if user is None or not user.check_password(password):
                 return Response({
                     "error": "Invalid credentials"
                 }, status=401)
@@ -251,15 +245,9 @@ class FarmerDashboardView(APIView):
 
 
 class FarmerProfileView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFarmer]
 
     def get(self, request):
-        # Block non-farmers only
-        if request.user.role != 'FARMER':
-            return Response(
-                {"error": "Access denied. Farmers only."},
-                status=status.HTTP_403_FORBIDDEN
-            )
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         serializer = FarmerProfileSerializer(profile)
         return Response({
@@ -277,8 +265,6 @@ class FarmerProfileView(APIView):
 
 
     def put(self, request):
-        if request.user.role != 'FARMER':
-            return Response({"error": "Access denied."}, status=status.HTTP_403_FORBIDDEN)
 
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         user = request.user

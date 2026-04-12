@@ -21,7 +21,8 @@ import Reports         from '../pages/admin/Reports';
 import SeedPoll        from '../pages/admin/SeedPoll';
 import Announcement    from '../pages/admin/Announcement';
 import SeedInventory   from '../pages/admin/SeedInventory';
-import Distribution    from '../pages/admin/Distribution';
+import AdminBeneficiaries from '../pages/admin/AdminBeneficiaries';
+import AdminDistribution  from '../pages/admin/Distribution'; 
 import CropPhase       from '../pages/admin/CropPhase';
 import Production      from '../pages/admin/Production';
 import GisMap          from '../pages/admin/GisMap';
@@ -33,6 +34,7 @@ import FarmerMasterlist  from '../pages/admin/users/FarmerMasterlist';
 import SystemUsers       from '../pages/admin/users/SystemUsers';
 import ResetRequests     from '../pages/admin/users/ResetRequests';
 import Archive           from '../pages/admin/users/Archive';
+
 
 // ── FARMER pages ──
 import FarmerDashboard      from '../pages/farmer/FarmerDashboard';
@@ -50,20 +52,19 @@ import ATReports        from '../pages/at/ATReports';
 import ATAnnouncements  from '../pages/at/ATAnnouncements'
 
 // ── BRGY pages ──
-import BPDashboard          from '../pages/brgy/BPDashboard';
-import BrgyFarmers          from '../pages/brgy/BrgyFarmers';
-import BrgyHarvest          from '../pages/brgy/BrgyHarvest';
-import BrgyDistribution from '../pages/brgy/BrgyDistribution';
-import BrgyCropPhase        from '../pages/brgy/BrgyCropPhase';
-import BrgyAnnouncements    from '../pages/brgy/BrgyAnnouncements';
-import BrgyReports          from '../pages/brgy/BrgyReports';
+import BPDashboard       from '../pages/brgy/BPDashboard';
+import BrgyFarmers       from '../pages/brgy/BrgyFarmers';
+import BrgyHarvest       from '../pages/brgy/BrgyHarvest';
+import BrgyBeneficiaries from '../pages/brgy/BrgyBeneficiaries'; 
+import BrgyDistribution  from '../pages/brgy/BrgyDistribution';
+import BrgyCropPhase     from '../pages/brgy/BrgyCropPhase';
+import BrgyAnnouncements from '../pages/brgy/BrgyAnnouncements';
+import BrgyReports       from '../pages/brgy/BrgyReports';
+import BrgyPoll          from '../pages/brgy/BrgyPoll';
 
 // ── ANNOUNCEMENTS(SHARED PAGES) ──
 import AnnouncementDetail   from '../components/announcements/AnnouncementDetail';
 import AnnouncementCard     from '../components/announcements/AnnouncementCard';
-
-import BrgyPoll from '../pages/brgy/BrgyPoll';
-
 import UserLayout from '../layouts/UserLayout';
 
 
@@ -86,45 +87,38 @@ const AppRoutes = () => (
 
     {/* ADMIN */}
     <Route element={<ProtectedRoute allowedRole="ADMIN" />}>
-      <Route element={<DashboardLayout />}>
-        <Route path="/admin"               element={<AdminDashboard />} />
-        <Route path="/admin/seed-poll"     element={<SeedPoll />} />
-        <Route path="/admin/announcement"  element={<Announcement />} />
-        <Route path="/admin/inventory"     element={<SeedInventory />} />
-        <Route path="/admin/distribution"  element={<Distribution />} />
-        <Route path="/admin/crop-phase"    element={<CropPhase />} />
-        <Route path="/admin/production"    element={<Production />} />
-        <Route path="/admin/gis"           element={<GisMap />} />
-        <Route path="/admin/reports"       element={<Reports />} />
-        <Route path="/admin/settings"      element={<Settings />} />
-
-        {/* User Management — all sub-pages stay inside DashboardLayout */}
-        <Route path="/admin/users"
-          element={<Navigate to="/admin/users/farmer-requests" replace />} />
-        <Route path="/admin/users/farmer-requests"
-          element={<FarmerRequests />} />
-        <Route path="/admin/users/farmer-masterlist"
-          element={<FarmerMasterlist />} />
-        <Route path="/admin/users/officials"
-          element={<SystemUsers />} />
-        <Route path="/admin/users/reset-requests"
-          element={<ResetRequests />} />
-        <Route path="/admin/users/archive"
-          element={<Archive />} />
+        <Route element={<DashboardLayout />}>
+          <Route path="/admin"                element={<AdminDashboard />} />
+          <Route path="/admin/seed-poll"      element={<SeedPoll />} />
+          <Route path="/admin/announcement"   element={<Announcement />} />
+          <Route path="/admin/inventory"      element={<SeedInventory />} />
+          <Route path="/admin/beneficiaries"  element={<AdminBeneficiaries />} />
+          <Route path="/admin/distribution"   element={<AdminDistribution />} />  {/* ← bagong */}
+          <Route path="/admin/crop-phase"     element={<CropPhase />} />
+          <Route path="/admin/production"     element={<Production />} />
+          <Route path="/admin/gis"            element={<GisMap />} />
+          <Route path="/admin/reports"        element={<Reports />} />
+          <Route path="/admin/settings"       element={<Settings />} />
+          <Route path="/admin/users"          element={<Navigate to="/admin/users/farmer-requests" replace />} />
+          <Route path="/admin/users/farmer-requests"  element={<FarmerRequests />} />
+          <Route path="/admin/users/farmer-masterlist" element={<FarmerMasterlist />} />
+          <Route path="/admin/users/officials"         element={<SystemUsers />} />
+          <Route path="/admin/users/reset-requests"    element={<ResetRequests />} />
+          <Route path="/admin/users/archive"           element={<Archive />} />
+        </Route>
       </Route>
-    </Route>
 
-     {/* ── FARMER ── uses UserLayout (mobile-first) */}
-    <Route element={<ProtectedRoute allowedRole="FARMER" />}>
-      <Route element={<UserLayout />}>
-        <Route path="/farmer"               element={<FarmerDashboard />} />
-        <Route path="/farmer/profile"       element={<FarmerProfile />} />
-        <Route path="/farmer/harvest"       element={<YieldEncode />} />
-        <Route path="/farmer/announcements" element={<FarmerAnnouncements />} />
-        <Route path="/farmer/poll"          element={<FarmerPoll />} />
-        <Route path="/farmer/announcements/:id" element={<AnnouncementDetail />} />
+      {/* ── FARMER ── uses UserLayout (mobile-first) */}
+      <Route element={<ProtectedRoute allowedRole="FARMER" />}>
+        <Route element={<UserLayout />}>
+          <Route path="/farmer"               element={<FarmerDashboard />} />
+          <Route path="/farmer/profile"       element={<FarmerProfile />} />
+          <Route path="/farmer/harvest"       element={<YieldEncode />} />
+          <Route path="/farmer/announcements" element={<FarmerAnnouncements />} />
+          <Route path="/farmer/poll"          element={<FarmerPoll />} />
+          <Route path="/farmer/announcements/:id" element={<AnnouncementDetail />} />
+        </Route>
       </Route>
-    </Route>
 
         {/* // ── AT ── uses UserLayout */}
     <Route element={<ProtectedRoute allowedRole="AT" />}>
@@ -146,6 +140,7 @@ const AppRoutes = () => (
         <Route path="/brgy"                      element={<BPDashboard />} />
         <Route path="/brgy/harvest"              element={<BrgyHarvest />} />
         <Route path="/brgy/farmers"              element={<BrgyFarmers />} />
+        <Route path="/brgy/beneficiaries"        element={<BrgyBeneficiaries />} />
         <Route path="/brgy/distribution"         element={<BrgyDistribution />} />
         <Route path="/brgy/crop-phase"           element={<BrgyCropPhase />} />
         <Route path="/brgy/announcements"        element={<BrgyAnnouncements />} />

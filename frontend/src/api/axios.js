@@ -16,6 +16,18 @@ API.interceptors.request.use((config) => {
   return config;
 });
 
+API.interceptors.response.use(
+  response => response,
+  (error) => {
+    const status = error.response?.status;
+    if (status === 401) {
+      ['access_token', 'role', 'is_verified', 'first_name', 'last_name']
+        .forEach((key) => localStorage.removeItem(key));
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ===== AUTH =====
 // NOTE: field is "login" not "contact_number" — matches your new Django LoginView
 export const loginUser = (data) => API.post('/accounts/login/', data);
