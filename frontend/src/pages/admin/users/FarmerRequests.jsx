@@ -6,7 +6,6 @@ import {
   SortDropdown,
   COL_WIDTHS,
   NewBadge,
-  markTableAsSeen,
   getSeenIds,
 } from '../../../components/tables/TableBase';
 
@@ -51,6 +50,19 @@ const FarmerRequests = () => {
   const [newIds, setNewIds] = useState(new Set());
   const prevIds             = useRef(new Set()); // IDs from last poll
   const didInit             = useRef(false);     // first fetch done?
+  const newTimeouts         = useRef({});
+
+  const scheduleNewBadgeHide = (id) => {
+    if (newTimeouts.current[id]) clearTimeout(newTimeouts.current[id]);
+    newTimeouts.current[id] = setTimeout(() => {
+      setNewIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      delete newTimeouts.current[id];
+    }, 10000);
+  };
 
   // ── Action buttons state ──
   const [actionLoading, setActionLoading] = useState({});
@@ -86,6 +98,7 @@ const FarmerRequests = () => {
 
         if (unseenIds.length > 0) {
           setNewIds(new Set(unseenIds));
+          unseenIds.forEach(scheduleNewBadgeHide);
         }
 
       } else if (didInit.current) {
@@ -99,6 +112,7 @@ const FarmerRequests = () => {
             freshIds.forEach(id => next.add(id));
             return next;
           });
+          freshIds.forEach(scheduleNewBadgeHide);
         }
       }
 
@@ -126,30 +140,16 @@ const FarmerRequests = () => {
     return () => clearInterval(poll);
   }, [fetchFarmers]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(newTimeouts.current).forEach(clearTimeout);
+    };
+  }, []);
+
   // ── Reset page to 1 when filters change ──
   useEffect(() => {
     setPage(1);
   }, [search, statusFilter, barangayFilter, sort]);
-
-
-  // ─────────────────────────────────────────────────────────
-  // handleNewClick
-  // Dismisses the NEW badge for one specific row.
-  // Saves the ID to localStorage so it won't reappear.
-  // ─────────────────────────────────────────────────────────
-  const handleNewClick = (id) => {
-    // Remove from state → badge disappears immediately
-    setNewIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-
-    // Persist to localStorage → won't reappear after navigation/refresh
-    const updatedSeen = new Set(getSeenIds(TABLE_KEY));
-    updatedSeen.add(id);
-    markTableAsSeen(TABLE_KEY, updatedSeen);
-  };
 
 
   // ─────────────────────────────────────────────────────────
@@ -285,10 +285,7 @@ const FarmerRequests = () => {
                       {/* Name + NEW badge */}
                       <td style={{ padding: '0.875rem 1rem', fontWeight: '500', minWidth: COL_WIDTHS.name }}>
                         {farmer.first_name} {farmer.last_name}
-                        <NewBadge
-                          isNew={newIds.has(farmer.id)}
-                          onClick={() => handleNewClick(farmer.id)}
-                        />
+                        <NewBadge isNew={newIds.has(farmer.id)} />
                       </td>
 
                       {/* Contact */}

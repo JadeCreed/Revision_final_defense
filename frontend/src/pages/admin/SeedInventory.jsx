@@ -1,8 +1,820 @@
-// src/pages/admin/SeedInventory.jsx
-const SeedInventory = () => (
-  <div>
-    <h1 style={{ fontSize: '1.5rem', fontWeight: '700', marginBottom: '0.5rem' }}>Seed Inventory</h1>
-    <p style={{ color: '#6b7280' }}>Track seed inventory here.</p>
-  </div>
-);
-export default SeedInventory;
+
+import { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  getInventorySummary, getSeedDeliveries, createSeedDelivery,
+  updateSeedDelivery, deleteSeedDelivery, createAllocation,
+  getDeliveryAudit, getFinalSeeds,
+} from '../../api/axios';
+import {
+  Plus, Package, ChevronRight, ChevronLeft, CheckCircle,
+  AlertCircle, Search, Wheat, Truck, Users, Clock,
+  ClipboardList, Edit2, Trash2, Eye, History, X,
+  MapPin, Calendar, Hash,
+} from 'lucide-react';
+
+const GREEN = {
+  primary: '#1a4d1a', light: '#f0fdf4', border: '#bbf7d0',
+  accent: '#166534', soft: '#dcfce7',
+};
+
+const isHybrid = (s = '') => {
+  const n = s.toUpperCase();
+  return n.includes('HYBRID') || n === 'NRP' || n === 'RFO';
+};
+
+const StatusBadge = ({ status }) => {
+  const cfg = {
+    PENDING:   { bg: '#fef9c3', color: '#854d0e', label: 'Pending Pickup' },
+    CONFIRMED: { bg: '#dcfce7', color: '#166534', label: 'Confirmed'       },
+  }[status] || { bg: '#f9fafb', color: '#6b7280', label: status };
+  return (
+    <span style={{ backgroundColor: cfg.bg, color: cfg.color, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
+      {cfg.label}
+    </span>
+  );
+};
+
+const Toast = ({ toast }) => {
+  if (!toast) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: '1.5rem', left: '50%',
+      transform: 'translateX(-50%)', zIndex: 600,
+      backgroundColor: toast.type === 'success' ? GREEN.primary : '#991b1b',
+      color: 'white', padding: '0.75rem 1.5rem', borderRadius: '0.875rem',
+      fontWeight: 600, fontSize: '0.875rem', display: 'flex',
+      alignItems: 'center', gap: '0.5rem',
+      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
+      animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+      maxWidth: 'calc(100vw - 2rem)',
+    }}>
+      {toast.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+      {toast.message}
+    </div>
+  );
+};
+
+const ConfirmSnack = ({ data, onConfirm, onCancel }) => {
+  if (!data) return null;
+  return (
+    <div style={{
+      position: 'fixed', bottom: '1.5rem', left: '50%',
+      transform: 'translateX(-50%)', zIndex: 600,
+      width: 'min(100%, 420px)',
+      animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+    }}>
+      <div style={{
+        backgroundColor: 'white', borderRadius: '1rem',
+        padding: '1.25rem', boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+        border: `1px solid ${GREEN.border}`,
+      }}>
+        <p style={{ fontWeight: 700, color: '#1a1a1a', margin: '0 0 0.375rem', fontSize: '0.95rem' }}>{data.title}</p>
+        <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: '0 0 1rem' }}>{data.message}</p>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: '0.625rem', border: '1.5px solid #d1d5db', borderRadius: '0.625rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#374151' }}>Cancel</button>
+          <button onClick={onConfirm} style={{ flex: 2, padding: '0.625rem', backgroundColor: data.danger ? '#dc2626' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
+            {data.confirmLabel || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ProgressBar = ({ value, max, color = GREEN.primary }) => {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  return (
+    <div style={{ width: '100%', height: '6px', backgroundColor: '#e5e7eb', borderRadius: '999px', overflow: 'hidden' }}>
+      <div style={{ width: `${pct}%`, height: '100%', backgroundColor: color, borderRadius: '999px', transition: 'width 0.5s ease' }} />
+    </div>
+  );
+};
+
+const inp = (hasErr = false) => ({
+  padding: '0.625rem 0.875rem',
+  border: `1.5px solid ${hasErr ? '#dc2626' : '#d1d5db'}`,
+  borderRadius: '0.5rem', fontSize: '0.875rem',
+  width: '100%', outline: 'none', boxSizing: 'border-box',
+  fontFamily: 'inherit', backgroundColor: 'white',
+});
+
+export default function SeedInventory() {
+  // VIEW: 'landing' | 'detail' | 'audit'
+  const [view, setView]               = useState('landing');
+  const [deliveries, setDeliveries]   = useState([]);
+  const [summary, setSummary]         = useState(null);
+  const [finalSeeds, setFinalSeeds]   = useState([]);
+  const [loading, setLoading]         = useState(true);
+
+  // Selected delivery
+  const [selected, setSelected]       = useState(null);
+  const [auditLogs, setAuditLogs]     = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+
+  // Filters
+  const [search, setSearch]           = useState('');
+  const [filterSeason, setFilterSeason] = useState('');
+
+  // Modals
+  const [deliveryModal, setDeliveryModal] = useState(false);
+  const [editDelivery, setEditDelivery]   = useState(null);
+  const [allocModal, setAllocModal]       = useState(null);
+  const [confirmSnack, setConfirmSnack]   = useState(null);
+  const [toast, setToast]                 = useState(null);
+
+  // Forms
+  const [dForm, setDForm]             = useState({ final_seed_id: '', season: '', year: '', total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
+  const [dErrors, setDErrors]         = useState({});
+  const [dSaving, setDSaving]         = useState(false);
+
+  const [aForm, setAForm]             = useState({ barangay: '', allocated_bags: '', notes: '' });
+  const [aErrors, setAErrors]         = useState({});
+  const [aSaving, setASaving]         = useState(false);
+
+  const showToast = useCallback((type, message) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 3500);
+  }, []);
+
+  const loadInventory = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [delRes, sumRes] = await Promise.all([
+        getSeedDeliveries(),
+        getInventorySummary(),
+      ]);
+      setDeliveries(delRes.data || []);
+      setSummary(sumRes.data);
+    } catch (err) {
+      showToast('error', err.response?.data?.error || err.response?.data?.detail || 'Failed to load inventory data.');
+      setDeliveries([]);
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
+
+  const loadFinalSeeds = useCallback(async () => {
+    try {
+      const res = await getFinalSeeds();
+      setFinalSeeds(res.data || []);
+    } catch (err) {
+      showToast('error', err.response?.data?.error || err.response?.data?.detail || 'Failed to load final seeds.');
+      setFinalSeeds([]);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    loadInventory();
+    loadFinalSeeds();
+  }, [loadInventory, loadFinalSeeds]);
+
+  const openDetail = (delivery) => {
+    setSelected(delivery);
+    setView('detail');
+  };
+
+  const openAudit = async (delivery) => {
+    setSelected(delivery);
+    setView('audit');
+    setAuditLoading(true);
+    try {
+      const res = await getDeliveryAudit(delivery.id);
+      setAuditLogs(res.data || []);
+    } catch { setAuditLogs([]); }
+    finally { setAuditLoading(false); }
+  };
+
+  // ── DELIVERY FORM ──
+  const openCreateDelivery = async () => {
+    setEditDelivery(null);
+    if (!finalSeeds.length) {
+      await loadFinalSeeds();
+    }
+    const fs = finalSeeds[0];
+    setDForm({
+      final_seed_id: '',
+      season: fs?.season || '',
+      year: fs?.year || new Date().getFullYear(),
+      total_bags: '', delivery_date: '',
+      lot_number: '', remarks: '',
+    });
+    setDErrors({});
+    setDeliveryModal(true);
+  };
+
+  const openEditDelivery = (delivery) => {
+    setEditDelivery(delivery);
+    setDForm({
+      final_seed_id: delivery.seed_type,
+      season: delivery.season,
+      year: delivery.year,
+      total_bags: delivery.total_bags,
+      delivery_date: delivery.delivery_date,
+      lot_number: delivery.lot_number || '',
+      remarks: delivery.remarks || '',
+    });
+    setDErrors({});
+    setDeliveryModal(true);
+  };
+
+  const handleSaveDelivery = async () => {
+    const errs = {};
+    if (!dForm.season)        errs.season      = 'Required';
+    if (!dForm.year)          errs.year        = 'Required';
+    if (!dForm.total_bags)    errs.total_bags  = 'Required';
+    if (!dForm.delivery_date) errs.delivery_date = 'Required';
+    if (!editDelivery && !dForm.final_seed_id) errs.final_seed_id = 'Select seed type';
+    if (Object.keys(errs).length > 0) { setDErrors(errs); return; }
+
+    setDSaving(true);
+    try {
+      const selectedFS = finalSeeds.find(fs => fs.id?.toString() === dForm.final_seed_id?.toString());
+      const payload = {
+        seed_type:     selectedFS?.seed_type?.id || editDelivery?.seed_type,
+        variety:       selectedFS?.varieties?.[0]?.id || editDelivery?.variety,
+        season:        dForm.season,
+        year:          Number(dForm.year),
+        total_bags:    Number(dForm.total_bags),
+        delivery_date: dForm.delivery_date,
+        lot_number:    dForm.lot_number,
+        remarks:       dForm.remarks,
+      };
+      if (editDelivery) {
+        await updateSeedDelivery(editDelivery.id, payload);
+        showToast('success', 'Delivery record updated.');
+      } else {
+        await createSeedDelivery(payload);
+        showToast('success', 'Seed delivery recorded successfully.');
+      }
+      setDeliveryModal(false);
+      await loadAll();
+      if (selected) {
+        const res = await getSeedDeliveries();
+        const updated = (res.data || []).find(d => d.id === selected.id);
+        if (updated) setSelected(updated);
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to save delivery.');
+    } finally {
+      setDSaving(false);
+    }
+  };
+
+  const handleDeleteDelivery = (delivery) => {
+    setConfirmSnack({
+      title: `Delete this delivery record?`,
+      message: `${delivery.seed_type_name} — ${delivery.season_display} ${delivery.year}. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      danger: true,
+      _action: async () => {
+        try {
+          await deleteSeedDelivery(delivery.id);
+          showToast('success', 'Delivery deleted.');
+          setView('landing');
+          await loadAll();
+        } catch (err) {
+          showToast('error', err.response?.data?.error || 'Failed to delete.');
+        }
+      },
+    });
+  };
+
+  // ── ALLOCATION FORM ──
+  const openAllocModal = (delivery) => {
+    setAllocModal(delivery);
+    setAForm({ barangay: '', allocated_bags: '', notes: '' });
+    setAErrors({});
+  };
+
+  const handleSaveAlloc = async () => {
+    const errs = {};
+    if (!aForm.barangay.trim())  errs.barangay      = 'Required';
+    if (!aForm.allocated_bags)   errs.allocated_bags = 'Required';
+    if (Object.keys(errs).length > 0) { setAErrors(errs); return; }
+
+    setASaving(true);
+    try {
+      await createAllocation(allocModal.id, {
+        barangay:       aForm.barangay.trim(),
+        allocated_bags: Number(aForm.allocated_bags),
+        notes:          aForm.notes,
+      });
+      showToast('success', `Allocated ${aForm.allocated_bags} bags to Brgy. ${aForm.barangay}.`);
+      setAllocModal(null);
+      const res = await getSeedDeliveries();
+      setDeliveries(res.data || []);
+      const updated = (res.data || []).find(d => d.id === allocModal.id);
+      if (updated) setSelected(updated);
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Failed to allocate.');
+    } finally {
+      setASaving(false);
+    }
+  };
+
+  const filteredDeliveries = deliveries.filter(d => {
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      d.seed_type_name?.toLowerCase().includes(q) ||
+      d.variety_name?.toLowerCase().includes(q) ||
+      d.lot_number?.toLowerCase().includes(q);
+    const matchSeason = !filterSeason || d.season === filterSeason;
+    return matchSearch && matchSeason;
+  });
+
+  if (loading) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: '#9ca3af' }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity:0; } to { transform: translateX(-50%) translateY(0); opacity:1; } }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes slideUp { from { transform:translateY(12px);opacity:0; } to { transform:translateY(0);opacity:1; } }
+      `}</style>
+      <div style={{ width: 36, height: 36, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <p style={{ margin: 0, fontSize: '0.875rem' }}>Loading seed inventory...</p>
+    </div>
+  );
+
+  return (
+    <div style={{ paddingBottom: '2rem' }}>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity:0; } to { transform: translateX(-50%) translateY(0); opacity:1; } }
+        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+        @keyframes slideUp { from { transform:translateY(12px);opacity:0; } to { transform:translateY(0);opacity:1; } }
+        .card-hover:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12) !important; transform: translateY(-2px); transition: all 0.2s; }
+        .row-hover:hover { background-color: ${GREEN.light} !important; }
+        .btn-icon:hover { opacity: 0.75; }
+      `}</style>
+
+      <Toast toast={toast} />
+      <ConfirmSnack
+        data={confirmSnack}
+        onConfirm={async () => { const fn = confirmSnack?._action; setConfirmSnack(null); if (fn) await fn(); }}
+        onCancel={() => setConfirmSnack(null)}
+      />
+
+      {/* BREADCRUMB */}
+      {view !== 'landing' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '1.25rem', fontSize: '0.8rem', animation: 'fadeIn 0.2s ease', flexWrap: 'wrap' }}>
+          <button onClick={() => { setView('landing'); setSelected(null); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN.primary, fontWeight: 700, fontSize: '0.8rem', padding: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+            <ChevronLeft size={15} /> Seed Inventory
+          </button>
+          <ChevronRight size={12} color="#9ca3af" />
+          <span style={{ color: '#374151', fontWeight: 700 }}>
+            {view === 'detail' ? `${selected?.seed_type_name} — ${selected?.season_display} ${selected?.year}` : 'Audit Trail'}
+          </span>
+        </div>
+      )}
+
+      {/* ══ LANDING ══ */}
+      {view === 'landing' && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Seed Inventory</h1>
+              <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>Track seed deliveries and barangay allocations.</p>
+            </div>
+            <button onClick={openCreateDelivery}
+              style={{ padding: '0.625rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+              <Plus size={16} /> Record Delivery
+            </button>
+          </div>
+
+          {/* Summary stats */}
+          {summary && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
+              {[
+                { label: 'Total Deliveries',  value: summary.total_deliveries,      Icon: Truck,        color: '#1e40af', bg: '#eff6ff' },
+                { label: 'Bags Received',     value: summary.total_bags_received,   Icon: Package,      color: GREEN.primary, bg: GREEN.light },
+                { label: 'Bags Allocated',    value: summary.total_bags_allocated,  Icon: Users,        color: '#854d0e', bg: '#fef9c3' },
+                { label: 'Bags Remaining',    value: summary.total_bags_remaining,  Icon: Wheat,        color: GREEN.accent, bg: GREEN.soft },
+                { label: 'Pending Pickups',   value: summary.pending_confirmations, Icon: Clock,        color: '#854d0e', bg: '#fff7ed' },
+                { label: 'Confirmed Pickups', value: summary.confirmed_pickups,     Icon: CheckCircle,  color: GREEN.accent, bg: GREEN.light },
+              ].map(({ label, value, Icon, color, bg }, i) => (
+                <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', animation: `slideUp ${0.3 + i * 0.04}s ease` }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                    <Icon size={16} color={color} />
+                  </div>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
+                  <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase' }}>{label}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Search + filter */}
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
+            <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+              <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by seed type, variety, or lot number..." style={{ ...inp(), paddingLeft: '2.5rem' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              {['WET', 'DRY'].map(s => (
+                <button key={s} onClick={() => setFilterSeason(filterSeason === s ? '' : s)}
+                  style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${filterSeason === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: filterSeason === s ? GREEN.light : 'white', color: filterSeason === s ? GREEN.primary : '#6b7280', fontWeight: filterSeason === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
+                  {s === 'WET' ? '💧 Wet Season' : '☀️ Dry Season'}
+                </button>
+              ))}
+              {(search || filterSeason) && (
+                <button onClick={() => { setSearch(''); setFilterSeason(''); }}
+                  style={{ padding: '0.375rem 0.625rem', border: '1.5px solid #fca5a5', borderRadius: '999px', backgroundColor: '#fee2e2', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <X size={11} /> Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Delivery cards */}
+          {filteredDeliveries.length === 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+              <Package size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>{deliveries.length === 0 ? 'No deliveries recorded yet' : 'No results found'}</p>
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Record a seed delivery using the button above.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              {filteredDeliveries.map((delivery, idx) => {
+                const evH = isHybrid(delivery.seed_type_name || '');
+                const tagColor  = evH ? '#1e40af' : GREEN.primary;
+                const tagBg     = evH ? '#eff6ff' : GREEN.light;
+                const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                const allocPct  = delivery.total_bags > 0 ? (delivery.allocated_bags / delivery.total_bags) * 100 : 0;
+                return (
+                  <div key={delivery.id} className="card-hover"
+                    onClick={() => openDetail(delivery)}
+                    style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `1px solid ${tagBorder}`, cursor: 'pointer', animation: `slideUp ${0.3 + idx * 0.06}s ease` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div>
+                        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                          <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                            {delivery.seed_type_name}
+                          </span>
+                          {delivery.variety_name && (
+                            <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
+                              {delivery.variety_name}
+                            </span>
+                          )}
+                          <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
+                            {delivery.season_display} {delivery.year}
+                          </span>
+                        </div>
+                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', margin: 0, color: '#111827' }}>
+                          {delivery.source === 'REGION' ? 'From Region (NRP/RFO)' : 'From PhilRice (RCEF)'}
+                        </h3>
+                        <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                          <Calendar size={11} /> {new Date(delivery.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                          {delivery.lot_number && <><Hash size={11} style={{ marginLeft: '0.375rem' }} />{delivery.lot_number}</>}
+                        </p>
+                      </div>
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <p style={{ fontSize: '1.75rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{delivery.total_bags}</p>
+                        <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>total bags</p>
+                      </div>
+                    </div>
+                    <ProgressBar value={delivery.allocated_bags} max={delivery.total_bags} color={tagColor} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.7rem', color: '#9ca3af', flexWrap: 'wrap', gap: '0.25rem' }}>
+                      <span>{delivery.allocated_bags} allocated · {delivery.remaining_bags} remaining</span>
+                      <span style={{ color: tagColor, fontWeight: 600 }}>{delivery.allocations?.length || 0} brgy{delivery.allocations?.length !== 1 ? 's' : ''} allocated <ChevronRight size={11} style={{ display: 'inline' }} /></span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ DETAIL ══ */}
+      {view === 'detail' && selected && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          {/* Delivery header card */}
+          <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.25rem', color: 'white' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div>
+                <p style={{ fontSize: '0.72rem', opacity: 0.75, margin: '0 0 0.25rem', fontWeight: 700, textTransform: 'uppercase' }}>
+                  {selected.source === 'REGION' ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'} · {selected.season_display} {selected.year}
+                </p>
+                <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>{selected.seed_type_name}</h2>
+                {selected.variety_name && <p style={{ opacity: 0.8, fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{selected.variety_name}</p>}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={e => { e.stopPropagation(); openEditDelivery(selected); }}
+                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Edit2 size={13} /> Edit
+                </button>
+                <button onClick={e => { e.stopPropagation(); openAudit(selected); }}
+                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <History size={13} /> Audit
+                </button>
+                <button onClick={e => { e.stopPropagation(); handleDeleteDelivery(selected); }}
+                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(220,38,38,0.5)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            </div>
+
+            {/* Bag stats */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
+              {[
+                { label: 'Total Received', value: selected.total_bags,    bold: true },
+                { label: 'Allocated',      value: selected.allocated_bags, bold: false },
+                { label: 'Remaining',      value: selected.remaining_bags, bold: false },
+              ].map(({ label, value, bold }) => (
+                <div key={label} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '0.75rem', padding: '0.75rem', textAlign: 'center' }}>
+                  <p style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, lineHeight: 1 }}>{value}</p>
+                  <p style={{ fontSize: '0.65rem', opacity: 0.8, margin: '0.25rem 0 0', fontWeight: 700, textTransform: 'uppercase' }}>{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Delivery info */}
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8rem' }}>
+              <div>
+                <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Delivery Date</p>
+                <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>
+                  {new Date(selected.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                </p>
+              </div>
+              <div>
+                <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Lot Number</p>
+                <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>{selected.lot_number || '—'}</p>
+              </div>
+              <div style={{ gridColumn: '1/-1' }}>
+                <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Remarks</p>
+                <p style={{ fontWeight: 600, color: '#374151', margin: 0 }}>{selected.remarks || '—'}</p>
+              </div>
+              <div>
+                <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Encoded By</p>
+                <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>{selected.encoded_by_name || '—'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Allocations section */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
+            <h2 style={{ fontWeight: 800, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>Barangay Allocations</h2>
+            {selected.remaining_bags > 0 && (
+              <button onClick={() => openAllocModal(selected)}
+                style={{ padding: '0.5rem 1rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <Plus size={14} /> Allocate Bags
+              </button>
+            )}
+          </div>
+
+          {selected.allocations?.length === 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #f3f4f6', color: '#9ca3af' }}>
+              <Users size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.25rem' }}>No allocations yet</p>
+              <p style={{ fontSize: '0.8rem', margin: 0 }}>Allocate bags to barangays using the button above.</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              {selected.allocations.map((alloc, idx) => (
+                <div key={alloc.id} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${alloc.status === 'CONFIRMED' ? GREEN.border : '#fde68a'}`, animation: `slideUp ${0.3 + idx * 0.05}s ease`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                      <MapPin size={13} color={GREEN.primary} />
+                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1a1a1a' }}>Brgy. {alloc.barangay}</span>
+                      <StatusBadge status={alloc.status} />
+                    </div>
+                    <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>
+                      Allocated: {new Date(alloc.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      {alloc.date_confirmed && ` · Confirmed: ${new Date(alloc.date_confirmed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                    </p>
+                    {alloc.confirmed_by_name && (
+                      <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>Confirmed by: {alloc.confirmed_by_name}</p>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: alloc.status === 'CONFIRMED' ? GREEN.primary : '#854d0e', margin: 0, lineHeight: 1 }}>{alloc.allocated_bags}</p>
+                    <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>bags</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ AUDIT ══ */}
+      {view === 'audit' && selected && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+            <h2 style={{ fontWeight: 800, fontSize: '1rem', margin: '0 0 0.25rem' }}>Audit Trail</h2>
+            <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0 }}>
+              {selected.seed_type_name} — {selected.season_display} {selected.year}
+            </p>
+          </div>
+          {auditLoading ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
+              <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
+              Loading audit logs...
+            </div>
+          ) : auditLogs.length === 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', color: '#9ca3af', border: '1px solid #f3f4f6' }}>
+              <History size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+              No audit logs yet.
+            </div>
+          ) : (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
+              {auditLogs.map((log, idx) => {
+                const actionCfg = {
+                  CREATED:   { color: GREEN.accent,  bg: GREEN.soft,   icon: '📦' },
+                  UPDATED:   { color: '#1e40af',     bg: '#eff6ff',    icon: '✏️' },
+                  ALLOCATED: { color: '#854d0e',     bg: '#fef9c3',    icon: '🏘️' },
+                  CONFIRMED: { color: GREEN.primary, bg: GREEN.light,  icon: '✅' },
+                  DELETED:   { color: '#991b1b',     bg: '#fee2e2',    icon: '🗑️' },
+                }[log.action] || { color: '#6b7280', bg: '#f9fafb', icon: '📋' };
+                return (
+                  <div key={log.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < auditLogs.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', animation: `slideUp ${0.3 + idx * 0.04}s ease` }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
+                      {actionCfg.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: actionCfg.color }}>{log.action_display}</span>
+                        <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
+                          {new Date(log.timestamp).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0.25rem 0 0.125rem' }}>{log.details}</p>
+                      {log.performed_by_name && (
+                        <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>By: {log.performed_by_name}</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ DELIVERY MODAL ══ */}
+      {deliveryModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0', padding: '2rem', width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))', animation: 'slideUp 0.3s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>
+                {editDelivery ? 'Edit Delivery' : 'Record Seed Delivery'}
+              </h2>
+              <button onClick={() => setDeliveryModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '1.5rem' }}>×</button>
+            </div>
+
+            {/* Seed type selector — only on create */}
+            {!editDelivery && (
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
+                  Seed Type <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                {finalSeeds.length === 0 ? (
+                  <p style={{ fontSize: '0.8rem', color: '#dc2626' }}>No finalized seeds. Admin must finalize in Seed Poll first.</p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: finalSeeds.length === 1 ? '1fr' : '1fr 1fr', gap: '0.5rem' }}>
+                    {finalSeeds.map(fs => {
+                      const evH = isHybrid(fs.seed_type?.name || '');
+                      const tagColor = evH ? '#1e40af' : GREEN.primary;
+                      const tagBg    = evH ? '#eff6ff' : GREEN.light;
+                      const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                      const sel = dForm.final_seed_id?.toString() === fs.id?.toString();
+                      return (
+                        <button key={fs.id} type="button"
+                          onClick={() => setDForm(p => ({ ...p, final_seed_id: fs.id, season: fs.season || p.season, year: fs.year || p.year }))}
+                          style={{ padding: '0.875rem', textAlign: 'left', border: `2px solid ${sel ? tagColor : '#e5e7eb'}`, borderRadius: '0.875rem', backgroundColor: sel ? tagBg : 'white', cursor: 'pointer', transition: 'all 0.15s' }}>
+                          <p style={{ fontWeight: 800, fontSize: '0.9rem', color: sel ? tagColor : '#374151', margin: 0 }}>{fs.seed_type?.name}</p>
+                          <p style={{ fontSize: '0.68rem', color: sel ? tagColor : '#9ca3af', margin: '0.125rem 0 0.25rem', opacity: 0.9 }}>
+                            {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
+                          </p>
+                          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                            {fs.varieties?.map(v => (
+                              <span key={v.id} style={{ backgroundColor: sel ? `${tagColor}15` : '#f3f4f6', color: sel ? tagColor : '#6b7280', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.63rem', fontWeight: 600 }}>{v.name}</span>
+                            ))}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {dErrors.final_seed_id && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.final_seed_id}</p>}
+              </div>
+            )}
+
+            {/* Season + Year */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                  Season <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <select value={dForm.season} onChange={e => { setDForm(p => ({ ...p, season: e.target.value })); setDErrors(p => ({ ...p, season: '' })); }} style={inp(!!dErrors.season)}>
+                  <option value="">Select</option>
+                  <option value="WET">Wet Season</option>
+                  <option value="DRY">Dry Season</option>
+                </select>
+                {dErrors.season && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.season}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                  Year <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input type="number" value={dForm.year} onChange={e => { setDForm(p => ({ ...p, year: e.target.value })); setDErrors(p => ({ ...p, year: '' })); }} placeholder="2025" style={inp(!!dErrors.year)} />
+                {dErrors.year && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.year}</p>}
+              </div>
+            </div>
+
+            {/* Total bags + date */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                  Total Bags <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input type="number" min="1" value={dForm.total_bags} onChange={e => { setDForm(p => ({ ...p, total_bags: e.target.value })); setDErrors(p => ({ ...p, total_bags: '' })); }} placeholder="e.g. 500" style={inp(!!dErrors.total_bags)} />
+                {dErrors.total_bags && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.total_bags}</p>}
+              </div>
+              <div>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                  Delivery Date <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input type="date" value={dForm.delivery_date} onChange={e => { setDForm(p => ({ ...p, delivery_date: e.target.value })); setDErrors(p => ({ ...p, delivery_date: '' })); }} style={inp(!!dErrors.delivery_date)} />
+                {dErrors.delivery_date && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.delivery_date}</p>}
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '0.875rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Lot Number</label>
+              <input type="text" value={dForm.lot_number} onChange={e => setDForm(p => ({ ...p, lot_number: e.target.value }))} placeholder="e.g. LOT-2025-001" style={inp()} />
+            </div>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Remarks</label>
+              <textarea value={dForm.remarks} onChange={e => setDForm(p => ({ ...p, remarks: e.target.value }))} rows={2} placeholder="Optional notes..." style={{ ...inp(), resize: 'vertical' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setDeliveryModal(false)} style={{ flex: 1, padding: '0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+              <button onClick={handleSaveDelivery} disabled={dSaving}
+                style={{ flex: 2, padding: '0.875rem', backgroundColor: dSaving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, cursor: dSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <CheckCircle size={16} /> {dSaving ? 'Saving...' : editDelivery ? 'Save Changes' : 'Record Delivery'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ALLOCATION MODAL ══ */}
+      {allocModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.25s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontWeight: 800, margin: 0 }}>Allocate Bags</h3>
+                <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
+                  {allocModal.remaining_bags} bags remaining
+                </p>
+              </div>
+              <button onClick={() => setAllocModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#6b7280' }}>×</button>
+            </div>
+
+            <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: GREEN.accent }}>
+              <strong>{allocModal.seed_type_name}</strong> · {allocModal.season_display} {allocModal.year} · {allocModal.remaining_bags} bags available
+            </div>
+
+            <div style={{ marginBottom: '0.875rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                Barangay <span style={{ color: '#dc2626' }}>*</span>
+              </label>
+              <input type="text" value={aForm.barangay} onChange={e => { setAForm(p => ({ ...p, barangay: e.target.value })); setAErrors(p => ({ ...p, barangay: '' })); }} placeholder="e.g. May-It" style={inp(!!aErrors.barangay)} />
+              {aErrors.barangay && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{aErrors.barangay}</p>}
+            </div>
+
+            <div style={{ marginBottom: '0.875rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                Bags to Allocate <span style={{ color: '#dc2626' }}>*</span>
+                <span style={{ color: '#9ca3af', fontWeight: 400, marginLeft: '0.375rem' }}>max: {allocModal.remaining_bags}</span>
+              </label>
+              <input type="number" min="1" max={allocModal.remaining_bags} value={aForm.allocated_bags} onChange={e => { setAForm(p => ({ ...p, allocated_bags: e.target.value })); setAErrors(p => ({ ...p, allocated_bags: '' })); }} placeholder="e.g. 45" style={inp(!!aErrors.allocated_bags)} />
+              {aErrors.allocated_bags && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{aErrors.allocated_bags}</p>}
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Notes</label>
+              <input type="text" value={aForm.notes} onChange={e => setAForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional" style={inp()} />
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setAllocModal(null)} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+              <button onClick={handleSaveAlloc} disabled={aSaving}
+                style={{ flex: 2, padding: '0.75rem', backgroundColor: aSaving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, cursor: aSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <Plus size={16} /> {aSaving ? 'Allocating...' : 'Confirm Allocation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

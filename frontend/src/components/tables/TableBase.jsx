@@ -101,11 +101,12 @@ export const COL_WIDTHS = {
 // NEW BADGE
 //
 // Yellow "NEW" pill next to a row name.
-// Admin clicks it → calls `onClick` → badge disappears.
+// Shows when `isNew` is true and can optionally be dismissed
+// when `onClick` is provided.
 //
 // Props:
 //   isNew   {boolean} — whether to show the badge
-//   onClick {function} — called when admin clicks to dismiss
+//   onClick {function} — optional callback when the badge is clicked
 // ─────────────────────────────────────────────────────────────
 export const NewBadge = ({ isNew, onClick }) => {
   if (!isNew) return null;
@@ -116,7 +117,7 @@ export const NewBadge = ({ isNew, onClick }) => {
         e.stopPropagation(); // don't trigger row click
         if (onClick) onClick();
       }}
-      title="Click to dismiss"
+      title={onClick ? 'Click to dismiss' : undefined}
       style={{
         display:         'inline-block',
         backgroundColor: '#f5c842',
@@ -128,7 +129,7 @@ export const NewBadge = ({ isNew, onClick }) => {
         marginLeft:      '0.4rem',
         verticalAlign:   'middle',
         letterSpacing:   '0.05em',
-        cursor:          'pointer',
+        cursor:          onClick ? 'pointer' : 'default',
         userSelect:      'none',
         transition:      'opacity 0.2s',
       }}

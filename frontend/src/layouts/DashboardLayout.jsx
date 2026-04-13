@@ -11,6 +11,7 @@
 // ============================================================
 
 import { Outlet } from 'react-router-dom';
+import { Bell } from 'lucide-react';
 import Sidebar from '../components/navigation/Sidebar';
 import BottomNav from '../components/navigation/BottomNav';
 import { useAuth } from '../auth/AuthContext';
@@ -36,13 +37,21 @@ const DashboardLayout = () => {
         {/* ── TOP HEADER BAR — stays fixed, never changes ── */}
         <header className="dashboard-header-bar">
 
-          {/* Notification Bell button — clickable, yellow background */}
+          {/* Notification Bell button — simple icon style like BRGY user header */}
           <button
             className="notif-btn"
             title="Notifications"
             onClick={() => alert('Notifications coming soon!')} // 🔔 replace with modal later
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'none',
+              border: 'none',
+              padding: '0.25rem',
+            }}
           >
-            🔔
+            <Bell size={18} />
           </button>
 
           {/* Profile section: Avatar + Name + Role */}

@@ -91,7 +91,5 @@ export const BOTTOM_NAV_CONFIG = {
     { label: 'Farmers',   path: '/brgy/farmers',      icon: Tractor },
     { label: 'Crops',     path: '/brgy/crop-phase',   icon: Wheat },
     { label: 'News',      path: '/brgy/announcements',icon: Megaphone },
-    { label: 'Beneficiaries', path: '/brgy/beneficiaries', icon: Package },
-    { label: 'Distribution',  path: '/brgy/distribution',  icon: Truck   },
   ],
 };

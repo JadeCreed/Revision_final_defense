@@ -22,7 +22,7 @@ import SeedPoll        from '../pages/admin/SeedPoll';
 import Announcement    from '../pages/admin/Announcement';
 import SeedInventory   from '../pages/admin/SeedInventory';
 import AdminBeneficiaries from '../pages/admin/AdminBeneficiaries';
-import AdminDistribution  from '../pages/admin/Distribution'; 
+import AdminDistribution  from '../pages/admin/AdminDistribution';  
 import CropPhase       from '../pages/admin/CropPhase';
 import Production      from '../pages/admin/Production';
 import GisMap          from '../pages/admin/GisMap';

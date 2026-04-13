@@ -524,8 +524,9 @@ class DistributionEntryDetailView(APIView):
     def put(self, request, pk):
         entry = self.get_object(pk)
 
-        # Allow editing if DRAFT (BRGY) or APPROVED (admin emergency edit)
-        if entry.batch.status == 'SUBMITTED':
+        # Allow editing in DRAFT batches.
+        # If a batch was unlocked for emergency editing, ADMIN may also edit SUBMITTED entries.
+        if entry.batch.status == 'SUBMITTED' and request.user.role != 'ADMIN':
             return Response({"error": "Cannot edit entries in a SUBMITTED batch."}, status=400)
 
         allowed = ['farm_area_ha', 'crop_establishment', 'qty_bags', 'date_received',

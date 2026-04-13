@@ -353,11 +353,11 @@ body {
   z-index: 40;
 }
 
-/* Yellow notification bell button */
+/* Notification bell icon button matching BRGY account header style */
 .notif-btn {
   width: 40px;
   height: 40px;
-  background-color: #f5c842;
+  background: none;
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -365,10 +365,10 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s;
+  transition: color 0.15s, background-color 0.15s;
 }
 .notif-btn:hover {
-  background-color: #e6b800;
+  background-color: rgba(249, 250, 251, 0.9);
 }
 
 /* Profile area — clickable, shows cursor pointer */

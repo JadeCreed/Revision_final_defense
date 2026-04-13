@@ -308,6 +308,11 @@ const BrgyBeneficiaries = () => {
     ? `${finalSeeds[0].season_display} ${finalSeeds[0].year}`
     : null;
 
+  const getEffectiveTotalMembers = (event) => {
+    const expected = event?.total_members || 0;
+    return Math.max(expected, totalFarmers || 0);
+  };
+
   // ─────────────────────────────────────────
   // OPEN PROGRAM
   // ─────────────────────────────────────────
@@ -871,12 +876,12 @@ const BrgyBeneficiaries = () => {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>
-                          {event.total_encoded}<span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>/{event.total_members}</span>
+                          {event.total_encoded}<span style={{ fontSize: '0.875rem', color: '#9ca3af' }}>/{getEffectiveTotalMembers(event)}</span>
                         </p>
                         <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>encoded</p>
                       </div>
                     </div>
-                    <ProgressBar value={event.total_encoded} max={event.total_members} />
+                    <ProgressBar value={event.total_encoded} max={getEffectiveTotalMembers(event)} />
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.7rem', color: '#9ca3af' }}>
                       <span>Approved: {event.total_approved}</span>
                       <span>{event.batch_count} batch{event.batch_count !== 1 ? 'es' : ''} <ChevronRight size={11} style={{ display: 'inline' }} /></span>
@@ -920,10 +925,10 @@ const BrgyBeneficiaries = () => {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#9ca3af', marginBottom: '0.375rem' }}>
-              <span>{currentEvent.total_encoded} of {currentEvent.total_members} farmers</span>
-              <span>{currentEvent.total_members > 0 ? Math.round((currentEvent.total_encoded / currentEvent.total_members) * 100) : 0}%</span>
+              <span>{currentEvent.total_encoded} of {getEffectiveTotalMembers(currentEvent)} farmers</span>
+              <span>{getEffectiveTotalMembers(currentEvent) > 0 ? Math.round((currentEvent.total_encoded / getEffectiveTotalMembers(currentEvent)) * 100) : 0}%</span>
             </div>
-            <ProgressBar value={currentEvent.total_encoded} max={currentEvent.total_members} />
+            <ProgressBar value={currentEvent.total_encoded} max={getEffectiveTotalMembers(currentEvent)} />
           </div>
 
           {/* Batch status */}
@@ -1320,7 +1325,12 @@ const BrgyBeneficiaries = () => {
               <span><strong>Intervention:</strong> {eventIsHybrid ? 'Hybrid (NRP/Region)' : 'Inbred (RCEF/PhilRice)'}</span>
               <span><strong>Season:</strong> {finalSeason || `${currentEvent.season_display} ${currentEvent.year}`}</span>
               <span><strong>Barangay:</strong> {currentEvent.barangay}</span>
-              <span><strong>Total Members:</strong> {currentEvent.total_members}</span>
+              <span><strong>Total Members:</strong> {getEffectiveTotalMembers(currentEvent)}</span>
+              {currentEvent.total_members !== getEffectiveTotalMembers(currentEvent) && (
+                <span style={{ gridColumn: '1/-1', fontSize: '0.72rem', color: '#6b7280' }}>
+                  Original program size: {currentEvent.total_members} · Currently approved in barangay: {getEffectiveTotalMembers(currentEvent)}
+                </span>
+              )}
               <span style={{ gridColumn: '1/-1' }}><strong>Organization:</strong> {currentEvent.organization_name}</span>
               {!eventIsInbred && currentEvent.variety_name && (
                 <span style={{ gridColumn: '1/-1' }}><strong>Variety:</strong> {currentEvent.variety_name}</span>

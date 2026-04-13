@@ -23,7 +23,7 @@ urlpatterns = [
     path('api/announcements/', include('apps.announcements.urls')),
     path('api/seed-poll/', include('apps.seed_poll.urls')),
     path('api/distribution/', include('apps.distribution.urls')),
-    # path('api/seed-inventory/', include('apps.seed_inventory.urls')),
+    path('api/inventory/', include('apps.seed_inventory.urls')),
     # path('api/gis-map/', include('apps.gis_map.urls')),
     # path('api/production/', include('apps.production.urls')),
     # path('api/reports/', include('apps.reports.urls')),

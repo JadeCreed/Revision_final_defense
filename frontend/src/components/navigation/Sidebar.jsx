@@ -75,7 +75,8 @@ const Sidebar = () => {
   }, [location.pathname]);
 
   // ── AUTO-MARK SEEN when admin is on the badge page ──
-  // Runs whenever route changes OR live badges update
+  // Runs whenever route changes OR live badges update.
+  // When the child page is active, update the stored seen count to the current live count.
   useEffect(() => {
     if (role !== 'ADMIN') return;
     menus.forEach(item => {
@@ -84,15 +85,12 @@ const Sidebar = () => {
         if (!child.badgeKey) return;
         const onPage = location.pathname.startsWith(child.path);
         if (!onPage) return;
-        const live    = liveBadges[child.badgeKey] || 0;
-        const current = getSeenFromStorage()[child.badgeKey] || 0;
-        if (live > current) {
-          setSeenInStorage(child.badgeKey, live);
-          setSeen(prev => ({ ...prev, [child.badgeKey]: live }));
-        }
+        const live = liveBadges[child.badgeKey] || 0;
+        setSeenInStorage(child.badgeKey, live);
+        setSeen(prev => ({ ...prev, [child.badgeKey]: live }));
       });
     });
-  }, [location.pathname, liveBadges, role]);
+  }, [location.pathname, liveBadges, role, menus]);
 
   // ── ON CLICK: mark badge as seen immediately ──
   const handleChildClick = (child) => {
@@ -123,11 +121,14 @@ const Sidebar = () => {
 
   // ── STYLES ──
   const base = {
+    position: 'relative',
     display: 'flex', alignItems: 'center', gap: '0.75rem',
-    padding: '0.75rem 1.5rem', textDecoration: 'none',
+    padding: '0.75rem 3rem 0.75rem 1.5rem', textDecoration: 'none',
     fontSize: '0.875rem', transition: 'all 0.15s ease',
     borderLeft: '3px solid transparent',
     width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
   };
 
   const linkStyle = (active) => ({
@@ -140,7 +141,7 @@ const Sidebar = () => {
 
   const childStyle = (active) => ({
     ...linkStyle(active),
-    padding:  '0.6rem 1.5rem 0.6rem 3rem',
+    padding:  '0.6rem 3rem 0.6rem 3rem',
     fontSize: '0.825rem',
   });
 
@@ -153,9 +154,15 @@ const Sidebar = () => {
   });
 
   const badgePill = {
+    position: 'absolute',
+    top: '0.8rem',
+    right: '1.3rem',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    minWidth: '20px', height: '20px',
     backgroundColor: '#f5c842', color: '#1a1a1a',
     borderRadius: '999px', fontSize: '0.65rem', fontWeight: '700',
-    padding: '1px 7px', marginLeft: 'auto', flexShrink: 0,
+    padding: '0 7px',
+    lineHeight: 1,
   };
 
   const renderIcon = (icon, active, size = 18) => {
@@ -185,38 +192,51 @@ const Sidebar = () => {
           if (item.hasChildren) {
             const isOpen   = !!openGroups[item.label];
             const isActive = item.children.some(c => location.pathname.startsWith(c.path));
+            const totalBadge = item.children.reduce((sum, child) => {
+              if (!child.badgeKey) return sum;
+              return sum + getDisplayBadge(child.badgeKey);
+            }, 0);
+
             return (
               <div key={item.label}>
                 <button onClick={() => toggleGroup(item.label)} style={parentStyle(isActive)}>
-                  <span style={{ minWidth: 20, display: 'flex', alignItems: 'center' }}>
+                  <span style={{ minWidth: 20, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                     {renderIcon(item.icon, isActive)}
                   </span>
-                  <span style={{ flex: 1 }}>{item.label}</span>
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                  {totalBadge > 0 && <span style={badgePill}>{totalBadge}</span>}
                   <ChevronDown size={14} color="rgba(255,255,255,0.5)"
                     style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
                 </button>
 
-                {isOpen && item.children.map(child => {
-                  const childActive =
-                    location.pathname === child.path ||
-                    location.pathname.startsWith(child.path + '/');
-                  const badge = getDisplayBadge(child.badgeKey);
+                <div style={{
+                  overflow: 'hidden',
+                  transition: 'max-height 0.25s ease, opacity 0.25s ease',
+                  maxHeight: isOpen ? '1040px' : '0',
+                  opacity: isOpen ? 1 : 0,
+                }}>
+                  {item.children.map(child => {
+                    const childActive =
+                      location.pathname === child.path ||
+                      location.pathname.startsWith(child.path + '/');
+                    const badge = getDisplayBadge(child.badgeKey);
 
-                  return (
-                    <NavLink
-                      key={child.path}
-                      to={child.path}
-                      onClick={() => handleChildClick(child)}
-                      style={childStyle(childActive)}
-                    >
-                      <span style={{ minWidth: 16, display: 'flex', alignItems: 'center' }}>
-                        {renderIcon(child.icon, childActive, 16)}
-                      </span>
-                      <span style={{ flex: 1 }}>{child.label}</span>
-                      {badge > 0 && <span style={badgePill}>{badge}</span>}
-                    </NavLink>
-                  );
-                })}
+                    return (
+                      <NavLink
+                        key={child.path}
+                        to={child.path}
+                        onClick={() => handleChildClick(child)}
+                        style={childStyle(childActive)}
+                      >
+                        <span style={{ minWidth: 16, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                          {renderIcon(child.icon, childActive, 16)}
+                        </span>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{child.label}</span>
+                        {badge > 0 && <span style={badgePill}>{badge}</span>}
+                      </NavLink>
+                    );
+                  })}
+                </div>
               </div>
             );
           }

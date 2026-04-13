@@ -9,7 +9,6 @@ import {
   SortDropdown,
   COL_WIDTHS,
   NewBadge,
-  markTableAsSeen,
   getSeenIds,
 } from '../../../components/tables/TableBase';
 
@@ -59,6 +58,19 @@ const ResetRequests = () => {
   // didInit: becomes true after first fetch completes
   // Prevents false NEW badges on initial load from poll comparisons
   const didInit = useRef(false);
+  const newTimeouts = useRef({});
+
+  const scheduleNewBadgeHide = (id) => {
+    if (newTimeouts.current[id]) clearTimeout(newTimeouts.current[id]);
+    newTimeouts.current[id] = setTimeout(() => {
+      setNewIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      delete newTimeouts.current[id];
+    }, 10000);
+  };
 
   // ── Reset password modal state ──
   const [resetModal, setResetModal]     = useState(null);
@@ -107,9 +119,9 @@ const ResetRequests = () => {
 
         if (unseenIds.length > 0) {
           setNewIds(new Set(unseenIds));
+          unseenIds.forEach(scheduleNewBadgeHide);
         }
-        // Note: we do NOT automatically mark everything as seen here.
-        // Admin must explicitly click the NEW badge to dismiss it.
+        // Note: NEW badges disappear automatically after 10 seconds.
 
       } else if (didInit.current) {
         // ── POLL UPDATE: detect items that weren't here last poll ──
@@ -121,6 +133,7 @@ const ResetRequests = () => {
             freshIds.forEach(id => next.add(id));
             return next;
           });
+          freshIds.forEach(scheduleNewBadgeHide);
         }
       }
 
@@ -152,32 +165,17 @@ const ResetRequests = () => {
     return () => clearInterval(poll); // cleanup on unmount
   }, [fetchRequests]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(newTimeouts.current).forEach(clearTimeout);
+    };
+  }, []);
+
   // ── Reset to page 1 when filters/sort change ──
   // (don't want to be on page 3 after changing the role filter)
   useEffect(() => {
     setPage(1);
   }, [search, roleFilter, sort]);
-
-
-  // ─────────────────────────────────────────────────────────
-  // handleNewClick
-  // Called when admin clicks a NEW badge on a row.
-  // Removes the badge from that row and saves to localStorage
-  // so it won't reappear on next visit or refresh.
-  // ─────────────────────────────────────────────────────────
-  const handleNewClick = (id) => {
-    // 1. Remove from component state → badge disappears immediately
-    setNewIds(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
-
-    // 2. Save to localStorage → won't appear again after navigation/refresh
-    const updatedSeen = new Set(getSeenIds(TABLE_KEY));
-    updatedSeen.add(id);
-    markTableAsSeen(TABLE_KEY, updatedSeen);
-  };
 
 
   // ─────────────────────────────────────────────────────────
@@ -373,13 +371,10 @@ const ResetRequests = () => {
                         {u.first_name} {u.last_name}
                         {/*
                           NewBadge receives:
-                            isNew   → whether this row is in newIds
-                            onClick → handleNewClick dismisses it and saves to localStorage
+                            isNew → whether this row is in newIds
+                          The badge disappears automatically after 10 seconds.
                         */}
-                        <NewBadge
-                          isNew={newIds.has(u.id)}
-                          onClick={() => handleNewClick(u.id)}
-                        />
+                        <NewBadge isNew={newIds.has(u.id)} />
                       </td>
 
                       {/* Contact number */}

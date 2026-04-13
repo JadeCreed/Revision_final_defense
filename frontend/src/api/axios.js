@@ -132,7 +132,7 @@ export const searchFarmers = (params) =>
 // ── DISTRIBUTION: BRGY requests program deletion ──
 export const requestDeleteEvent = (eventId, data)       => API.post(`/distribution/events/${eventId}/request-delete/`, data);
 // ── DISTRIBUTION: Admin confirms program deletion ──
-export const adminConfirmDeleteEvent = (eventId)        => API.delete(`/distribution/events/${eventId}/event-confirm-delete/`);
+export const adminConfirmDeleteEvent = (eventId)        => API.delete(`/distribution/events/${eventId}/confirm-delete/`);
 // Events
 export const getDistributionEvents   = (params) => API.get('/distribution/events/', { params });
 export const createDistributionEvent = (data)   => API.post('/distribution/events/', data);
@@ -160,5 +160,19 @@ export const getAdminPendingBatches = ()       => API.get('/distribution/admin/p
 export const getDistributionStats   = ()       => API.get('/distribution/admin/stats/');
 export const confirmSeedDelivery    = (eventId) => API.post(`/distribution/events/${eventId}/confirm-delivery/`);
 
+
+// ── SEED INVENTORY ──
+export const getInventorySummary      = ()           => API.get('/inventory/summary/');
+export const getSeedDeliveries        = (params)     => API.get('/inventory/deliveries/', { params });
+export const createSeedDelivery       = (data)       => API.post('/inventory/deliveries/', data);
+export const updateSeedDelivery       = (id, data)   => API.patch(`/inventory/deliveries/${id}/`, data);
+export const deleteSeedDelivery       = (id)         => API.delete(`/inventory/deliveries/${id}/`);
+export const getDeliveryAllocations   = (id)         => API.get(`/inventory/deliveries/${id}/allocations/`);
+export const createAllocation         = (id, data)   => API.post(`/inventory/deliveries/${id}/allocations/`, data);
+export const getDeliveryAudit         = (id)         => API.get(`/inventory/deliveries/${id}/audit/`);
+
+export const getBrgyAllocations       = ()           => API.get('/inventory/my-allocations/');
+export const getBrgyPendingCount      = ()           => API.get('/inventory/my-allocations/pending-count/');
+export const confirmPickup            = (id)         => API.post(`/inventory/allocations/${id}/confirm/`);
 
 export default API;
