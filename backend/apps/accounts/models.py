@@ -69,6 +69,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.role}"
+
+    def get_full_name(self):
+        last_name = (self.last_name or '').strip()
+        first_name = (self.first_name or '').strip()
+        if last_name and first_name:
+            return f"{last_name}, {first_name}"
+        if last_name:
+            return last_name
+        if first_name:
+            return first_name
+        return self.contact_number
     
     def clean(self):
         # Require email for non-farmers

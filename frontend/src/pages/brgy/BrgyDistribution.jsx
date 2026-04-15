@@ -228,7 +228,8 @@ const BrgyDistribution = () => {
         getEventBatches(event.id),
       ]);
       setCurrentEvent(evRes.data);
-      const batches = bRes.data || [];
+      // Distribution should only operate on APPROVED beneficiaries batches
+      const batches = (bRes.data || []).filter(b => b.status === 'APPROVED');
       setCurrentBatches(batches);
       if (batches.length > 0) {
         const first = batches[0];
@@ -280,12 +281,12 @@ const BrgyDistribution = () => {
       // Find the event this farmer is in
       for (const event of allEvents) {
         const batches = await getEventBatches(event.id);
-        for (const batch of (batches.data || [])) {
+        for (const batch of (batches.data || []).filter(b => b.status === 'APPROVED')) {
           const det = await getBatchDetail(batch.id);
           const entry = det.data.entries?.find(e => e.farmer === farmer.id || e.farmer_contact === farmer.contact_number);
           if (entry) {
             setCurrentEvent(event);
-            setCurrentBatches(batches.data);
+            setCurrentBatches((batches.data || []).filter(b => b.status === 'APPROVED'));
             setSelectedBatch(batch);
             setBatchData(det.data);
             openFarmerDetail(entry);

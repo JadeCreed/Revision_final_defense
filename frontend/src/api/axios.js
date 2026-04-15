@@ -146,6 +146,7 @@ export const getBatchDetail   = (id)           => API.get(`/distribution/batches
 export const submitBatch      = (id)           => API.post(`/distribution/batches/${id}/submit/`);
 export const approveBatch     = (id)           => API.post(`/distribution/batches/${id}/approve/`);
 export const rejectBatch      = (id, data)     => API.post(`/distribution/batches/${id}/reject/`, data);
+export const reopenBatch      = (id)           => API.post(`/distribution/batches/${id}/reopen/`);
 export const unlockBatch      = (id, data)     => API.post(`/distribution/batches/${id}/unlock/`, data);
 export const getBatchAudit    = (id)           => API.get(`/distribution/batches/${id}/audit/`);
 export const getBrgyDistributionContext = ()   =>API.get('/distribution/brgy-context/');

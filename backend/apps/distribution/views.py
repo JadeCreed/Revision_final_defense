@@ -358,12 +358,10 @@ class DistributionBatchRejectView(APIView):
         if not reason:
             return Response({"error": "Rejection reason is required."}, status=400)
 
-        batch.status          = 'REJECTED'
-        batch.rejected_reason = reason
-        batch.save()
-
-        # Reset to DRAFT so BRGY can fix and resubmit
+        # Keep status as REJECTED so the rejection is visible in reports.
+        # BRGY must explicitly reopen the batch to continue editing.
         batch.status = 'REJECTED'
+        batch.rejected_reason = reason
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='REJECTED',
@@ -372,6 +370,47 @@ class DistributionBatchRejectView(APIView):
         return Response({
             "message": "Batch rejected. BRGY has been notified.",
             "status":  "REJECTED"
+        })
+
+
+class DistributionBatchReopenView(APIView):
+    """
+    POST /api/distribution/batches/<id>/reopen/
+    BRGY reopens a REJECTED batch for editing:
+      - status becomes DRAFT
+      - rejection reason is cleared (so the banner disappears while fixing)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        batch = get_object_or_404(DistributionBatch, pk=pk)
+
+        # Only BRGY who owns the event can reopen
+        if request.user.role != 'BRGY':
+            return Response({"error": "Access denied."}, status=403)
+        brgy = getattr(request.user, 'barangay', None)
+        if batch.event.barangay != brgy:
+            return Response({"error": "Access denied."}, status=403)
+
+        if batch.status != 'REJECTED':
+            return Response({"error": "Only REJECTED batches can be reopened."}, status=400)
+
+        batch.status = 'DRAFT'
+        batch.rejected_reason = ''
+        batch.submitted_at = None
+        batch.save()
+
+        log_action(
+            event=batch.event,
+            batch=batch,
+            user=request.user,
+            action='EDITED',
+            notes=f"BRGY reopened Batch {batch.batch_number} for fixes and resubmission",
+        )
+
+        return Response({
+            "message": "Batch reopened. You can now edit entries and resubmit.",
+            "status": "DRAFT",
         })
 
 

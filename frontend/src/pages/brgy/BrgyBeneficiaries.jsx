@@ -23,6 +23,7 @@ import {
   addEntryToBatch,
   deleteEntry,
   saveSignature,
+  reopenBatch,
   searchFarmers,
   getBrgyDistributionContext,
   getFinalSeeds,
@@ -602,6 +603,8 @@ const BrgyBeneficiaries = () => {
         // New entry
         let activeBatch = currentBatch;
         const batchFull = (activeBatch?.entry_count || 0) >= 10 || (batchData?.entry_count || 0) >= 10;
+        // If a rejected batch is reopened, backend turns it into DRAFT.
+        // Only create a new batch when there is no usable DRAFT batch or current one is full.
         if (!activeBatch || activeBatch.status !== 'DRAFT' || batchFull) {
           const nb = await createBatch(currentEvent.id);
           activeBatch = nb.data;
@@ -670,6 +673,19 @@ const BrgyBeneficiaries = () => {
       showToast('error', err.response?.data?.error || 'Failed to submit.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleGoBackToFixEntries = async (batchId) => {
+    if (!batchId) return;
+    try {
+      await reopenBatch(batchId);
+      setView('detail');
+      await refreshDetail(batchId);
+      showToast('success', 'Batch reopened. You can now fix entries and resubmit.');
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Failed to reopen batch.');
+      setView('detail');
     }
   };
 
@@ -1765,7 +1781,7 @@ const BrgyBeneficiaries = () => {
                   <p style={{ color: '#6b7280', fontSize: '0.75rem', margin: '0 0 1rem' }}>
                     Please edit or remove the affected entries in this batch, then resubmit.
                   </p>
-                  <button onClick={() => setView('detail')}
+                  <button onClick={() => handleGoBackToFixEntries(reportBatchData.id)}
                     style={{ padding: '0.625rem 1.25rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                     <Edit2 size={14} /> Go Back to Fix Entries
                   </button>

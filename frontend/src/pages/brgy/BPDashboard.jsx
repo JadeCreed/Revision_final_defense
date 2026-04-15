@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate }         from 'react-router-dom';
 import { useAuth }             from '../../auth/AuthContext';
-import { getAnnouncements,getFinalSeeds }    from '../../api/axios';
+import { getAnnouncements, getFinalSeeds, getBrgyAllocations, confirmPickup } from '../../api/axios';
 import AnnouncementCard        from '../../components/announcements/AnnouncementCard';
 import {
   Users, Megaphone, Wheat, FileText,
-  ChevronRight, ClipboardList,
+  ChevronRight, ClipboardList, Package, CheckCircle,
 } from 'lucide-react';
 
 // ── Greeting based on time of day ──
@@ -61,9 +61,30 @@ const BPDashboard = () => {
   const { firstName } = useAuth();
   const navigate      = useNavigate();
 
+  // ── Seed allocations state (from Seed Inventory) ──
+  const [allocations, setAllocations] = useState([]);
+  const [allocLoading, setAllocLoading] = useState(true);
+  const [allocConfirming, setAllocConfirming] = useState({});
+
   // ── Announcements state ──
   const [announcements, setAnnouncements] = useState([]);
   const [annLoading, setAnnLoading]       = useState(true);
+
+  const loadAllocations = async () => {
+    try {
+      setAllocLoading(true);
+      const res = await getBrgyAllocations();
+      setAllocations(res.data || []);
+    } catch {
+      setAllocations([]);
+    } finally {
+      setAllocLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadAllocations();
+  }, []);
 
   // ── Fetch latest 3 announcements on mount ──
   useEffect(() => {
@@ -79,6 +100,8 @@ const BPDashboard = () => {
     .then(res => setFinalSeeds(res.data || []))
     .catch(() => {});
   }, []);
+
+  const pendingAllocs = allocations.filter(a => a.status === 'PENDING');
 
   return (
     <div style={{ padding: '1.25rem' }}>
@@ -122,6 +145,84 @@ const BPDashboard = () => {
             Confirm seed receipts and facilitate farmer signing.
           </p>
         </div>
+      </div>
+
+      {/* ── PENDING SEED PICKUPS ── */}
+      <div style={{ marginBottom: '1.375rem' }}>
+        <p style={{ fontSize: '1rem', fontWeight: 700, color: '#1a1a1a', marginBottom: '0.75rem' }}>
+          Pending Seed Pickups
+        </p>
+
+        {allocLoading ? (
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', border: '1px solid #f3f4f6', color: '#9ca3af' }}>
+            Loading allocations...
+          </div>
+        ) : pendingAllocs.length === 0 ? (
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', border: '1px solid #f3f4f6', color: '#9ca3af' }}>
+            No pending pickups right now.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            {pendingAllocs.map((a) => (
+              <div key={a.id} style={{
+                backgroundColor: 'white',
+                borderRadius: '0.875rem',
+                border: '1px solid #bbf7d0',
+                padding: '1rem',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '0.75rem',
+                flexWrap: 'wrap',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: '0.75rem', backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Package size={18} color="#166534" />
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 800, color: '#166534', fontSize: '0.9rem' }}>
+                      {a.delivery_info?.seed_type || 'Seed'} · {a.allocated_bags} bag{a.allocated_bags !== 1 ? 's' : ''}
+                    </p>
+                    <p style={{ margin: '0.125rem 0 0', color: '#9ca3af', fontSize: '0.75rem' }}>
+                      {a.delivery_info?.season_display} {a.delivery_info?.year} · {a.delivery_info?.source === 'REGION' ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    setAllocConfirming(p => ({ ...p, [a.id]: true }));
+                    try {
+                      await confirmPickup(a.id);
+                      await loadAllocations();
+                    } finally {
+                      setAllocConfirming(p => ({ ...p, [a.id]: false }));
+                    }
+                  }}
+                  disabled={!!allocConfirming[a.id]}
+                  style={{
+                    padding: '0.625rem 1rem',
+                    backgroundColor: '#166534',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '0.75rem',
+                    cursor: allocConfirming[a.id] ? 'not-allowed' : 'pointer',
+                    fontWeight: 800,
+                    fontSize: '0.8rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.375rem',
+                    opacity: allocConfirming[a.id] ? 0.7 : 1,
+                  }}
+                >
+                  <CheckCircle size={16} />
+                  {allocConfirming[a.id] ? 'Confirming...' : 'Confirm Received'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── QUICK ACTIONS ── */}

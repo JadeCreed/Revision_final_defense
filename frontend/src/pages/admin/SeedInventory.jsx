@@ -98,6 +98,11 @@ const inp = (hasErr = false) => ({
   fontFamily: 'inherit', backgroundColor: 'white',
 });
 
+const BARANGAYS = [
+  'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit','Kalangay','Kalyaat','Kilib','Kulapi',
+  'Mahabang Parang','Malupak','Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil','Tiawe','Tinamnan',
+];
+
 export default function SeedInventory() {
   // VIEW: 'landing' | 'detail' | 'audit'
   const [view, setView]               = useState('landing');
@@ -146,7 +151,13 @@ export default function SeedInventory() {
       setDeliveries(delRes.data || []);
       setSummary(sumRes.data);
     } catch (err) {
-      showToast('error', err.response?.data?.error || err.response?.data?.detail || 'Failed to load inventory data.');
+      showToast(
+        'error',
+        err.response?.data?.error
+          || err.response?.data?.detail
+          || err.message
+          || 'Failed to load inventory data.'
+      );
       setDeliveries([]);
       setSummary(null);
     } finally {
@@ -248,7 +259,7 @@ export default function SeedInventory() {
         showToast('success', 'Seed delivery recorded successfully.');
       }
       setDeliveryModal(false);
-      await loadAll();
+      await loadInventory();
       if (selected) {
         const res = await getSeedDeliveries();
         const updated = (res.data || []).find(d => d.id === selected.id);
@@ -272,7 +283,7 @@ export default function SeedInventory() {
           await deleteSeedDelivery(delivery.id);
           showToast('success', 'Delivery deleted.');
           setView('landing');
-          await loadAll();
+          await loadInventory();
         } catch (err) {
           showToast('error', err.response?.data?.error || 'Failed to delete.');
         }
@@ -787,7 +798,18 @@ export default function SeedInventory() {
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
                 Barangay <span style={{ color: '#dc2626' }}>*</span>
               </label>
-              <input type="text" value={aForm.barangay} onChange={e => { setAForm(p => ({ ...p, barangay: e.target.value })); setAErrors(p => ({ ...p, barangay: '' })); }} placeholder="e.g. May-It" style={inp(!!aErrors.barangay)} />
+              <select
+                value={aForm.barangay}
+                onChange={e => { setAForm(p => ({ ...p, barangay: e.target.value })); setAErrors(p => ({ ...p, barangay: '' })); }}
+                style={{ ...inp(!!aErrors.barangay), cursor: 'pointer' }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = GREEN.primary; }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = aErrors.barangay ? '#dc2626' : '#d1d5db'; }}
+              >
+                <option value="">Select barangay</option>
+                {BARANGAYS.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
               {aErrors.barangay && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{aErrors.barangay}</p>}
             </div>
 
