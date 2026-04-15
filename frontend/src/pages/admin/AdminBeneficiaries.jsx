@@ -4,6 +4,7 @@ import {
   getDistributionEvents, getAdminPendingBatches,
   getDistributionStats, approveBatch, rejectBatch,
   unlockBatch, getBatchDetail, adminConfirmDeleteEvent,
+  getEventBatches,
 } from '../../api/axios';
 import {
   ClipboardList, Clock, CheckCircle, XCircle,
@@ -306,13 +307,21 @@ const AdminBeneficiaries = () => {
   const openApprovedBrgy = async (brgy) => {
     setSelectedApprovedBrgy(brgy);
     setApprovedView('batch_list');
-    // Collect all approved batches for this brgy's events
     const brgyEvents = approvedByBrgy[brgy]?.events || [];
-    const batchPromises = brgyEvents.map(ev =>
-      getDistributionEvents({ barangay: ev.barangay })
-    );
-    // We'll load batch details per event on demand
-    setApprovedBatches(brgyEvents);
+    if (brgyEvents.length === 0) {
+      setApprovedBatches([]);
+      return;
+    }
+
+    try {
+      const loadedEvents = await Promise.all(brgyEvents.map(async (ev) => {
+        const bRes = await getEventBatches(ev.id);
+        return { ...ev, batches: bRes.data || [] };
+      }));
+      setApprovedBatches(loadedEvents);
+    } catch {
+      setApprovedBatches(brgyEvents);
+    }
   };
 
   // ─────────────────────────────────────────
@@ -701,7 +710,7 @@ const AdminBeneficiaries = () => {
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                   {Object.values(approvedByBrgy).map((brgyData, idx) => {
-                    const hasApproved = brgyData.events.some(ev => ev.batches?.some(b => b.status === 'APPROVED'));
+                    const hasApproved = brgyData.totalApproved > 0;
                     if (!hasApproved) return null;
                     return (
                       <div key={brgyData.barangay} className="card-hover"
@@ -719,7 +728,7 @@ const AdminBeneficiaries = () => {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${GREEN.border}` }}>
-                              {brgyData.events.reduce((sum, ev) => sum + (ev.batches?.filter(b => b.status === 'APPROVED').length || 0), 0)} approved
+                              {brgyData.totalApproved} approved
                             </span>
                             <ChevronRight size={18} color="#9ca3af" />
                           </div>

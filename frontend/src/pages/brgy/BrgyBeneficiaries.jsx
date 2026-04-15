@@ -10,7 +10,7 @@ import {
   Plus, Search, ChevronRight, ChevronLeft,
   CheckCircle, Clock, XCircle, Send, Pen,
   Trash2, AlertCircle, FileText, ChevronDown,
-  ChevronUp, Eye, Edit2, Package
+  ChevronUp, Eye, Edit2, Package, Download
 } from 'lucide-react';
 import {
   getDistributionEvents,
@@ -137,7 +137,7 @@ const ConfirmSnack = ({ data, onConfirm, onCancel }) => {
             backgroundColor: 'white', cursor: 'pointer',
             fontWeight: 600, fontSize: '0.875rem', color: '#374151',
           }}>
-            Cancel — Edit
+            Cancel
           </button>
           <button onClick={onConfirm} style={{
             flex: 2, padding: '0.625rem',
@@ -203,12 +203,18 @@ const BrgyBeneficiaries = () => {
   // ── DATA ──
   const [events, setEvents]           = useState([]);
   const [batches, setBatches]         = useState([]);
+  const [batchDetails, setBatchDetails] = useState({});
   const [batchData, setBatchData]     = useState(null);
   const [loading, setLoading]         = useState(true);
+  const [listPage, setListPage]       = useState(1);
+  const PAGE_SIZE = 10;
 
   // ── FILTER ──
   const [programSearch, setProgramSearch] = useState('');
   const [filterType, setFilterType]   = useState('');
+  const [encodedSearch, setEncodedSearch] = useState('');
+  const [encodedSearchOpen, setEncodedSearchOpen] = useState(false);
+  const encodedSearchRef = useRef(null);
 
   // ── FARMER SEARCH ──
   const [farmerSearch, setFarmerSearch]   = useState('');
@@ -313,6 +319,85 @@ const BrgyBeneficiaries = () => {
     return Math.max(expected, totalFarmers || 0);
   };
 
+  const eventNeedsMoreEntries = (event) => {
+    if (!event) return false;
+    return (event.total_encoded || 0) < getEffectiveTotalMembers(event);
+  };
+
+  const compareEntries = (a, b) => {
+    if (a.created_at && b.created_at) {
+      return new Date(b.created_at) - new Date(a.created_at);
+    }
+    if (a.id && b.id) {
+      return Number(b.id) - Number(a.id);
+    }
+    return 0;
+  };
+
+  const loadAllBatchDetails = useCallback(async (batchList) => {
+    if (!batchList?.length) {
+      setBatchDetails({});
+      return;
+    }
+    try {
+      const details = await Promise.all(batchList.map(async (batch) => {
+        const det = await getBatchDetail(batch.id);
+        return {
+          ...det.data,
+          batch_id: batch.id,
+          batch_number: batch.batch_number,
+          batch_status: det.data.status,
+        };
+      }));
+      setBatchDetails(details.reduce((acc, detail) => {
+        acc[detail.batch_id] = detail;
+        return acc;
+      }, {}));
+    } catch {
+      setBatchDetails({});
+    }
+  }, []);
+
+  const allEncodedEntries = Object.values(batchDetails)
+    .flatMap(detail => (detail.entries || []).map(entry => ({
+      ...entry,
+      batch_id: detail.batch_id,
+      batch_number: detail.batch_number,
+      batch_status: detail.batch_status,
+    })))
+    .sort(compareEntries);
+
+  const filteredEncodedEntries = allEncodedEntries.filter(entry => {
+    const query = encodedSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [
+      entry.farmer_name,
+      entry.farmer_rsbsa?.toString(),
+    ]
+      .filter(Boolean)
+      .some(value => value.toLowerCase().includes(query));
+  });
+
+  const totalEncodedEntries = allEncodedEntries.length;
+  const totalEncodedFarmers = filteredEncodedEntries.length;
+  const totalPages = Math.max(1, Math.ceil(totalEncodedFarmers / PAGE_SIZE));
+  const pageEntries = filteredEncodedEntries.slice((listPage - 1) * PAGE_SIZE, listPage * PAGE_SIZE);
+
+  useEffect(() => {
+    setListPage(1);
+  }, [encodedSearch, totalEncodedFarmers]);
+
+  useEffect(() => {
+    if (!encodedSearchOpen) return;
+    const handleClickOutside = (event) => {
+      if (encodedSearchRef.current && !encodedSearchRef.current.contains(event.target)) {
+        setEncodedSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [encodedSearchOpen]);
+
   // ─────────────────────────────────────────
   // OPEN PROGRAM
   // ─────────────────────────────────────────
@@ -320,6 +405,8 @@ const BrgyBeneficiaries = () => {
     setCurrentEvent(event);
     setFarmerSearch('');
     setFarmerResults([]);
+    setEncodedSearch('');
+    setEncodedSearchOpen(false);
     setView('detail');
     try {
       const [evRes, bRes] = await Promise.all([
@@ -329,15 +416,23 @@ const BrgyBeneficiaries = () => {
       setCurrentEvent(evRes.data);
       const allBatches = bRes.data || [];
       setBatches(allBatches);
-      // Auto-open draft batch or create one
-      const draft = allBatches.find(b => b.status === 'DRAFT');
-      if (draft) {
-        setCurrentBatch(draft);
-        const det = await getBatchDetail(draft.id);
+      await loadAllBatchDetails(allBatches);
+      const incomplete = eventNeedsMoreEntries(evRes.data);
+      const rejectedBatch = allBatches.find(b => b.status === 'REJECTED');
+      const draftBatches = allBatches.filter(b => b.status === 'DRAFT');
+      const latestDraft = draftBatches.length > 0
+        ? draftBatches.reduce((latest, batch) => (batch.batch_number > (latest.batch_number || 0) ? batch : latest), draftBatches[0])
+        : null;
+      const openBatch = rejectedBatch
+        || (latestDraft && latestDraft.entry_count < 10 ? latestDraft : null);
+
+      if (openBatch) {
+        setCurrentBatch(openBatch);
+        const det = await getBatchDetail(openBatch.id);
         setBatchData(det.data);
-      } else if (allBatches.length === 0) {
+      } else if (allBatches.length === 0 || incomplete) {
         const nb = await createBatch(evRes.data.id);
-        setBatches([nb.data]);
+        setBatches(prev => [...prev, nb.data]);
         setCurrentBatch(nb.data);
         const det = await getBatchDetail(nb.data.id);
         setBatchData(det.data);
@@ -352,7 +447,7 @@ const BrgyBeneficiaries = () => {
     }
   };
 
-  const refreshDetail = useCallback(async () => {
+  const refreshDetail = useCallback(async (batchId = null) => {
     if (!currentEvent?.id) return;
     try {
       const [evRes, bRes] = await Promise.all([
@@ -360,10 +455,15 @@ const BrgyBeneficiaries = () => {
         getEventBatches(currentEvent.id),
       ]);
       setCurrentEvent(evRes.data);
-      setBatches(bRes.data || []);
-      if (currentBatch?.id) {
-        const det = await getBatchDetail(currentBatch.id);
+      const allBatches = bRes.data || [];
+      setBatches(allBatches);
+      await loadAllBatchDetails(allBatches);
+      const targetBatchId = batchId || currentBatch?.id;
+      if (targetBatchId) {
+        const det = await getBatchDetail(targetBatchId);
         setBatchData(det.data);
+        const found = allBatches.find(b => b.id === targetBatchId);
+        if (found) setCurrentBatch(found);
       }
     } catch {}
   }, [currentEvent?.id, currentBatch?.id]);
@@ -477,6 +577,7 @@ const BrgyBeneficiaries = () => {
   const doSaveEntry = async () => {
     setConfirmSnack(null);
     setSaving(true);
+    let refreshBatchId = currentBatch?.id;
     try {
       if (view === 'edit') {
         // Update existing entry
@@ -500,10 +601,12 @@ const BrgyBeneficiaries = () => {
       } else {
         // New entry
         let activeBatch = currentBatch;
-        if (!activeBatch || activeBatch.status !== 'DRAFT' || batchData?.is_full) {
+        const batchFull = (activeBatch?.entry_count || 0) >= 10 || (batchData?.entry_count || 0) >= 10;
+        if (!activeBatch || activeBatch.status !== 'DRAFT' || batchFull) {
           const nb = await createBatch(currentEvent.id);
           activeBatch = nb.data;
           setCurrentBatch(activeBatch);
+          refreshBatchId = activeBatch.id;
         }
         const entryRes = await addEntryToBatch(activeBatch.id, {
           farmer_id: currentFarmer.id,
@@ -521,6 +624,8 @@ const BrgyBeneficiaries = () => {
           signature: sigRef.current.toDataURL('image/png'),
         });
         showToast('success', `${currentFarmer.first_name} ${currentFarmer.last_name} encoded successfully.`);
+        const det = await getBatchDetail(activeBatch.id);
+        setBatchData(det.data);
       }
       setTimeout(async () => {
         setView('detail');
@@ -528,7 +633,7 @@ const BrgyBeneficiaries = () => {
         setEditEntry(null);
         setFarmerSearch('');
         setFarmerResults([]);
-        await refreshDetail();
+        await refreshDetail(refreshBatchId);
       }, 800);
     } catch (err) {
       showToast('error', err.response?.data?.error || 'Failed to save.');
@@ -606,6 +711,50 @@ const BrgyBeneficiaries = () => {
     return Object.values(groups);
   })();
 
+  const csvEscape = (value) => {
+    const text = value == null ? '' : String(value);
+    if (/[\n",]/.test(text)) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+    return text;
+  };
+
+  const downloadBatchCsv = () => {
+    if (!reportBatchData?.entries?.length) return;
+    const rows = reportBatchData.entries.map(entry => {
+      const farmer = entry.farmer_name || '';
+      const rsbsa = entry.farmer_rsbsa || '';
+      const signature = entry.has_signature ? 'Yes' : 'No';
+      const variety = entry.variety_name || entry.variety || '';
+      return [
+        entry.row_number,
+        rsbsa,
+        farmer,
+        entry.farm_area_ha ?? '',
+        entry.qty_bags ?? '',
+        variety,
+        entry.authorized_representative || '',
+        entry.date_received || '',
+        signature,
+        reportBatchData.status || '',
+      ].map(csvEscape).join(',');
+    });
+
+    const header = [
+      'Row','RSBSA No','Farmer Name','Farm Area (ha)','QTY (bags)','Variety','Authorized Rep','Date Received','Signed','Batch Status'
+    ].map(csvEscape).join(',');
+    const csvContent = [header, ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `brgy_batch_${reportBatchData.batch_number || reportBatchId || 'report'}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // ─────────────────────────────────────────
   // CREATE PROGRAM
   // ─────────────────────────────────────────
@@ -654,6 +803,9 @@ const BrgyBeneficiaries = () => {
       try {
         await deleteEntry(entry.id);
         await refreshDetail();
+        if (view === 'report' && reportBatchId) {
+          await loadReportBatch(reportBatchId);
+        }
         showToast('success', `${entry.farmer_name} removed.`);
       } catch (err) {
         showToast('error', err.response?.data?.error || 'Failed to remove.');
@@ -961,13 +1113,14 @@ const BrgyBeneficiaries = () => {
             </div>
           )}
 
-          {/* Farmer search — only if batch is DRAFT or REJECTED */}
-          {currentEvent.status === 'ACTIVE' && batchData &&
-            (batchData.status === 'DRAFT' || batchData.status === 'REJECTED') &&
-            !batchData.is_full && (
+          {/* Farmer search — keep available until all approved farmers are encoded */}
+          {currentEvent.status === 'ACTIVE' && batchData && (
+            ((batchData.status === 'DRAFT' || batchData.status === 'REJECTED') && !batchData.is_full)
+            || eventNeedsMoreEntries(currentEvent)
+          ) && (
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem', border: '1px solid #f3f4f6' }}>
               <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: '0 0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Search size={15} color={GREEN.primary} /> Add Beneficiary
+                 Add Beneficiary
               </p>
               <div style={{ position: 'relative' }}>
                 <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -1006,31 +1159,82 @@ const BrgyBeneficiaries = () => {
             </div>
           )}
 
-          {/* Batch full notice */}
-          {batchData?.is_full && batchData.status === 'DRAFT' && (
-            <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#854d0e', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <AlertCircle size={15} style={{ flexShrink: 0 }} />
-              Batch is full (10/10). Submit this batch first, then a new batch will be created.
-            </div>
-          )}
 
           {/* Encoded farmers list */}
-          {batchData?.entries?.length > 0 && (
+          {totalEncodedEntries > 0 && (
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
-              <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0 }}>Registered Farmers</h3>
-                <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{batchData.entry_count}/10</span>
+              <div style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div>
+                  <h3 style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0 }}>Registered Farmers</h3>
+                  <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem', color: '#9ca3af' }}>
+                    Showing {(listPage - 1) * PAGE_SIZE + 1}–{Math.min(listPage * PAGE_SIZE, totalEncodedFarmers)} of {totalEncodedFarmers}
+                  </p>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                    Overall {currentEvent ? ` / ${getEffectiveTotalMembers(currentEvent)}` : ''}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                    Page {listPage} of {totalPages}
+                  </span>
+                </div>
               </div>
-              {batchData.entries.map((entry, idx) => (
-                <div key={entry.id} style={{ padding: '0.875rem 1.25rem', borderBottom: idx < batchData.entries.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{ padding: '0 1.25rem 1rem', borderBottom: '1px solid #f3f4f6' }}>
+                <div ref={encodedSearchRef} style={{ position: 'relative', width: encodedSearchOpen ? '100%' : '40px', maxWidth: '420px', minWidth: '40px', transition: 'width 0.25s ease' }}>
+                  <button
+                    type="button"
+                    onClick={() => setEncodedSearchOpen(true)}
+                    style={{
+                      position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', width: '32px', height: '32px', borderRadius: '999px', border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: encodedSearchOpen ? GREEN.primary : '#9ca3af', zIndex: 1
+                    }}>
+                    <Search size={18} />
+                  </button>
+                  <input
+                    value={encodedSearch}
+                    onChange={e => setEncodedSearch(e.target.value)}
+                    placeholder="Search farmers by name or RSBSA..."
+                    style={{
+                      ...inp(false),
+                      width: encodedSearchOpen ? '100%' : '40px',
+                      paddingLeft: '2.75rem',
+                      paddingRight: encodedSearch ? '2.75rem' : '0.75rem',
+                      borderRadius: '999px',
+                      opacity: encodedSearchOpen ? 1 : 0,
+                      visibility: encodedSearchOpen ? 'visible' : 'hidden',
+                      transition: 'all 0.25s ease',
+                      height: '40px',
+                    }}
+                    onFocus={() => setEncodedSearchOpen(true)}
+                  />
+                  {encodedSearch && encodedSearchOpen && (
+                    <button
+                      type="button"
+                      onClick={() => setEncodedSearch('')}
+                      style={{
+                        position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', width: '28px', height: '28px', borderRadius: '999px', border: 'none', background: 'none', color: '#9ca3af', cursor: 'pointer'
+                      }}>
+                      <XCircle size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {pageEntries.length === 0 ? (
+                <div style={{ padding: '1rem 1.25rem', color: '#9ca3af', textAlign: 'center', backgroundColor: '#f9fafb' }}>
+                  No registered farmers match that filter.
+                </div>
+              ) : pageEntries.map((entry, idx) => (
+                <div key={`${entry.batch_id}-${entry.id}`} style={{ padding: '0.875rem 1.25rem', borderBottom: idx < pageEntries.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
                   <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flex: 1 }}>
                     <div style={{ width: 26, height: 26, borderRadius: '50%', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', flexShrink: 0 }}>
-                      {entry.row_number}
+                      {(listPage - 1) * PAGE_SIZE + idx + 1}
                     </div>
                     <div>
                       <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>{entry.farmer_name}</p>
                       <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>
                         {entry.farmer_rsbsa || '—'} · {entry.farm_area_ha ? `${entry.farm_area_ha} ha` : '—'}
+                      </p>
+                      <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+                        Batch {entry.batch_number}
                       </p>
                     </div>
                   </div>
@@ -1039,8 +1243,7 @@ const BrgyBeneficiaries = () => {
                     {entry.has_signature ? (
                       <button
                         onClick={() => {
-                          // Fetch full entry signature
-                          getBatchDetail(batchData.id).then(res => {
+                          getBatchDetail(entry.batch_id).then(res => {
                             const full = res.data.entries.find(e => e.id === entry.id);
                             if (full?.signature) setViewSig(full.signature);
                           });
@@ -1052,7 +1255,7 @@ const BrgyBeneficiaries = () => {
                       <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700 }}>Unsigned</span>
                     )}
                     {/* Edit — only in DRAFT/REJECTED */}
-                    {(batchData.status === 'DRAFT' || batchData.status === 'REJECTED') && (
+                    {((entry.batch_status === 'DRAFT' || entry.batch_status === 'REJECTED') || (batchData?.status === 'DRAFT' || batchData?.status === 'REJECTED')) && (
                       <>
                         <button className="btn-sm" onClick={() => openEdit(entry)}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', padding: '0.25rem' }}>
@@ -1075,6 +1278,23 @@ const BrgyBeneficiaries = () => {
                   </div>
                 </div>
               ))}
+              <div style={{ padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                <button
+                  onClick={() => setListPage(p => Math.max(1, p - 1))}
+                  disabled={listPage === 1}
+                  style={{ padding: '0.5rem 0.75rem', borderRadius: '0.75rem', border: `1px solid ${listPage === 1 ? '#e5e7eb' : '#d1d5db'}`, backgroundColor: listPage === 1 ? '#f9fafb' : 'white', color: listPage === 1 ? '#9ca3af' : '#111827', cursor: listPage === 1 ? 'not-allowed' : 'pointer' }}>
+                  Previous
+                </button>
+                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                  Page {listPage} of {totalPages}
+                </div>
+                <button
+                  onClick={() => setListPage(p => Math.min(totalPages, p + 1))}
+                  disabled={listPage === totalPages}
+                  style={{ padding: '0.5rem 0.75rem', borderRadius: '0.75rem', border: `1px solid ${listPage === totalPages ? '#e5e7eb' : '#d1d5db'}`, backgroundColor: listPage === totalPages ? '#f9fafb' : 'white', color: listPage === totalPages ? '#9ca3af' : '#111827', cursor: listPage === totalPages ? 'not-allowed' : 'pointer' }}>
+                  Next
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1378,6 +1598,10 @@ const BrgyBeneficiaries = () => {
                       </span>
                     </div>
                     {/* Submit/status */}
+                    <button onClick={downloadBatchCsv}
+                      style={{ padding: '0.5rem 1.125rem', backgroundColor: '#e5f4e8', color: GREEN.accent, border: '1px solid #bbf7d0', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <Download size={13} /> Export CSV
+                    </button>
                     {reportBatchData?.status === 'DRAFT' && (
                       <button onClick={() => setSubmitConfirm(true)}
                         style={{ padding: '0.5rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -1413,7 +1637,7 @@ const BrgyBeneficiaries = () => {
                               'Date of Birth','Res. Municipality','Res. Barangay',
                               'Farm Municipality','Farm Barangay',
                               'Gender','IP','Senior Citizen','PWD','ARBs','4Ps',
-                              'Farm Area (ha)','QTY (bags)','Contact No.','Signature','Action'
+                              'Farm Area (ha)','QTY (bags)','Contact No.','Signature'
                             ].map((col, i) => (
                               <th key={i} style={{ padding: '0.5rem 0.375rem', textAlign: 'center', fontWeight: 700, color: ['Res. Municipality','Res. Barangay','Farm Municipality','Farm Barangay','IP','Senior Citizen','PWD','ARBs','4Ps'].includes(col) ? '#dc2626' : '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                             ))}
@@ -1461,21 +1685,6 @@ const BrgyBeneficiaries = () => {
                                     <span style={{ color: '#9ca3af', fontSize: '0.6rem' }}>—</span>
                                   )}
                                 </td>
-                                <td style={{ ...td, textAlign: 'center' }}>
-                                  {(reportBatchData?.status === 'DRAFT' || reportBatchData?.status === 'REJECTED') ? (
-                                    <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                                      <button onClick={() => { setView('report'); openEdit(entry); setView('edit'); }}
-                                        style={{ padding: '0.15rem 0.375rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                        <Edit2 size={9} /> Edit
-                                      </button>
-                                      <button
-                                        onClick={() => setConfirmSnack({ title: `Remove ${entry.farmer_name}?`, message: 'Farmer will need to be re-encoded.', confirmLabel: 'Remove', _entry: entry })}
-                                        style={{ padding: '0.15rem 0.375rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                        <XCircle size={9} /> Remove
-                                      </button>
-                                    </div>
-                                  ) : <span style={{ color: '#d1d5db', fontSize: '0.6rem' }}>—</span>}
-                                </td>
                               </tr>
                             );
                           })}
@@ -1491,7 +1700,7 @@ const BrgyBeneficiaries = () => {
                               'Registered Mun. Rice Area','Total Parcel Count','Area to be Planted',
                               'No. of Bags (20kg)','Rice Variety Received','Crop Estab (D/T)',
                               'Expected Sowing Date','Data Sharing','2025 DS YIELD (placeholder)',
-                              'No. of KP Kits','Authorized Rep.','Date Received','Signature','Action'
+                              'No. of KP Kits','Authorized Rep.','Date Received','Signature'
                             ].map((col, i) => (
                               <th key={i} style={{ padding: '0.5rem 0.375rem', textAlign: 'center', fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                             ))}
@@ -1535,21 +1744,6 @@ const BrgyBeneficiaries = () => {
                                       <Eye size={9} /> View
                                     </button>
                                   ) : <span style={{ color: '#9ca3af', fontSize: '0.6rem' }}>—</span>}
-                                </td>
-                                <td style={{ ...td, textAlign: 'center' }}>
-                                  {(reportBatchData?.status === 'DRAFT' || reportBatchData?.status === 'REJECTED') ? (
-                                    <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'center' }}>
-                                      <button onClick={() => { openEdit(entry); }}
-                                        style={{ padding: '0.15rem 0.375rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                        <Edit2 size={9} /> Edit
-                                      </button>
-                                      <button
-                                        onClick={() => setConfirmSnack({ title: `Remove ${entry.farmer_name}?`, message: 'Farmer will need to be re-encoded.', confirmLabel: 'Remove', _entry: entry })}
-                                        style={{ padding: '0.15rem 0.375rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                        <XCircle size={9} /> Remove
-                                      </button>
-                                    </div>
-                                  ) : <span style={{ color: '#d1d5db', fontSize: '0.6rem' }}>—</span>}
                                 </td>
                               </tr>
                             );

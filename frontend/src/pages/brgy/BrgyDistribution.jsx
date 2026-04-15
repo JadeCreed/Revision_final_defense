@@ -516,7 +516,7 @@ const BrgyDistribution = () => {
           {/* Info banner */}
           <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '1rem', padding: '1rem 1.125rem', marginBottom: '1.25rem' }}>
             <p style={{ fontWeight: 700, color: GREEN.accent, margin: '0 0 0.25rem', fontSize: '0.875rem' }}>
-              📦 Seed Distribution Phase
+               Seed Distribution Phase
             </p>
             <p style={{ color: GREEN.accent, opacity: 0.85, margin: 0, fontSize: '0.78rem', lineHeight: 1.5 }}>
               Once seeds arrive, encode missing distribution data here (QTY for Hybrid, complete details for Inbred). Search a farmer or select a program below.

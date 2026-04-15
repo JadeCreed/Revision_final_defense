@@ -79,11 +79,13 @@ const Sidebar = () => {
   // When the child page is active, update the stored seen count to the current live count.
   useEffect(() => {
     if (role !== 'ADMIN') return;
+    const currentPath = location.pathname.replace(/\/$/, '');
     menus.forEach(item => {
       if (!item.hasChildren) return;
       item.children.forEach(child => {
         if (!child.badgeKey) return;
-        const onPage = location.pathname.startsWith(child.path);
+        const childPath = child.path.replace(/\/$/, '');
+        const onPage = currentPath === childPath || currentPath.startsWith(childPath + '/');
         if (!onPage) return;
         const live = liveBadges[child.badgeKey] || 0;
         setSeenInStorage(child.badgeKey, live);

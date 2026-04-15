@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { CheckCircle2 } from 'lucide-react';
 import { registerFarmer } from '../api/axios';
 
 const BARANGAY_CHOICES = [
@@ -100,17 +101,25 @@ const Register = () => {
   if (success) {
     return (
       <div className="register-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div className="auth-card-icon">
-            <span style={{ fontSize: '1.5rem' }}>✅</span>
+        <div className="auth-card" style={{ textAlign: 'center', maxWidth: '460px' }}>
+          <div style={{ width: 76, height: 76, margin: '0 auto 1rem', display: 'grid', placeItems: 'center', borderRadius: '1.25rem', backgroundColor: '#ecfdf5' }}>
+            <CheckCircle2 size={36} color="#166534" />
           </div>
-          <h2 className="auth-card-title">Registration Successful!</h2>
-          <p style={{ color: 'var(--color-muted)', margin: '1rem 0' }}>
-            Your account is pending admin approval. You will be notified once verified.
+          <h2 className="auth-card-title">Registration Received</h2>
+          <p style={{ color: '#6b7280', margin: '1rem 0', lineHeight: 1.75 }}>
+            Your account has been submitted for admin approval. You will receive a notification once your farmer profile is verified.
           </p>
-          <Link to="/">
-            <button className="btn-primary">Back to Login</button>
-          </Link>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="btn-primary"
+            style={{ width: '100%', maxWidth: '260px', margin: '0 auto' }}
+          >
+            Back to Login
+          </button>
+          <p style={{ color: '#9ca3af', margin: '0.75rem 0 0', fontSize: '0.85rem' }}>
+            If you want, you may return to login and check later after approval.
+          </p>
         </div>
       </div>
     );
