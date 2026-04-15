@@ -24,9 +24,11 @@ urlpatterns = [
     path('api/seed-poll/', include('apps.seed_poll.urls')),
     path('api/distribution/', include('apps.distribution.urls')),
     path('api/inventory/', include('apps.seed_inventory.urls')),
+    path('api/reports/', include('apps.reports.urls')),
+
     # path('api/gis-map/', include('apps.gis_map.urls')),
     # path('api/production/', include('apps.production.urls')),
-    # path('api/reports/', include('apps.reports.urls')),
+    
     # path('api/crop-monitoring/', include('apps.crop_monitoring.urls')),
     # path('api/crop-phase/', include('apps.crop_phase.urls')),
 ]

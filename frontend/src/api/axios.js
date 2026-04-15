@@ -176,4 +176,18 @@ export const getBrgyAllocations       = ()           => API.get('/inventory/my-a
 export const getBrgyPendingCount      = ()           => API.get('/inventory/my-allocations/pending-count/');
 export const confirmPickup            = (id)         => API.post(`/inventory/allocations/${id}/confirm/`);
 
+// ── REPORTS ──
+// ── REPORTS ── (replace existing report calls)
+export const getReportFilterOptions = () =>
+  API.get('/reports/filter-options/');
+
+export const getReportPreview = (params) =>
+  API.get('/reports/preview/', { params });
+
+export const downloadReport = (params) =>
+  API.get('/reports/download/', { params, responseType: 'blob' });
+
+export const getReportLogs = () =>
+  API.get('/reports/logs/');
+
 export default API;

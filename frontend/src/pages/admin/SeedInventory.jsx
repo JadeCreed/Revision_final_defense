@@ -636,12 +636,12 @@ export default function SeedInventory() {
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
               {auditLogs.map((log, idx) => {
                 const actionCfg = {
-                  CREATED:   { color: GREEN.accent,  bg: GREEN.soft,   icon: '📦' },
-                  UPDATED:   { color: '#1e40af',     bg: '#eff6ff',    icon: '✏️' },
-                  ALLOCATED: { color: '#854d0e',     bg: '#fef9c3',    icon: '🏘️' },
-                  CONFIRMED: { color: GREEN.primary, bg: GREEN.light,  icon: '✅' },
-                  DELETED:   { color: '#991b1b',     bg: '#fee2e2',    icon: '🗑️' },
-                }[log.action] || { color: '#6b7280', bg: '#f9fafb', icon: '📋' };
+                  CREATED:   { color: GREEN.accent,  bg: GREEN.soft,   icon: <Package size={16} /> },
+                  UPDATED:   { color: '#1e40af',     bg: '#eff6ff',    icon: <Edit2 size={16} /> },
+                  ALLOCATED: { color: '#854d0e',     bg: '#fef9c3',    icon: <Truck size={16} /> },
+                  CONFIRMED: { color: GREEN.primary, bg: GREEN.light,  icon: <CheckCircle size={16} /> },
+                  DELETED:   { color: '#991b1b',     bg: '#fee2e2',    icon: <Trash2 size={16} /> },
+                }[log.action] || { color: '#6b7280', bg: '#f9fafb', icon: <ClipboardList size={16} /> };
                 return (
                   <div key={log.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < auditLogs.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', animation: `slideUp ${0.3 + idx * 0.04}s ease` }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
