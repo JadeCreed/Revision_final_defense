@@ -25,7 +25,7 @@ const ProtectedRoute = ({ allowedRole }) => {
     return <Navigate to={ROLE_REDIRECT[role]} replace />;
   }
 
-  return <Outlet />; // ✅ IMPORTANT
+  return <Outlet />;
 };
 
 export default ProtectedRoute;
