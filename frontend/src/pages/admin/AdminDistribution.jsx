@@ -772,10 +772,10 @@ const AdminDistribution = () => {
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     {eventIsHybrid ? (
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '900px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '850px' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f9fafb' }}>
-                            {['No.','RSBSA No.','Name','Contact','Farm Area (ha)','QTY (bags)','Variety','Signature','Action'].map((col, i) => (
+                            {['No.','RSBSA No.','Name','Contact','Farm Area (ha)','QTY (bags)','Variety','Signature'].map((col, i) => (
                               <th key={i} style={{ padding: '0.5rem 0.5rem', textAlign: 'center', fontWeight: 700, color: col === 'QTY (bags)' ? '#854d0e' : '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                             ))}
                           </tr>
@@ -805,12 +805,6 @@ const AdminDistribution = () => {
                                     </button>
                                   ) : <span style={{ color: '#9ca3af' }}>—</span>}
                                 </td>
-                                <td style={{ ...td, textAlign: 'center' }}>
-                                  <button onClick={() => openFarmerDetail(entry)}
-                                    style={{ padding: '0.15rem 0.5rem', backgroundColor: missing ? '#854d0e' : '#eff6ff', color: missing ? 'white' : '#1e40af', border: missing ? 'none' : '1px solid #bfdbfe', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                    <Edit2 size={9} /> {missing ? 'Encode QTY' : 'Edit'}
-                                  </button>
-                                </td>
                               </tr>
                             );
                           })}
@@ -820,7 +814,7 @@ const AdminDistribution = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '1300px' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f9fafb' }}>
-                            {['No.','RSBSA No.','Name','Area Planted','No. of Bags','Rice Variety','Crop Estab.','Sowing Date','Data Sharing','Date Received','Auth. Rep.','Signature','Action'].map((col, i) => (
+                            {['No.','RSBSA No.','Name','Area Planted','No. of Bags','Rice Variety','Crop Estab.','Sowing Date','Data Sharing','Date Received','Auth. Rep.','Signature'].map((col, i) => (
                               <th key={i} style={{ padding: '0.5rem 0.375rem', textAlign: 'center', fontWeight: 700, color: ['No. of Bags','Rice Variety','Crop Estab.','Sowing Date','Date Received'].includes(col) ? '#854d0e' : '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                             ))}
                           </tr>
@@ -851,12 +845,6 @@ const AdminDistribution = () => {
                                       <Eye size={9} /> View
                                     </button>
                                   ) : <span style={{ color: '#9ca3af' }}>—</span>}
-                                </td>
-                                <td style={{ ...td, textAlign: 'center' }}>
-                                  <button onClick={() => openFarmerDetail(entry)}
-                                    style={{ padding: '0.15rem 0.5rem', backgroundColor: missing ? '#854d0e' : '#eff6ff', color: missing ? 'white' : '#1e40af', border: missing ? 'none' : '1px solid #bfdbfe', borderRadius: '0.25rem', cursor: 'pointer', fontSize: '0.6rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.15rem' }}>
-                                    <Edit2 size={9} /> {missing ? 'Encode' : 'Edit'}
-                                  </button>
                                 </td>
                               </tr>
                             );

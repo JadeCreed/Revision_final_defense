@@ -130,7 +130,7 @@ class DistributionEntrySerializer(serializers.ModelSerializer):
             'farmer_name', 'farmer_rsbsa', 'farmer_contact', 'farmer_barangay',
             'farm_area_ha', 'crop_establishment', 'crop_establishment_display',
             'variety', 'variety_name', 'data_sharing',
-            'qty_bags', 'date_received',
+            'qty_bags', 'date_received', 'expected_sowing_date', 'authorized_representative',
             'area_planted', 'expected_yield',
             'signature', 'has_signature', 'signed_at',
             'encoded_at', 'updated_at',
@@ -181,7 +181,7 @@ class DistributionEntryListSerializer(serializers.ModelSerializer):
             'farmer_contact', 'farmer_barangay',
             'farm_area_ha', 'crop_establishment', 'crop_establishment_display',
             'variety_name',
-            'qty_bags', 'date_received',
+            'qty_bags', 'date_received', 'expected_sowing_date', 'authorized_representative',
             'has_signature', 'signed_at',
         ]
 

@@ -253,6 +253,18 @@ class DistributionEntry(models.Model):
         null=True, blank=True,
         help_text='Date when farmer received seeds'
     )
+    expected_sowing_date = models.CharField(
+        max_length=120,
+        blank=True,
+        default='',
+        help_text='Expected sowing date (e.g. June/2nd Week)'
+    )
+    authorized_representative = models.CharField(
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Authorized representative name'
+    )
 
     # ── PHILRICE / RCEF SPECIFIC ──
     # From image 3 — saved for future RCEF report generation

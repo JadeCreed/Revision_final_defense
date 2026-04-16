@@ -324,6 +324,9 @@ class DistributionBatchApproveView(APIView):
                 "error": f"Batch is {batch.get_status_display()}. Only SUBMITTED batches can be approved."
             }, status=400)
 
+        if batch.entries.count() == 0:
+            return Response({"error": "Cannot approve an empty batch."}, status=400)
+
         batch.status      = 'APPROVED'
         batch.approved_at = timezone.now()
         batch.approved_by = request.user
@@ -435,7 +438,11 @@ class DistributionBatchUnlockView(APIView):
         log_action(event=batch.event, batch=batch, user=request.user, action='EDITED',
                    notes=f"Unlocked for emergency edit. Reason: {reason}")
 
-        return Response({"message": "Batch unlocked. Edit and re-approve when done.", "status": "SUBMITTED"})
+        return Response({
+            "message": "Batch unlocked. Edit and re-approve when done.",
+            "status": "SUBMITTED",
+            "reason": reason,
+        })
 
 
 # ═══════════════════════════════════════════════════════════
@@ -526,6 +533,14 @@ class DistributionEntryCreateView(APIView):
         if isinstance(data_sharing, str):
             data_sharing = data_sharing.lower() in ('true', '1', 'yes', 'y')
 
+        def normalize_nullable(field_name):
+            value = request.data.get(field_name)
+            return None if value in ('', None) else value
+
+        def normalize_text(field_name):
+            value = request.data.get(field_name, '')
+            return '' if value is None else value
+
         # Auto row number
         row_number = batch.entries.count() + 1
 
@@ -533,11 +548,14 @@ class DistributionEntryCreateView(APIView):
             batch=batch,
             farmer=farmer,
             row_number=row_number,
-            farm_area_ha=request.data.get('farm_area_ha'),
+            farm_area_ha=normalize_nullable('farm_area_ha'),
             crop_establishment=request.data.get('crop_establishment'),
-            qty_bags=request.data.get('qty_bags'),
-            area_planted=request.data.get('area_planted'),
-            expected_yield=request.data.get('expected_yield'),
+            qty_bags=normalize_nullable('qty_bags'),
+            date_received=normalize_nullable('date_received'),
+            expected_sowing_date=normalize_text('expected_sowing_date'),
+            authorized_representative=normalize_text('authorized_representative'),
+            area_planted=normalize_nullable('area_planted'),
+            expected_yield=normalize_nullable('expected_yield'),
             variety=variety,
             data_sharing=data_sharing,
             encoded_by=request.user,
@@ -569,6 +587,7 @@ class DistributionEntryDetailView(APIView):
             return Response({"error": "Cannot edit entries in a SUBMITTED batch."}, status=400)
 
         allowed = ['farm_area_ha', 'crop_establishment', 'qty_bags', 'date_received',
+                   'expected_sowing_date', 'authorized_representative',
                    'area_planted', 'expected_yield', 'variety', 'data_sharing']
         data = {k: v for k, v in request.data.items() if k in allowed}
 

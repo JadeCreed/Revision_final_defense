@@ -1614,10 +1614,6 @@ const BrgyBeneficiaries = () => {
                       </span>
                     </div>
                     {/* Submit/status */}
-                    <button onClick={downloadBatchCsv}
-                      style={{ padding: '0.5rem 1.125rem', backgroundColor: '#e5f4e8', color: GREEN.accent, border: '1px solid #bbf7d0', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Download size={13} /> Export CSV
-                    </button>
                     {reportBatchData?.status === 'DRAFT' && (
                       <button onClick={() => setSubmitConfirm(true)}
                         style={{ padding: '0.5rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -1708,15 +1704,13 @@ const BrgyBeneficiaries = () => {
                       </table>
                     ) : (
                       /* ── INBRED / PHILRICE TABLE ── */
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '1400px' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '1200px' }}>
                         <thead>
                           <tr style={{ backgroundColor: '#f9fafb' }}>
                             {[
-                              'No.','RSBSA No.','Farmer Name','Reg. Mun.','Reg. Brgy.','Farm Mun.','Farm Brgy.',
-                              'Registered Mun. Rice Area','Total Parcel Count','Area to be Planted',
-                              'No. of Bags (20kg)','Rice Variety Received','Crop Estab (D/T)',
-                              'Expected Sowing Date','Data Sharing','2025 DS YIELD (placeholder)',
-                              'No. of KP Kits','Authorized Rep.','Date Received','Signature'
+                              'No.','Farmer Name','RSBSA No.','Area to be Planted (ha)','No. of Bags (20kg)',
+                              'Rice Variety Received','Crop Estab (D/T)','Expected Sowing Date','Data Sharing',
+                              '2025 DS YIELD','Authorized Rep.','Date Received','Signature'
                             ].map((col, i) => (
                               <th key={i} style={{ padding: '0.5rem 0.375rem', textAlign: 'center', fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                             ))}
@@ -1724,19 +1718,12 @@ const BrgyBeneficiaries = () => {
                         </thead>
                         <tbody>
                           {group.entries.map((entry, idx) => {
-                            const fd = entry.farmer_detail || {};
                             const td = { padding: '0.4375rem 0.375rem', color: '#374151', whiteSpace: 'nowrap', fontSize: '0.68rem', borderBottom: '1px solid #f3f4f6', borderRight: '1px solid #e5e7eb' };
                             return (
                               <tr key={entry.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.row_number}</td>
-                                <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.63rem' }}>{entry.farmer_rsbsa || '—'}</td>
                                 <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name || '—'}</td>
-                                <td style={td}>{fd.residency_municipality || '—'}</td>
-                                <td style={td}>{fd.residency_barangay || '—'}</td>
-                                <td style={td}>{fd.farm_municipality || '—'}</td>
-                                <td style={td}>{fd.farm_barangay || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>—</td>
-                                <td style={{ ...td, textAlign: 'center' }}>—</td>
+                                <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.63rem' }}>{entry.farmer_rsbsa || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.area_planted || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
@@ -1744,7 +1731,6 @@ const BrgyBeneficiaries = () => {
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.expected_sowing_date || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.data_sharing ? '✓' : '✗'}</td>
                                 <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>To be encoded in Yield</td>
-                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={td}>{entry.authorized_representative || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.date_received ? new Date(entry.date_received + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' }) : '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>

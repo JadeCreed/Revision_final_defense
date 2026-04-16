@@ -190,4 +190,13 @@ export const downloadReport = (params) =>
 export const getReportLogs = () =>
   API.get('/reports/logs/');
 
+
+// GIS Map
+export const getGisPlots    = (params) => API.get('/gis/plots/', { params });
+export const createGisPlot  = (data)   => API.post('/gis/plots/', data);
+export const updateGisPlot  = (id, d)  => API.patch(`/gis/plots/${id}/`, d);
+export const deleteGisPlot  = (id)     => API.delete(`/gis/plots/${id}/`);
+export const getMapSummary  = ()       => API.get('/gis/summary/');
+export const getGisBarangays= ()       => API.get('/gis/barangays/');
+
 export default API;
