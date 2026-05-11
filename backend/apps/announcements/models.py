@@ -12,6 +12,18 @@ class Announcement(models.Model):
 
     title      = models.CharField(max_length=200)
     content    = models.TextField()
+    action_title = models.CharField(
+        max_length=140,
+        blank=True,
+        default='',
+        help_text='Optional button text for an action users should take.'
+    )
+    action_url = models.CharField(
+        max_length=250,
+        blank=True,
+        default='',
+        help_text='Optional internal path or URL for the action button.'
+    )
 
     announced_date = models.DateField(
     null=True,

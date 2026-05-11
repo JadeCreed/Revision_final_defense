@@ -1,66 +1,151 @@
+# apps/crop_monitoring/models.py
+# CropMonitoring tracks each AT visit to a farmer's field.
+# Each record = one phase observation for one farmer.
+# The GIS map reads the LATEST record per barangay to get dominant phase.
+
 from django.db import models
 from django.conf import settings
-from apps.accounts.choices import BARANGAY_CHOICES
 
 
-class CropMonitoring(models.Model):
+class CropMonitoringRecord(models.Model):
     """
-    Tracks crop phase progression for each distributed farmer.
-    Each phase update creates a new record for audit trail.
-    Latest record per distribution_entry determines current phase.
+    One field visit = one record.
+    AT encodes the current crop phase for a specific farmer
+    after physically visiting their farm.
     """
 
-    PHASE_CHOICES = (
-        ('DISTRIBUTED', 'Seed Distributed'),
-        ('ESTABLISHED', 'Crop Established'),
-        ('TILLERING',   'Tillering'),
-        ('FLOWERING',   'Flowering'),
-        ('RIPENING',    'Ripening'),
-        ('HARVESTING',  'Harvesting'),
-    )
+    PHASE_CHOICES = [
+        ('DISTRIBUTION',  'Seed Distribution'),
+        ('ESTABLISHMENT', 'Crop Establishment'),
+        ('TILLERING',     'Tillering'),
+        ('FLOWERING',     'Flowering'),
+        ('RIPENING',      'Ripening'),
+        ('HARVESTING',    'Harvesting'),
+    ]
 
-    # Links to the farmer who received seed
-    distribution_entry = models.ForeignKey(
-        'distribution.DistributionEntry',
+    ESTABLISHMENT_CHOICES = [
+        ('DS', 'Direct Seeding (D)'),
+        ('TP', 'Transplanting (T)'),
+    ]
+
+    # ── WHO ──
+    # The farmer being monitored
+    farmer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='crop_monitoring_records'
     )
-
-    # Who encoded this (AT user)
+    # The AT who visited and encoded
     encoded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        on_delete=models.PROTECT,
-        related_name='crop_monitoring_encoded'
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='monitoring_encoded'
     )
 
-    # Location
-    barangay = models.CharField(
-        max_length=50,
-        choices=BARANGAY_CHOICES
+    # ── WHERE ──
+    barangay = models.CharField(max_length=100)
+
+    # ── PHASE DATA ──
+    crop_phase = models.CharField(max_length=20, choices=PHASE_CHOICES)
+    crop_establishment = models.CharField(
+        max_length=2, choices=ESTABLISHMENT_CHOICES,
+        null=True, blank=True,
+        help_text='Only required if phase is ESTABLISHMENT'
     )
 
-    # Monitoring data
-    phase = models.CharField(
-        max_length=15,
-        choices=PHASE_CHOICES
+    # ── FARM DATA ──
+    area_monitored_ha = models.DecimalField(
+        max_digits=6, decimal_places=2,
+        null=True, blank=True,
+        help_text='Area actually monitored in hectares'
     )
-    date_observed = models.DateField()
-    notes = models.TextField(blank=True, default='')
-    area_monitored = models.DecimalField(
-        max_digits=6,
-        decimal_places=2,
-        help_text='Area monitored in hectares'
+    sowing_date = models.DateField(
+        null=True, blank=True,
+        help_text='Date when planting/sowing started'
+    )
+    variety_name = models.CharField(
+        max_length=100, blank=True,
+        help_text='Crop variety observed in the field'
     )
 
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # ── NOTES ──
+    remarks = models.TextField(
+        blank=True,
+        help_text='AT field observations, issues, or notes'
+    )
+
+    # ── TIMESTAMPS ──
+    date_observed  = models.DateField()
+    encoded_at     = models.DateTimeField(auto_now_add=True)
+    updated_at     = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['-date_observed', '-encoded_at']
         verbose_name = 'Crop Monitoring Record'
-        verbose_name_plural = 'Crop Monitoring Records'
 
     def __str__(self):
-        farmer_name = f"{self.distribution_entry.farmer.first_name} {self.distribution_entry.farmer.last_name}"
-        return f"{self.barangay} - {farmer_name} - {self.phase} ({self.date_observed})"
+        return (
+            f"{self.farmer.get_full_name()} — "
+            f"{self.get_crop_phase_display()} — "
+            f"{self.date_observed}"
+        )
+
+
+class BarangayCropSummary(models.Model):
+    """
+    Cached summary per barangay for GIS map performance.
+    Updated every time a new CropMonitoringRecord is saved
+    via Django signal (see signals.py).
+    Avoids expensive real-time aggregation on GIS map load.
+    """
+
+    barangay       = models.CharField(max_length=100, unique=True)
+    dominant_phase = models.CharField(
+        max_length=20,
+        choices=CropMonitoringRecord.PHASE_CHOICES,
+        default='DISTRIBUTION'
+    )
+    total_farmers        = models.PositiveIntegerField(default=0)
+    distribution_count   = models.PositiveIntegerField(default=0)
+    establishment_count  = models.PositiveIntegerField(default=0)
+    tillering_count      = models.PositiveIntegerField(default=0)
+    flowering_count      = models.PositiveIntegerField(default=0)
+    ripening_count       = models.PositiveIntegerField(default=0)
+    harvesting_count     = models.PositiveIntegerField(default=0)
+    last_updated         = models.DateTimeField(auto_now=True)
+    last_reported_by     = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True, blank=True
+    )
+
+    class Meta:
+        ordering = ['barangay']
+        verbose_name = 'Barangay Crop Summary'
+        verbose_name_plural = 'Barangay Crop Summaries'
+
+    def __str__(self):
+        return f"{self.barangay} — {self.get_dominant_phase_display()}"
+
+    def get_dominant_phase_display(self):
+        phase_map = dict(CropMonitoringRecord.PHASE_CHOICES)
+        return phase_map.get(self.dominant_phase, self.dominant_phase)
+
+    def get_phase_percentages(self):
+        """Returns dict of phase: percentage for GIS chart display."""
+        total = (
+            self.distribution_count + self.establishment_count +
+            self.tillering_count + self.flowering_count +
+            self.ripening_count + self.harvesting_count
+        )
+        if total == 0:
+            return {}
+        return {
+            'DISTRIBUTION':  round((self.distribution_count  / total) * 100),
+            'ESTABLISHMENT': round((self.establishment_count / total) * 100),
+            'TILLERING':     round((self.tillering_count     / total) * 100),
+            'FLOWERING':     round((self.flowering_count     / total) * 100),
+            'RIPENING':      round((self.ripening_count      / total) * 100),
+            'HARVESTING':    round((self.harvesting_count    / total) * 100),
+        }

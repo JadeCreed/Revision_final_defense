@@ -50,6 +50,8 @@ class AnnouncementAdminSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'content',
+            'action_title',
+            'action_url',
             'announced_date',
             'target_role',
             'target_barangays_list',    # write: frontend sends list
@@ -135,6 +137,8 @@ class AnnouncementListSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'content',
+            'action_title',
+            'action_url',
             'announced_date',
             'target_role',
             'target_barangays_list',

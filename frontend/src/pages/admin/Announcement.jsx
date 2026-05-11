@@ -275,7 +275,7 @@ const Announcement = () => {
       marginLeft:   '0.5rem',
       fontSize:     '0.72rem',
     }}>
-      (defaults to today — change if needed)
+      (defaults to today)
     </span>
   </label>
   <input

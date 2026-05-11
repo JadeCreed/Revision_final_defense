@@ -23,6 +23,7 @@ const getGreeting = () => {
 // ── Quick action cards for AT ──
 const QUICK_ACTIONS = [
   {
+    id:       'at-farmers',
     label:    'My Assigned Farmers',
     subLabel: 'View and manage farmers in your barangays',
     icon:     Users,
@@ -31,6 +32,7 @@ const QUICK_ACTIONS = [
     iconColor:'#166534',
   },
   {
+    id:       'crop-monitoring',
     label:    'Crop Monitoring',
     subLabel: 'Record and update crop phases per barangay',
     icon:     Tractor,
@@ -39,6 +41,16 @@ const QUICK_ACTIONS = [
     iconColor:'#1e40af',
   },
   {
+    id:       'fill-masterlist',
+    label:    'Fill Masterlist',
+    subLabel: 'Complete the required masterlist fill-out',
+    icon:     ClipboardList,
+    path:     '/at/crop-monitoring',
+    iconBg:   '#e0e7ff',
+    iconColor:'#4338ca',
+  },
+  {
+    id:       'submit-report',
     label:    'Submit Report',
     subLabel: 'Send field report to admin',
     icon:     ClipboardList,
@@ -47,6 +59,7 @@ const QUICK_ACTIONS = [
     iconColor:'#854d0e',
   },
   {
+    id:       'gis-map',
     label:    'GIS Map',
     subLabel: 'View barangay crop phase map',
     icon:     MapPin,
@@ -140,7 +153,7 @@ const ATDashboard = () => {
             const Icon = action.icon;
             return (
               <button
-                key={action.path}
+                key={action.id}
                 onClick={() => navigate(action.path)}
                 style={{
                   display:         'flex',
@@ -184,6 +197,43 @@ const ATDashboard = () => {
             );
           })}
         </div>
+      </div>
+
+      <div style={{
+        backgroundColor: '#eff6ff',
+        border:          '1px solid #bfdbfe',
+        borderRadius:    '1rem',
+        padding:         '1rem 1.25rem',
+        marginBottom:    '1.375rem',
+        display:         'flex',
+        justifyContent:  'space-between',
+        flexWrap:        'wrap',
+        gap:             '1rem',
+        alignItems:      'center',
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontWeight: 700, color: '#1e3a8a', margin: 0, fontSize: '0.95rem' }}>
+            Masterlist fill-out required
+          </p>
+          <p style={{ color: '#1e40af', margin: '0.35rem 0 0', fontSize: '0.88rem', lineHeight: 1.5 }}>
+            You have assigned barangays that still need their crop monitoring masterlist completed. Tap below to continue.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/at/crop-monitoring')}
+          style={{
+            backgroundColor: '#1e40af',
+            color:           'white',
+            border:          'none',
+            borderRadius:    '0.875rem',
+            padding:         '0.9rem 1.1rem',
+            cursor:          'pointer',
+            fontWeight:      700,
+            minWidth:        170,
+          }}
+        >
+          Open Masterlist
+        </button>
       </div>
 
         {/* ── CONFIRMED SEED VARIETIES ── */}

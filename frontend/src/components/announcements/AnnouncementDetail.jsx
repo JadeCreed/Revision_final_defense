@@ -272,6 +272,36 @@ const AnnouncementDetail = () => {
                 }}>
                   {announcement.content}
                 </div>
+
+                {announcement.action_title && announcement.action_url && (
+                  <button
+                    onClick={() => {
+                      const url = announcement.action_url.trim();
+                      if (!url) return;
+                      if (url.startsWith('/')) {
+                        navigate(url);
+                      } else {
+                        window.open(url, '_blank', 'noopener');
+                      }
+                    }}
+                    style={{
+                      display:        'block',
+                      width:          '100%',
+                      marginTop:      '1.25rem',
+                      padding:        '0.95rem 1rem',
+                      border:         'none',
+                      borderRadius:   '0.95rem',
+                      backgroundColor: colors.primary,
+                      color:          'white',
+                      fontSize:       '0.95rem',
+                      fontWeight:     700,
+                      cursor:         'pointer',
+                      textAlign:      'center',
+                    }}
+                  >
+                    {announcement.action_title}
+                  </button>
+                )}
               </div>
 
               {/* ── READ STATUS BADGE ── */}

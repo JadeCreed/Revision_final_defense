@@ -49,7 +49,7 @@ import CropMonitoring   from '../pages/at/CropMonitoring';
 import ATFarmers        from '../pages/at/ATFarmers';
 import ATGisMap         from '../pages/at/ATGisMap';
 import ATReports        from '../pages/at/ATReports';
-import ATAnnouncements  from '../pages/at/ATAnnouncements'
+import ATAnnouncements  from '../pages/at/ATAnnouncements';
 
 // ── BRGY pages ──
 import BPDashboard       from '../pages/brgy/BPDashboard';

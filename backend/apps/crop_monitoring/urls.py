@@ -1,14 +1,31 @@
+# apps/crop_monitoring/urls.py
+
 from django.urls import path
 from .views import (
-    CropMonitoringEntriesView,
-    CropMonitoringListCreateView,
-    CropMonitoringSummaryView,
-    CropMonitoringBarangaySummaryView,
+    ATFarmerListView,
+    ATCropMonitoringCreateView,
+    ATFarmerHistoryView,
+    ATCropMonitoringUpdateView,
+    ATDashboardStatsView,
+    AdminCropMonitoringListView,
+    GISBarangaySummaryView,
 )
 
 urlpatterns = [
-    path('', CropMonitoringListCreateView.as_view(), name='crop-monitoring-list'),
-    path('entries/', CropMonitoringEntriesView.as_view(), name='crop-monitoring-entries'),
-    path('summary/', CropMonitoringSummaryView.as_view(), name='crop-monitoring-summary'),
-    path('barangays/', CropMonitoringBarangaySummaryView.as_view(), name='crop-monitoring-barangay-summary'),
+    # AT — farmer list for encoding
+    path('at/farmers/',          ATFarmerListView.as_view(),          name='at-farmer-list'),
+    path('at/stats/',            ATDashboardStatsView.as_view(),      name='at-stats'),
+
+    # AT — encode + update records
+    path('records/',             ATCropMonitoringCreateView.as_view(), name='record-create'),
+    path('records/<int:pk>/',    ATCropMonitoringUpdateView.as_view(), name='record-update'),
+
+    # AT — farmer history
+    path('farmers/<int:farmer_id>/history/', ATFarmerHistoryView.as_view(), name='farmer-history'),
+
+    # Admin
+    path('admin/records/',       AdminCropMonitoringListView.as_view(), name='admin-records'),
+
+    # GIS (shared — admin + AT)
+    path('gis/summaries/',       GISBarangaySummaryView.as_view(),    name='gis-summaries'),
 ]

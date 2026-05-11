@@ -1,58 +1,78 @@
+# apps/crop_monitoring/serializers.py
+
 from rest_framework import serializers
-from .models import CropMonitoring
+from .models import CropMonitoringRecord, BarangayCropSummary
+from apps.accounts.models import User
 
 
-class CropMonitoringSerializer(serializers.ModelSerializer):
-    distribution_entry_id = serializers.IntegerField(source='distribution_entry.id', read_only=True)
-    farmer_name = serializers.SerializerMethodField()
-    farmer_rsbsa = serializers.SerializerMethodField()
-    farmer_barangay = serializers.SerializerMethodField()
-    event_name = serializers.SerializerMethodField()
-    phase_display = serializers.CharField(source='get_phase_display', read_only=True)
+class CropMonitoringRecordSerializer(serializers.ModelSerializer):
+    """Full record with farmer + AT info — used for detail views and lists."""
+
+    farmer_name    = serializers.SerializerMethodField()
+    farmer_rsbsa   = serializers.SerializerMethodField()
+    farmer_contact = serializers.SerializerMethodField()
+    encoded_by_name = serializers.SerializerMethodField()
+    crop_phase_display       = serializers.CharField(
+        source='get_crop_phase_display', read_only=True
+    )
+    crop_establishment_display = serializers.CharField(
+        source='get_crop_establishment_display', read_only=True
+    )
 
     class Meta:
-        model = CropMonitoring
+        model  = CropMonitoringRecord
         fields = [
-            'id', 'distribution_entry_id', 'farmer_name', 'farmer_rsbsa', 'farmer_barangay',
-            'event_name', 'barangay', 'phase', 'phase_display', 'date_observed',
-            'area_monitored', 'notes', 'encoded_by', 'encoded_by', 'created_at', 'updated_at',
+            'id', 'farmer', 'farmer_name', 'farmer_rsbsa', 'farmer_contact',
+            'encoded_by', 'encoded_by_name',
+            'barangay',
+            'crop_phase', 'crop_phase_display',
+            'crop_establishment', 'crop_establishment_display',
+            'area_monitored_ha', 'sowing_date', 'variety_name',
+            'remarks', 'date_observed', 'encoded_at', 'updated_at',
         ]
-        read_only_fields = [
-            'id', 'farmer_name', 'farmer_rsbsa', 'farmer_barangay', 'event_name',
-            'phase_display', 'encoded_by', 'created_at', 'updated_at',
-        ]
+        read_only_fields = ['id', 'encoded_at', 'updated_at', 'encoded_by']
 
     def get_farmer_name(self, obj):
-        farmer = getattr(obj.distribution_entry, 'farmer', None)
-        if farmer:
-            return f"{farmer.last_name}, {farmer.first_name}"
-        return ''
+        return obj.farmer.get_full_name()
 
     def get_farmer_rsbsa(self, obj):
-        return getattr(obj.distribution_entry.farmer, 'rsbsa_number', '') if obj.distribution_entry else ''
+        return obj.farmer.rsbsa_number or ''
 
-    def get_farmer_barangay(self, obj):
-        return obj.distribution_entry.batch.event.barangay if obj.distribution_entry else ''
+    def get_farmer_contact(self, obj):
+        return obj.farmer.contact_number or ''
 
-    def get_event_name(self, obj):
-        return str(obj.distribution_entry.batch.event) if obj.distribution_entry else ''
+    def get_encoded_by_name(self, obj):
+        if obj.encoded_by:
+            return obj.encoded_by.get_full_name()
+        return ''
 
 
-class CropMonitoringCreateSerializer(serializers.ModelSerializer):
+class BarangayCropSummarySerializer(serializers.ModelSerializer):
+    """
+    Used by GIS map — returns phase counts + percentages per barangay.
+    """
+    phase_percentages      = serializers.SerializerMethodField()
+    dominant_phase_display = serializers.SerializerMethodField()
+    last_reported_by_name  = serializers.SerializerMethodField()
+
     class Meta:
-        model = CropMonitoring
-        fields = ['distribution_entry', 'barangay', 'phase', 'date_observed', 'area_monitored', 'notes']
+        model  = BarangayCropSummary
+        fields = [
+            'barangay', 'dominant_phase', 'dominant_phase_display',
+            'total_farmers',
+            'distribution_count', 'establishment_count', 'tillering_count',
+            'flowering_count', 'ripening_count', 'harvesting_count',
+            'phase_percentages',
+            'last_updated', 'last_reported_by_name',
+        ]
 
-    def validate(self, attrs):
-        entry = attrs.get('distribution_entry')
-        if not entry:
-            raise serializers.ValidationError({'distribution_entry': 'Distribution entry is required.'})
+    def get_phase_percentages(self, obj):
+        return obj.get_phase_percentages()
 
-        phase = attrs.get('phase')
-        if not phase:
-            raise serializers.ValidationError({'phase': 'Phase is required.'})
+    def get_dominant_phase_display(self, obj):
+        return obj.get_dominant_phase_display()
 
-        if attrs.get('area_monitored') is None:
-            raise serializers.ValidationError({'area_monitored': 'Area monitored is required.'})
-
-        return attrs
+    def get_last_reported_by_name(self, obj):
+        if obj.last_reported_by:
+            return obj.last_reported_by.get_full_name()
+        return '—'

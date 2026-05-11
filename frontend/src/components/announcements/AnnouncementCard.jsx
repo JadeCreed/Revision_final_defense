@@ -8,6 +8,8 @@ const AnnouncementCard = ({ announcement, onClick, roleColor = '#1a4d1a' }) => {
     is_new,
     is_read,
     target_barangays_list,
+    action_title,
+    action_url,
   } = announcement;
 
   // Show barangay in the card footer
@@ -166,6 +168,24 @@ const AnnouncementCard = ({ announcement, onClick, roleColor = '#1a4d1a' }) => {
         }}>
           {contentPreview}
         </p>
+
+        {action_title && action_url && (
+          <div style={{
+            marginBottom: '0.75rem',
+          }}>
+            <span style={{
+              backgroundColor: '#eef2ff',
+              color: '#1d4ed8',
+              fontSize: '0.68rem',
+              fontWeight: 700,
+              padding: '4px 10px',
+              borderRadius: '999px',
+              display: 'inline-block',
+            }}>
+              {action_title}
+            </span>
+          </div>
+        )}
 
         {/* Footer: date • barangay */}
         <div style={{
