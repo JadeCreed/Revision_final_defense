@@ -9,6 +9,7 @@ from django.db.models           import Q
 
 from apps.accounts.permissions  import IsAdminUserRole, IsBPUser
 from apps.accounts.models       import User
+from apps.crop_monitoring.models import CropMonitoring
 from .models import (
     DistributionEvent,
     DistributionBatch,
