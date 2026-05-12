@@ -28,6 +28,7 @@ from .serializers import (
     AdminCreateUserSerializer,
     AdminCreateATSerializer,
     AdminCreateBPSerializer,
+    AdminUpdateATAssignedBarangaysSerializer,
     AgriculturalTechnicianProfileSerializer,
     BrgyPresidentProfileSerializer,
     AdminUserSimpleSerializer
@@ -36,6 +37,15 @@ from .serializers import (
 from django.contrib.auth import get_user_model
 
 ALLOWED_ORDERING = ['date_joined', '-date_joined', 'last_name', '-last_name', 'first_name', '-first_name']
+
+
+def normalize_contact_number(value):
+    if not value:
+        return ''
+    digits = ''.join(ch for ch in str(value) if ch.isdigit())
+    if len(digits) == 12 and digits.startswith('63'):
+        digits = '0' + digits[2:]
+    return digits
 
 
 User = get_user_model()
@@ -72,20 +82,68 @@ class LoginView(APIView):
 
             # 🔐 Generate JWT
             refresh = RefreshToken.for_user(user)
+            access_token = str(refresh.access_token)
 
-            return Response({
-                "token": str(refresh.access_token),
+            response = Response({
+                "access_token": access_token,
                 "role": user.role,
                 "is_verified": user.is_verified,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
                 "message": "Login successful"
             })
+            
+            # 🍪 Set httpOnly cookie (secure token storage)
+            response.set_cookie(
+                key='access_token',
+                value=access_token,
+                httponly=True,
+                secure=False,  # Set to True in production (HTTPS only)
+                samesite='None',  # Required for cross-origin localhost dev
+                max_age=3600  # 1 hour (matches JWT_ACCESS_TOKEN_LIFETIME)
+            )
+
+            return response
 
         except Exception as e:
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+# 🔓 Logout View — Clears the httpOnly cookie
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        response = Response({
+            "message": "Logged out successfully"
+        })
+        
+        # 🍪 Clear the httpOnly cookie
+        response.delete_cookie('access_token')
+        
+        return response
+
+
+# ✅ Verify Token View — Check if user is authenticated
+class VerifyTokenView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        """
+        GET /api/accounts/verify-token/
+        Returns user info if token is valid.
+        Used by frontend on app load to restore auth state.
+        """
+        user = request.user
+        return Response({
+            "role": user.role,
+            "is_verified": user.is_verified,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "user_id": user.id,
+            "message": "Token is valid"
+        }, status=200)
 
 class StandardPagination(PageNumberPagination):
     page_size            = 10          # 10 records per page
@@ -516,12 +574,25 @@ class BPListView(ListAPIView):
 # --------- Forgot Password ---------
 class ForgotPasswordView(APIView):
     def post(self, request):
-        email = request.data.get("email")
+        email = request.data.get("email", "").strip()
+        contact_number = normalize_contact_number(request.data.get("contact_number", ""))
 
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
-            return Response({"error": "Email not found"}, status=404)
+        if not email and not contact_number:
+            return Response({"error": "Please provide your registered email or contact number."}, status=400)
+
+        user = None
+        if email:
+            user = User.objects.filter(email__iexact=email).first()
+        if not user and contact_number:
+            user = User.objects.filter(contact_number=contact_number).first()
+
+        if user is None:
+            return Response({"error": "Email or contact number not found."}, status=404)
+
+        if not user.email:
+            return Response({
+                "error": "This account has no email on file. Please use the contact number reset option."
+            }, status=400)
 
         # ⛔ RATE LIMIT (3 requests per 30 mins)
         thirty_minutes_ago = timezone.now() - timedelta(minutes=30)
@@ -563,17 +634,30 @@ class VerifyOTPView(APIView):
     
 
     def post(self, request):
-        email = request.data.get("email")
+        identifier = request.data.get("email", "").strip()
         otp = request.data.get("otp")
 
+        if not identifier or not otp:
+            return Response({"error": "Invalid OTP"}, status=400)
+
+        user = None
+        if '@' in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+        if user is None:
+            normalized_number = normalize_contact_number(identifier)
+            if normalized_number:
+                user = User.objects.filter(contact_number=normalized_number).first()
+
+        if user is None:
+            return Response({"error": "Invalid OTP"}, status=400)
+
         try:
-            user = User.objects.get(email=email)
             otp_obj = PasswordResetOTP.objects.filter(
                 user=user,
                 otp=otp,
                 is_used=False  # ✅ prevent reuse
             ).latest('created_at')
-        except:
+        except Exception:
             return Response({"error": "Invalid OTP"}, status=400)
 
         # ⏱ Expiry check
@@ -590,13 +674,13 @@ class ResetPasswordView(APIView):
     Requires: email, otp (re-checked), new_password, confirm_password
     """
     def post(self, request):
-        email = request.data.get("email")
+        identifier = request.data.get("email", "").strip()
         otp = request.data.get("otp")           # re-verify OTP for security
         new_password = request.data.get("new_password")
         confirm_password = request.data.get("confirm_password")
 
         # ── Validate all fields present ──
-        if not all([email, otp, new_password, confirm_password]):
+        if not all([identifier, otp, new_password, confirm_password]):
             return Response({"error": "All fields are required"}, status=400)
 
         if new_password != confirm_password:
@@ -606,12 +690,18 @@ class ResetPasswordView(APIView):
             return Response({"error": "Password must be at least 6 characters"}, status=400)
 
         # ── Find user ──
-        try:
-            user = User.objects.get(email=email)
-        except User.DoesNotExist:
+        user = None
+        if '@' in identifier:
+            user = User.objects.filter(email__iexact=identifier).first()
+        if user is None:
+            normalized_number = normalize_contact_number(identifier)
+            if normalized_number:
+                user = User.objects.filter(contact_number=normalized_number).first()
+
+        if user is None:
             return Response({"error": "Invalid Credentials"}, status=404)
 
-        # ── Re-verify OTP before allowing reset ──
+        # ── Re-verify OTP before allowing reset ─
         try:
             otp_obj = PasswordResetOTP.objects.filter(
                 user=user,
@@ -647,32 +737,21 @@ class AdminResetRequestView(APIView):
     → admin sees the request in User Management and resets manually
     """
     def post(self, request):
-        contact_number = request.data.get("contact_number","")
+        contact_number = normalize_contact_number(request.data.get("contact_number", ""))
 
-        # Validate input
         if not contact_number:
             return Response({"error": "Contact number is required"}, status=400)
 
-        if len(contact_number) != 11 or not contact_number.isdigit():
-            return Response({"error": "Enter a valid 11-digit contact number"}, status=400)
+        if len(contact_number) != 11:
+            return Response({"error": "Enter a valid 11-digit contact number."}, status=400)
 
-        # Look up user by contact number
-        # We use filter().first() instead of get() to avoid crashing
-        user = User.objects.filter(
-            contact_number=contact_number,
-            is_active=True
-        ).first()
+        user = User.objects.filter(contact_number=contact_number).first()
 
         if user is None:
-            # For security: don't reveal if number exists or not
-            # But since farmers aren't tech-savvy, give a clear message
             return Response({
                 "error": "Contact number not found in our records. Please check and try again."
             }, status=404)
 
-        # Flag this user as needing admin password reset
-        # Use queryset .update() to bypass your model's full_clean() / save()
-        # This directly updates only this one field in the database
         User.objects.filter(pk=user.pk).update(password_reset_requested_at=timezone.now())
 
         return Response({
@@ -925,6 +1004,52 @@ class AdminCreateOfficialView(APIView):
             }, status=201)
 
         return Response(serializer.errors, status=400)
+
+class AdminUpdateATAssignedBarangaysView(APIView):
+    """
+    PUT /admin/users/{id}/assigned-barangays/
+    Update the barangays assigned to an AT account.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def put(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, role='AT')
+        except User.DoesNotExist:
+            return Response({"error": "AT user not found"}, status=404)
+
+        try:
+            at_profile = user.at_profile
+        except AgriculturalTechnicianProfile.DoesNotExist:
+            return Response({"error": "AT profile not found"}, status=404)
+
+        serializer = AdminUpdateATAssignedBarangaysSerializer(data=request.data, context={'user': user})
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+
+        desired_barangays = serializer.validated_data['assigned_barangays']
+        current_names = set(at_profile.barangays.values_list('name', flat=True))
+        desired_names = set(desired_barangays)
+
+        to_unassign = current_names - desired_names
+        to_assign = desired_names - current_names
+
+        if to_unassign:
+            Barangay.objects.filter(name__in=list(to_unassign), assigned_at=at_profile).update(assigned_at=None)
+
+        for name in desired_barangays:
+            barangay_obj, _ = Barangay.objects.get_or_create(name=name)
+            if barangay_obj.assigned_at_id != at_profile.id:
+                barangay_obj.assigned_at = at_profile
+                barangay_obj.save()
+
+        at_profile.assigned_barangay = desired_barangays[0]
+        at_profile.save()
+
+        return Response({
+            "message": "Assigned barangays updated",
+            "assigned_barangays": desired_barangays
+        })
 
 class AdminDeactivateUserView(APIView):
     """

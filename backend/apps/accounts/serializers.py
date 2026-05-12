@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User,FarmerProfile,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay
+from .models import User,FarmerProfile,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,BARANGAY_CHOICES
 from rest_framework.validators import UniqueValidator
 # -----------------------
 # Farmer registration (mobile self-register)
@@ -125,7 +125,6 @@ class AdminCreateATSerializer(serializers.ModelSerializer):
     def validate_assigned_barangays(self, value):
         if not value:
             raise serializers.ValidationError("At least one barangay must be assigned")
-        # Check if any barangay is already assigned to another AT
         already_taken = Barangay.objects.filter(
             name__in=value,
             assigned_at__isnull=False
@@ -147,9 +146,11 @@ class AdminCreateATSerializer(serializers.ModelSerializer):
         user.role        = 'AT'
         user.save()
 
-        at_profile = AgriculturalTechnicianProfile.objects.create(user=user)
+        at_profile = AgriculturalTechnicianProfile.objects.create(
+            user=user,
+            assigned_barangay=barangay_names[0] if barangay_names else ''
+        )
 
-        # Assign barangays — create or get each Barangay record
         for name in barangay_names:
             barangay_obj, _ = Barangay.objects.get_or_create(name=name)
             barangay_obj.assigned_at = at_profile
@@ -157,6 +158,46 @@ class AdminCreateATSerializer(serializers.ModelSerializer):
 
         return user
 
+
+class AdminUpdateATAssignedBarangaysSerializer(serializers.Serializer):
+    assigned_barangays = serializers.ListField(
+        child=serializers.CharField(),
+        required=True
+    )
+
+    def validate_assigned_barangays(self, value):
+        if not value:
+            raise serializers.ValidationError("At least one barangay must be assigned")
+        if len(set(value)) != len(value):
+            raise serializers.ValidationError("Duplicate barangay names are not allowed")
+
+        valid_names = [name for name, _ in BARANGAY_CHOICES]
+        invalid = [name for name in value if name not in valid_names]
+        if invalid:
+            raise serializers.ValidationError(f"Invalid barangay name(s): {', '.join(invalid)}")
+        return value
+
+    def validate(self, data):
+        user = self.context.get('user')
+        if not user:
+            raise serializers.ValidationError("AT user context is required")
+
+        try:
+            at_profile = user.at_profile
+        except AgriculturalTechnicianProfile.DoesNotExist:
+            raise serializers.ValidationError("AT profile not found")
+
+        already_taken = Barangay.objects.filter(
+            name__in=data['assigned_barangays'],
+            assigned_at__isnull=False
+        ).exclude(assigned_at=at_profile).values_list('name', flat=True)
+
+        if already_taken:
+            raise serializers.ValidationError({
+                'assigned_barangays': f"Already assigned to another AT: {', '.join(already_taken)}"
+            })
+
+        return data
 
 
 class AdminCreateBPSerializer(serializers.ModelSerializer):

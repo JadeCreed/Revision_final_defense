@@ -56,10 +56,13 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
-# Allow React dev server
+# Allow React dev server with credentials
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://localhost:5174",
 ]
+
+CORS_ALLOW_CREDENTIALS = True
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -142,7 +145,7 @@ STATIC_URL = 'static/'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.accounts.authentication.CookieJWTAuthentication',  # 🍪 Reads from httpOnly cookies
     ),
 }
 
@@ -150,6 +153,20 @@ SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# ─ Secure Cookie Settings ─
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SECURE = False  # True in production (HTTPS only)
+SESSION_COOKIE_SAMESITE = 'None'
+
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SECURE = False  # True in production
+CSRF_COOKIE_SAMESITE = 'None'
+
+# JWT Token can be accessed via cookies
+JWT_AUTH_COOKIE = 'access_token'
+JWT_AUTH_COOKIE_SECURE = False  # True in production
+JWT_AUTH_COOKIE_SAMESITE = 'None'
 
 
 # =========================

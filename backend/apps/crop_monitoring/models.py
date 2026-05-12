@@ -54,6 +54,26 @@ class CropMonitoringRecord(models.Model):
         help_text='Only required if phase is ESTABLISHMENT'
     )
 
+    STATUS_CHOICES = [
+        ('NORMAL',  'Normal'),
+        ('DELAYED', 'Delayed'),
+        ('DAMAGED', 'Damaged'),
+    ]
+
+    phase_status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES,
+        default='NORMAL',
+        help_text='Quick status summary for this crop observation'
+    )
+    delay_days = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text='Days delayed if status is delayed'
+    )
+    damage_cause = models.CharField(
+        max_length=100, blank=True,
+        help_text='Cause of damage if status is damaged'
+    )
+
     # ── FARM DATA ──
     area_monitored_ha = models.DecimalField(
         max_digits=6, decimal_places=2,

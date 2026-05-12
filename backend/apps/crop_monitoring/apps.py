@@ -1,5 +1,4 @@
 # apps/crop_monitoring/apps.py
-
 from django.apps import AppConfig
 
 

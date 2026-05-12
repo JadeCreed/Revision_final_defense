@@ -9,7 +9,6 @@ from django.db.models           import Q
 
 from apps.accounts.permissions  import IsAdminUserRole, IsBPUser
 from apps.accounts.models       import User
-from apps.crop_monitoring.models import CropMonitoringRecord
 from .models import (
     DistributionEvent,
     DistributionBatch,
@@ -592,26 +591,9 @@ class DistributionEntryDetailView(APIView):
                    'area_planted', 'expected_yield', 'variety', 'data_sharing']
         data = {k: v for k, v in request.data.items() if k in allowed}
 
-        was_distributed = entry.qty_bags is not None
         serializer = DistributionEntrySerializer(entry, data=data, partial=True)
         if serializer.is_valid():
-            entry = serializer.save()
-
-            if not was_distributed and entry.qty_bags is not None:
-                if not CropMonitoring.objects.filter(
-                    distribution_entry=entry,
-                    phase='DISTRIBUTED'
-                ).exists():
-                    CropMonitoring.objects.create(
-                        distribution_entry=entry,
-                        encoded_by=request.user,
-                        barangay=entry.batch.event.barangay,
-                        phase='DISTRIBUTED',
-                        date_observed=entry.date_received or timezone.now().date(),
-                        area_monitored=entry.farm_area_ha or 0,
-                        notes='Auto-generated when seed distribution was confirmed.',
-                    )
-
+            serializer.save()
             log_action(
                 event=entry.batch.event,
                 batch=entry.batch,

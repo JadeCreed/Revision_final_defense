@@ -5,7 +5,7 @@
 
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.db.models import Count
+from django.db.models import Count, OuterRef, Subquery
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
@@ -14,13 +14,19 @@ def _refresh_summary(barangay: str, reporter=None):
     Recompute the BarangayCropSummary for a given barangay.
     Uses the LATEST record per farmer (their current phase).
     """
-    # Get the latest record ID per farmer in this barangay
+    latest_record = (
+        CropMonitoringRecord.objects
+        .filter(barangay=barangay, farmer_id=OuterRef('farmer_id'))
+        .order_by('-date_observed', '-encoded_at')
+        .values('pk')[:1]
+    )
+
     latest_ids = (
         CropMonitoringRecord.objects
         .filter(barangay=barangay)
-        .order_by('farmer_id', '-date_observed', '-encoded_at')
-        .distinct('farmer_id')
-        .values_list('id', flat=True)
+        .values('farmer_id')
+        .annotate(latest_id=Subquery(latest_record))
+        .values_list('latest_id', flat=True)
     )
 
     records = CropMonitoringRecord.objects.filter(id__in=latest_ids)

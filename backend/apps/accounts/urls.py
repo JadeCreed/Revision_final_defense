@@ -4,6 +4,8 @@ from .views import (
     BPProfileView,
     FarmerRegisterView,
     LoginView,
+    LogoutView,
+    VerifyTokenView,
     AdminCreateUserView,
     FarmerProfileView,
     AdminVerifyFarmerView,
@@ -22,6 +24,7 @@ from .views import (
     AdminFarmerFullProfileView,
     AdminOfficialsListView,
     AdminCreateOfficialView,
+    AdminUpdateATAssignedBarangaysView,
     AdminDeactivateUserView,
     AdminReactivateUserView,
     AdminResetRequestsListView,
@@ -35,6 +38,8 @@ from .views import (
 urlpatterns = [
     path('register/farmer/', FarmerRegisterView.as_view(), name='farmer-register'),
     path('login/', LoginView.as_view(), name='login'),
+    path('logout/', LogoutView.as_view(), name='logout'),
+    path('verify-token/', VerifyTokenView.as_view(), name='verify-token'),
 
     path('forgot-password/', ForgotPasswordView.as_view(), name='forgot-password'),
     path('verify-otp/', VerifyOTPView.as_view(), name= 'verify-otp'),
@@ -49,6 +54,7 @@ urlpatterns = [
 
     path('admin/users/officials/',AdminOfficialsListView.as_view(),name='officials-list'),
     path('admin/users/officials/create/',AdminCreateOfficialView.as_view(), name='create-official'),
+    path('admin/users/<int:user_id>/assigned-barangays/', AdminUpdateATAssignedBarangaysView.as_view(), name='update-at-barangays'),
     path('admin/users/<int:user_id>/deactivate/', AdminDeactivateUserView.as_view(), name='deactivate-user'),
 
     path('admin/users/reset-requests/',AdminResetRequestsListView.as_view(), name='reset-requests'),

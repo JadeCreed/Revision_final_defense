@@ -18,6 +18,9 @@ class CropMonitoringRecordSerializer(serializers.ModelSerializer):
     crop_establishment_display = serializers.CharField(
         source='get_crop_establishment_display', read_only=True
     )
+    phase_status_display = serializers.CharField(
+        source='get_phase_status_display', read_only=True
+    )
 
     class Meta:
         model  = CropMonitoringRecord
@@ -26,7 +29,9 @@ class CropMonitoringRecordSerializer(serializers.ModelSerializer):
             'encoded_by', 'encoded_by_name',
             'barangay',
             'crop_phase', 'crop_phase_display',
+            'phase_status', 'phase_status_display',
             'crop_establishment', 'crop_establishment_display',
+            'delay_days', 'damage_cause',
             'area_monitored_ha', 'sowing_date', 'variety_name',
             'remarks', 'date_observed', 'encoded_at', 'updated_at',
         ]

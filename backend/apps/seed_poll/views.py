@@ -459,10 +459,14 @@ class FinalSeedListCreateView(APIView):
         # Always get from latest closed/locked poll unless specific params given
         season = request.query_params.get('season')
         year   = request.query_params.get('year')
+        all_seasons = request.query_params.get('all')
 
         qs = FinalSeed.objects.select_related('seed_type', 'confirmed_by').prefetch_related('varieties')
 
-        if season and year:
+        if all_seasons:
+            # Return all finalized season/year records so clients can build season filters.
+            qs = qs.order_by('-year', '-season', 'seed_type__name')
+        elif season and year:
             qs = qs.filter(season=season, year=int(year))
         else:
             # Get season/year from latest closed poll

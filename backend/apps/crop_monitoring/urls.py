@@ -3,6 +3,7 @@
 from django.urls import path
 from .views import (
     ATFarmerListView,
+    ATFarmerDetailView,
     ATCropMonitoringCreateView,
     ATFarmerHistoryView,
     ATCropMonitoringUpdateView,
@@ -22,6 +23,7 @@ urlpatterns = [
 
     # AT — farmer history
     path('farmers/<int:farmer_id>/history/', ATFarmerHistoryView.as_view(), name='farmer-history'),
+    path('at/farmers/<int:farmer_id>/detail/', ATFarmerDetailView.as_view(), name='at-farmer-detail'),
 
     # Admin
     path('admin/records/',       AdminCropMonitoringListView.as_view(), name='admin-records'),
