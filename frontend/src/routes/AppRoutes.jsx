@@ -69,7 +69,7 @@ import UserLayout from '../layouts/UserLayout';
 
 
 const AppRoutes = () => (
-  <Routes>
+  <Routes> 
 
     {/* PUBLIC */}
     <Route element={<PublicLayout />}>

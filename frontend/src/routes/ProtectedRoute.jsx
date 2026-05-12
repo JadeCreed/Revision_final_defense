@@ -14,8 +14,25 @@ const ROLE_REDIRECT = {
 };
 
 const ProtectedRoute = ({ allowedRole }) => {
-  const { isLoggedIn, role } = useAuth();
+  const { isLoggedIn, role, authLoading } = useAuth();
   const allowedRoles = Array.isArray(allowedRole) ? allowedRole : [allowedRole].filter(Boolean);
+
+  // ⏳ While checking auth status, show nothing (prevent redirect flicker)
+  if (authLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        backgroundColor: '#f5f5f5'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <p style={{ color: '#666', fontSize: '1rem' }}>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <Navigate to="/" replace />;

@@ -273,8 +273,6 @@ const UserLayout = () => {
         display:        'flex',
         flexDirection:  'column',
         minHeight:      '100vh',
-        maxWidth:       isDesktop ? 'none' : '480px',
-        margin:         isDesktop ? '0 0 0 240px' : '0 auto',
         width:          '100%',
         boxShadow:      isDesktop ? 'none' : '0 0 30px rgba(0,0,0,0.06)',
       }}>
@@ -386,7 +384,7 @@ const UserLayout = () => {
         <div style={{
           flex:          1,
           overflowY:     'auto',
-          paddingBottom: isDesktop ? '2rem' : '80px',
+          paddingBottom: isDesktop ? '2rem' : 'calc(72px + env(safe-area-inset-bottom))',
         }}>
           <Outlet />
         </div>
@@ -399,15 +397,15 @@ const UserLayout = () => {
         <div style={{
           position:        'fixed',
           bottom:          0,
-          left:            '50%',
-          transform:       'translateX(-50%)',
+          left:            0,
+          right:           0,
           width:           '100%',
-          maxWidth:        '480px',
+          maxWidth:        '100%',
           backgroundColor: 'white',
           display:         'flex',
           justifyContent:  'space-around',
           alignItems:      'center',
-          height:          '64px',
+          height:          '72px',
           zIndex:          40,
           boxShadow:       '0 -2px 16px rgba(0,0,0,0.08)',
           borderTop:       '1px solid #e5e7eb',

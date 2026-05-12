@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  getOfficials, createOfficial, deactivateUser, getAvailableBarangays
+  getOfficials, createOfficial, deactivateUser, getAvailableBarangays,
+  updateOfficialAssignedBarangays
 } from '../../../api/axios';
 import { Pagination, SortDropdown, COL_WIDTHS, NewBadge } from '../../../components/tables/TableBase';
 
@@ -80,6 +81,12 @@ const SystemUsers = () => {
 
   // View barangays modal (AT)
   const [viewBrgyModal, setViewBrgyModal]         = useState(null);
+  const [editBrgyModal, setEditBrgyModal]         = useState(null);
+  const [editAvailableBarangays, setEditAvailableBarangays] = useState([]);
+  const [editSelectedBarangays, setEditSelectedBarangays]   = useState([]);
+  const [editError, setEditError]                   = useState('');
+  const [editSubmitLoading, setEditSubmitLoading]   = useState(false);
+  const [editConfirmText, setEditConfirmText]       = useState('');
 
   // Deactivate modal
   const [deactivateModal, setDeactivateModal]     = useState(null);
@@ -236,6 +243,68 @@ const SystemUsers = () => {
       }
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const openEditBarangaysModal = async (atUser) => {
+    setEditError('');
+    setEditSubmitLoading(false);
+    setEditConfirmText('');
+    setEditSelectedBarangays(atUser.assigned_barangays || []);
+    setEditBrgyModal(atUser);
+
+    try {
+      const res = await getAvailableBarangays();
+      const available = res.data.available_barangays || [];
+      const merged = Array.from(new Set([...(atUser.assigned_barangays || []), ...available]));
+      setEditAvailableBarangays(merged);
+    } catch (err) {
+      setEditAvailableBarangays(atUser.assigned_barangays || []);
+      setEditError('Unable to load available barangays.');
+    }
+  };
+
+  const toggleEditBarangay = (brgy) => {
+    setEditSelectedBarangays(prev => (
+      prev.includes(brgy)
+        ? prev.filter(item => item !== brgy)
+        : [...prev, brgy]
+    ));
+    setEditError('');
+  };
+
+  const handleEditBarangaysSubmit = async () => {
+    if (!editBrgyModal) return;
+    if (editSelectedBarangays.length === 0) {
+      setEditError('Select at least one barangay before saving.');
+      return;
+    }
+    if (editConfirmText.trim().toUpperCase() !== 'CONFIRM') {
+      setEditError('Type CONFIRM to verify this change.');
+      return;
+    }
+
+    setEditSubmitLoading(true);
+    setEditError('');
+
+    try {
+      await updateOfficialAssignedBarangays(editBrgyModal.id, {
+        assigned_barangays: editSelectedBarangays,
+      });
+      setEditBrgyModal(null);
+      setViewBrgyModal(prev => prev ? ({ ...prev, assigned_barangays: editSelectedBarangays }) : prev);
+      fetchOfficials(false);
+    } catch (err) {
+      const data = err.response?.data;
+      if (data && typeof data === 'object') {
+        if (data.assigned_barangays) setEditError(data.assigned_barangays);
+        else if (typeof data.error === 'string') setEditError(data.error);
+        else setEditError('Failed to save changes.');
+      } else {
+        setEditError('Failed to save changes.');
+      }
+    } finally {
+      setEditSubmitLoading(false);
     }
   };
 
@@ -554,12 +623,18 @@ const SystemUsers = () => {
       {viewBrgyModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '420px', width: '100%' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', gap: '1rem' }}>
               <div>
                 <h3 style={{ fontWeight: '700' }}>Assigned Barangays</h3>
                 <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>{viewBrgyModal.first_name} {viewBrgyModal.last_name}</p>
               </div>
-              <button onClick={() => setViewBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => openEditBarangaysModal(viewBrgyModal)}
+                  style={{ padding: '0.5rem 0.9rem', backgroundColor: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>
+                  Edit
+                </button>
+                <button onClick={() => setViewBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+              </div>
             </div>
             {(viewBrgyModal.assigned_barangays || []).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -570,6 +645,78 @@ const SystemUsers = () => {
             ) : <p style={{ color: '#9ca3af', textAlign: 'center', padding: '1rem' }}>No barangays assigned.</p>}
             <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
               <button onClick={() => setViewBrgyModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT BARANGAYS MODAL ── */}
+      {editBrgyModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 115, padding: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '520px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontWeight: '700' }}>Edit Assigned Barangays</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>
+                  Update barangays for {editBrgyModal.first_name} {editBrgyModal.last_name}.
+                </p>
+              </div>
+              <button onClick={() => setEditBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+
+            <p style={{ color: '#374151', marginBottom: '0.75rem', fontSize: '0.9rem' }}>
+              Select barangays to assign to this AT. Existing assigned barangays remain selectable.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
+              {editAvailableBarangays.map(brgy => {
+                const selected = editSelectedBarangays.includes(brgy);
+                return (
+                  <button type="button" key={brgy}
+                    onClick={() => toggleEditBarangay(brgy)}
+                    style={{
+                      padding: '0.65rem 0.9rem', textAlign: 'left', borderRadius: '0.65rem', border: selected ? '1.5px solid #2563eb' : '1.5px solid #d1d5db',
+                      backgroundColor: selected ? '#dbeafe' : 'white', color: '#111827', cursor: 'pointer', fontSize: '0.85rem'
+                    }}>
+                    <span style={{ fontWeight: selected ? 700 : 500 }}>{brgy}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.85rem' }}>
+              {editSelectedBarangays.length} selected
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>
+                Confirm change
+              </label>
+              <input
+                type="text"
+                value={editConfirmText}
+                placeholder="Type CONFIRM to proceed"
+                onChange={e => { setEditConfirmText(e.target.value); setEditError(''); }}
+                style={{ width: '100%', padding: '0.65rem 0.85rem', border: `1.5px solid ${editError ? '#dc2626' : '#d1d5db'}`, borderRadius: '0.5rem', fontSize: '0.9rem', outline: 'none' }}
+              />
+            </div>
+
+            {editError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                {editError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={() => setEditBrgyModal(null)}
+                style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button onClick={handleEditBarangaysSubmit}
+                disabled={editSubmitLoading}
+                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: editSubmitLoading ? 'not-allowed' : 'pointer', fontWeight: '600' }}>
+                {editSubmitLoading ? 'Saving...' : 'Save changes'}
+              </button>
             </div>
           </div>
         </div>

@@ -39,7 +39,14 @@ const PHASES = [
   { key: 'HARVESTING',    label: 'Harvesting',         color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
 ];
 
-const getPhaseCfg = (key) => PHASES.find(p => p.key === key) || PHASES[0];
+const DEFAULT_PHASE_CFG = { key: 'NONE', label: 'Not monitored', color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb' };
+const getPhaseCfg = (key) => PHASES.find(p => p.key === key) || DEFAULT_PHASE_CFG;
+
+const STATUS_OPTIONS = [
+  { key: 'NORMAL',  label: 'Normal' },
+  { key: 'DELAYED', label: 'Delayed' },
+  { key: 'DAMAGED', label: 'Damaged' },
+];
 
 // ─────────────────────────────────────────
 // SHARED SMALL COMPONENTS
@@ -72,7 +79,6 @@ const Toast = ({ toast }) => {
       boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
       animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
       maxWidth: 'calc(100vw - 2rem)',
-      zIndex: 900,
     }}>
       {toast.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
       {toast.message}
@@ -87,9 +93,11 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
   const [form, setForm] = useState({
     crop_phase:        editRecord?.crop_phase || '',
     crop_establishment:editRecord?.crop_establishment || '',
+    phase_status:      editRecord?.phase_status || 'NORMAL',
+    delay_days:        editRecord?.delay_days ?? '',
+    damage_cause:      editRecord?.damage_cause || '',
     area_monitored_ha: editRecord?.area_monitored_ha || '',
     sowing_date:       editRecord?.sowing_date || '',
-    variety_name:      editRecord?.variety_name || '',
     remarks:           editRecord?.remarks || '',
     date_observed:     editRecord?.date_observed || new Date().toISOString().split('T')[0],
   });
@@ -106,9 +114,14 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
   const validate = () => {
     const errs = {};
     if (!form.crop_phase)    errs.crop_phase = 'Phase is required';
-    if (!form.date_observed) errs.date_observed = 'Date observed is required';
+    if (!form.phase_status)  errs.phase_status = 'Status is required';
     if (form.crop_phase === 'ESTABLISHMENT' && !form.crop_establishment)
       errs.crop_establishment = 'Required for Establishment phase';
+    if (form.phase_status === 'DELAYED' && !form.delay_days)
+      errs.delay_days = 'Delay duration is required';
+    if (form.phase_status === 'DAMAGED' && !form.damage_cause.trim())
+      errs.damage_cause = 'Damage cause is required';
+    if (!form.date_observed) errs.date_observed = 'Date observed is required';
     return errs;
   };
 
@@ -119,57 +132,149 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '1rem' }}>
-      {/* Farmer info */}
-      <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.75rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: GREEN.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 700, fontSize: '0.875rem', flexShrink: 0 }}>
-          {farmer.last_name?.[0]?.toUpperCase()}{farmer.first_name?.[0]?.toUpperCase()}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '1rem' }}>
+      <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem 1.1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.primary, display: 'grid', placeItems: 'center', color: 'white', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>
+            {farmer.last_name?.[0]?.toUpperCase()}{farmer.first_name?.[0]?.toUpperCase()}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#111827' }}>{farmer.full_name}</p>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.78rem', color: '#475569' }}>
+              Farmer ID: {farmer.rsbsa_number || 'N/A'} · Brgy. {farmer.barangay}
+            </p>
+          </div>
         </div>
-        <div>
-          <p style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', margin: 0 }}>{farmer.full_name}</p>
-          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.125rem 0 0' }}>
-            {farmer.rsbsa_number || 'No RSBSA'} · Brgy. {farmer.barangay}
-          </p>
+        <div style={{ marginTop: '0.9rem', color: '#475569', fontSize: '0.82rem' }}>
+          {farmer.distributed_variety || farmer.distributed_seed_type ? (
+            `Distributed: ${farmer.distributed_seed_type ? `${farmer.distributed_seed_type}${farmer.distributed_variety ? ' — ' : ''}` : ''}${farmer.distributed_variety || ''}`
+          ) : 'Distributed variety not confirmed yet.'}
         </div>
       </div>
 
-      {/* Phase selector */}
       <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
           Crop Phase <span style={{ color: '#dc2626' }}>*</span>
         </label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '0.75rem' }}>
           {PHASES.map(phase => {
             const sel = form.crop_phase === phase.key;
             return (
               <button key={phase.key} type="button"
-                onClick={() => { setForm(p => ({ ...p, crop_phase: phase.key })); setErrors(p => ({ ...p, crop_phase: '' })); }}
-                style={{ padding: '0.625rem 1rem', border: `2px solid ${sel ? phase.color : '#e5e7eb'}`, borderRadius: '0.625rem', backgroundColor: sel ? phase.bg : 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.625rem', transition: 'all 0.15s' }}>
-                <span style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: phase.color, flexShrink: 0 }} />
-                <span style={{ fontWeight: sel ? 700 : 400, fontSize: '0.875rem', color: sel ? phase.color : '#374151' }}>
-                  {phase.label}
-                </span>
-                {sel && <CheckCircle size={14} color={phase.color} style={{ marginLeft: 'auto' }} />}
+                onClick={() => {
+                  setForm(p => ({
+                    ...p,
+                    crop_phase: phase.key,
+                    sowing_date: phase.key === 'ESTABLISHMENT' ? p.sowing_date : '',
+                    crop_establishment: phase.key === 'ESTABLISHMENT' ? p.crop_establishment : '',
+                  }));
+                  setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
+                }}
+                style={{
+                  minHeight: 72,
+                  border: `2px solid ${sel ? phase.color : '#e2e8f0'}`,
+                  borderRadius: '1rem',
+                  backgroundColor: sel ? phase.bg : 'white',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.75rem',
+                  padding: '0.9rem',
+                  transition: 'all 0.2s',
+                  boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none',
+                }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: phase.color, flexShrink: 0 }} />
+                <span style={{ fontWeight: sel ? 700 : 600, fontSize: '0.92rem', color: sel ? '#0f172a' : '#334155' }}>{phase.label}</span>
+                {sel && <CheckCircle size={16} color={phase.color} style={{ marginLeft: 'auto' }} />}
               </button>
             );
           })}
         </div>
-        {errors.crop_phase && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.crop_phase}</p>}
+        {errors.crop_phase && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{errors.crop_phase}</p>}
       </div>
 
-      {/* Crop establishment — required when phase is ESTABLISHMENT */}
+      <div>
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
+          Observation Status <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem' }}>
+          {STATUS_OPTIONS.map(opt => {
+            const sel = form.phase_status === opt.key;
+            return (
+              <button key={opt.key} type="button"
+                onClick={() => {
+                  setForm(p => ({
+                    ...p,
+                    phase_status: opt.key,
+                    delay_days: opt.key === 'DELAYED' ? p.delay_days : '',
+                    damage_cause: opt.key === 'DAMAGED' ? p.damage_cause : '',
+                    ...(opt.key === 'NORMAL' ? { delay_days: '', damage_cause: '' } : {}),
+                  }));
+                  setErrors(p => ({ ...p, phase_status: '', delay_days: '', damage_cause: '' }));
+                }}
+                style={{
+                  border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`,
+                  borderRadius: '1rem',
+                  backgroundColor: sel ? '#ecfdf5' : 'white',
+                  color: sel ? '#166534' : '#334155',
+                  fontWeight: 700,
+                  padding: '0.95rem 0.85rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {errors.phase_status && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{errors.phase_status}</p>}
+      </div>
+
+      {form.phase_status === 'DELAYED' && (
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Delay Duration (days) <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <input type="number" step="1" min="0" value={form.delay_days}
+            onChange={e => setForm(p => ({ ...p, delay_days: e.target.value }))}
+            placeholder="e.g. 5" style={inp(!!errors.delay_days)} />
+          {errors.delay_days && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.delay_days}</p>}
+        </div>
+      )}
+
+      {form.phase_status === 'DAMAGED' && (
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Cause of Damage <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <input type="text" value={form.damage_cause}
+            onChange={e => setForm(p => ({ ...p, damage_cause: e.target.value }))}
+            placeholder="Pests, Typhoon, Flooding..." style={inp(!!errors.damage_cause)} />
+          {errors.damage_cause && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.damage_cause}</p>}
+        </div>
+      )}
+
       {form.crop_phase === 'ESTABLISHMENT' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
             Crop Establishment Method <span style={{ color: '#dc2626' }}>*</span>
           </label>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             {[{ key: 'DS', label: 'Direct Seeding (D)' }, { key: 'TP', label: 'Transplanting (T)' }].map(opt => {
               const sel = form.crop_establishment === opt.key;
               return (
                 <button key={opt.key} type="button"
                   onClick={() => { setForm(p => ({ ...p, crop_establishment: opt.key })); setErrors(p => ({ ...p, crop_establishment: '' })); }}
-                  style={{ flex: 1, padding: '0.5rem', border: `2px solid ${sel ? '#2563eb' : '#e5e7eb'}`, borderRadius: '0.5rem', backgroundColor: sel ? '#eff6ff' : 'white', cursor: 'pointer', fontWeight: sel ? 700 : 400, fontSize: '0.8rem', color: sel ? '#2563eb' : '#374151', transition: 'all 0.15s' }}>
+                  style={{
+                    border: `2px solid ${sel ? '#2563eb' : '#e2e8f0'}`,
+                    borderRadius: '1rem',
+                    backgroundColor: sel ? '#eff6ff' : 'white',
+                    color: sel ? '#1d4ed8' : '#334155',
+                    fontWeight: 700,
+                    padding: '0.85rem',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}>
                   {opt.label}
                 </button>
               );
@@ -179,52 +284,51 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
         </div>
       )}
 
-      {/* Date observed */}
-      <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-          Date Observed <span style={{ color: '#dc2626' }}>*</span>
-        </label>
-        <input type="date" value={form.date_observed}
-          onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }}
-          max={new Date().toISOString().split('T')[0]}
-          style={inp(!!errors.date_observed)} />
-        {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
-      </div>
-
-      {/* Optional fields */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Area Monitored (ha)</label>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Date Observed <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <input type="date" value={form.date_observed}
+            onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }}
+            max={new Date().toISOString().split('T')[0]}
+            style={inp(!!errors.date_observed)} />
+          {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
+        </div>
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Area Monitored (ha)
+          </label>
           <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
             onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
             placeholder="e.g. 0.50" style={inp(false)} />
         </div>
+      </div>
+
+      {form.crop_phase === 'ESTABLISHMENT' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Sowing Date</label>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Sowing Date
+          </label>
           <input type="date" value={form.sowing_date}
             onChange={e => setForm(p => ({ ...p, sowing_date: e.target.value }))}
             style={inp(false)} />
         </div>
-      </div>
+      )}
 
       <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Variety Name</label>
-        <input type="text" value={form.variety_name}
-          onChange={e => setForm(p => ({ ...p, variety_name: e.target.value }))}
-          placeholder="e.g. TH 82, RC 216" style={inp(false)} />
-      </div>
-
-      <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Remarks / Field Notes</label>
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+          Remarks / Field Notes (optional)
+        </label>
         <textarea value={form.remarks}
           onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))}
           placeholder="Any observations, issues, or notes..."
-          rows={3}
-          style={{ ...inp(false), resize: 'vertical' }} />
+          rows={4}
+          style={{ ...inp(false), resize: 'vertical', minHeight: 120 }} />
       </div>
 
       <button onClick={handleSubmit} disabled={saving}
-        style={{ width: '100%', padding: '0.9375rem', backgroundColor: saving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.875rem', fontWeight: 800, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: saving ? 'none' : `0 4px 16px ${GREEN.primary}40`, transition: 'all 0.2s' }}>
+        style={{ width: '100%', padding: '1rem', backgroundColor: saving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '1rem', fontWeight: 800, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: saving ? 'none' : `0 10px 24px ${GREEN.primary}40`, transition: 'all 0.2s' }}>
         {saving ? 'Saving...' : <><CheckCircle size={18} /> {editRecord ? 'Update Record' : 'Save Observation'}</>}
       </button>
     </div>
@@ -239,6 +343,7 @@ const CropMonitoring = () => {
   const [stats,        setStats]        = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
+  const [searching,    setSearching]    = useState(false);
 
   // Filters
   const [search,       setSearch]       = useState('');
@@ -258,18 +363,23 @@ const CropMonitoring = () => {
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 3500);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
   // ── LOAD ──
-  const loadData = useCallback(async (isRefresh = false) => {
+  const loadData = useCallback(async (searchTerm, barangay, mode = 'load') => {
     try {
-      isRefresh ? setRefreshing(true) : setLoading(true);
+      if (mode === 'refresh') setRefreshing(true);
+      else if (mode === 'search') setSearching(true);
+      else setLoading(true);
+
       const [farmersRes, statsRes] = await Promise.all([
-        getATFarmers({ search, barangay: brgyFilter }),
+        getATFarmers({ search: searchTerm, barangay }),
         getATDashboardStats(),
       ]);
       const farmersData = farmersRes.data?.farmers || [];
@@ -281,18 +391,31 @@ const CropMonitoring = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setSearching(false);
     }
-  }, [search, brgyFilter, showToast]);
-
-  useEffect(() => { loadData(); }, [brgyFilter]);
+  }, [showToast]);
 
   // Debounced search
   const searchTimer = useRef(null);
+
+  useEffect(() => {
+    loadData(search, brgyFilter, 'load');
+    return () => { clearTimeout(searchTimer.current); };
+  }, [brgyFilter, loadData]);
+
   const handleSearch = (q) => {
     setSearch(q);
     clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadData(), 400);
+    searchTimer.current = setTimeout(() => loadData(q, brgyFilter, 'search'), 400);
   };
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+      if (searchTimer.current) clearTimeout(searchTimer.current);
+    };
+  }, []);
+
 
   // ── FILTERED FARMERS ──
   const filteredFarmers = farmers.filter(f => {
@@ -365,7 +488,11 @@ const CropMonitoring = () => {
           @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
           @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
           @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-          @keyframes slideInBottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+          @keyframes slideInBottom {
+            0% { transform: translateX(-50%) translateY(120%); opacity: 0; }
+            70% { transform: translateX(-50%) translateY(-8px); opacity: 1; }
+            100% { transform: translateX(-50%) translateY(0); opacity: 1; }
+          }
         `}</style>
         <div style={{ width: 36, height: 36, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
         <p style={{ margin: 0, fontSize: '0.875rem' }}>Loading crop monitoring...</p>
@@ -377,13 +504,17 @@ const CropMonitoring = () => {
   // RENDER
   // ─────────────────────────────────────────
   return (
-    <div style={{ paddingBottom: '5rem', position: 'relative' }}>
+    <div style={{ paddingBottom: '5rem', position: 'relative', overflowX: 'hidden' }}>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes slideInBottom { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes slideInBottom {
+          0% { transform: translateY(120%); opacity: 0; }
+          70% { transform: translateY(-8px); opacity: 1; }
+          100% { transform: translateY(0); opacity: 1; }
+        }
         .farmer-row:hover { background-color: ${GREEN.light} !important; }
       `}</style>
 
@@ -398,21 +529,16 @@ const CropMonitoring = () => {
               Record field observations for your assigned barangays
             </p>
           </div>
-          <button onClick={() => loadData(true)} disabled={refreshing}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 1rem', backgroundColor: GREEN.light, color: GREEN.accent, border: `1px solid ${GREEN.border}`, borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem' }}>
-            <RefreshCw size={14} style={{ animation: refreshing ? 'spin 0.7s linear infinite' : 'none' }} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
         </div>
 
         {/* Stats cards */}
         {stats && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
             {[
               { label: 'Assigned Barangays', value: stats.total_barangays, color: GREEN.primary },
-              { label: 'Total Farmers',       value: stats.total_farmers,   color: '#374151' },
-              { label: 'Monitored',           value: stats.monitored_farmers, color: '#16a34a' },
-              { label: 'Not Yet Monitored',   value: stats.unmonitored_farmers, color: '#dc2626' },
+              { label: 'Total Farmers', value: stats.total_farmers, color: '#374151' },
+              { label: 'Monitored', value: stats.monitored_farmers, color: '#16a34a' },
+              { label: 'Not Yet Monitored', value: stats.unmonitored_farmers, color: '#dc2626' },
             ].map(({ label, value, color }, i) => (
               <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                 <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
@@ -448,21 +574,22 @@ const CropMonitoring = () => {
           )}
 
           {/* Phase filter */}
-          <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
-            <button onClick={() => setPhaseFilter('')}
-              style={{ padding: '0.25rem 0.625rem', border: `1.5px solid ${!phaseFilter ? '#374151' : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: !phaseFilter ? '#1a1a1a' : 'white', color: !phaseFilter ? 'white' : '#6b7280', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}>
-              All ({farmers.length})
-            </button>
-            {[{ key: 'NONE', label: 'Not Monitored', color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb' }, ...PHASES].map(p => {
-              const count = phaseCounts[p.key] || 0;
-              if (count === 0) return null;
-              return (
-                <button key={p.key} onClick={() => setPhaseFilter(phaseFilter === p.key ? '' : p.key)}
-                  style={{ padding: '0.25rem 0.625rem', border: `1.5px solid ${phaseFilter === p.key ? p.color : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: phaseFilter === p.key ? p.bg || '#f9fafb' : 'white', color: phaseFilter === p.key ? p.color : '#6b7280', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}>
-                  {p.key === 'NONE' ? 'Not Monitored' : p.label} ({count})
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Phase filter
+            </label>
+            <select value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}
+              style={{ width: '100%', maxWidth: '260px', padding: '0.75rem 0.9rem', borderRadius: '0.85rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827', fontSize: '0.875rem', outline: 'none' }}>
+              <option value="">All ({farmers.length})</option>
+              <option value="NONE">Not Monitored ({phaseCounts.NONE || 0})</option>
+              {PHASES.map(p => {
+                const count = phaseCounts[p.key] || 0;
+                if (count === 0) return null;
+                return (
+                  <option key={p.key} value={p.key}>{p.label} ({count})</option>
+                );
+              })}
+            </select>
           </div>
         </div>
       </div>
@@ -540,23 +667,26 @@ const CropMonitoring = () => {
           {/* Sheet */}
           <div style={{
             position: 'fixed', bottom: 0, left: 0, right: 0,
-            backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0',
+            backgroundColor: 'white', borderRadius: '1.5rem 1.5rem 0 0',
             padding: '1.5rem', zIndex: 800,
-            maxHeight: '92vh', overflowY: 'auto',
+            maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto',
             paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
             animation: 'slideInBottom 0.3s cubic-bezier(0.34,1.1,0.64,1)',
-            maxWidth: '640px', margin: '0 auto',
+            width: 'min(100%, 720px)', margin: '0 auto',
+            boxShadow: '0 32px 80px rgba(15,23,42,0.14)',
           }}>
             {/* Handle */}
-            <div style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: '999px', margin: '0 auto 1.25rem' }} />
+            <div style={{ width: 44, height: 4, backgroundColor: '#e5e7eb', borderRadius: '999px', margin: '0 auto 1.25rem' }} />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>
-                {editRecord ? 'Edit Observation' : 'Record Crop Phase'}
-              </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+              <div>
+                <h2 style={{ fontWeight: 800, fontSize: '1.6rem', margin: '0.35rem 0 0', color: '#111827', lineHeight: 1.05 }}>
+                  {editRecord ? 'Update observation details' : 'Record Crop Phase'}
+                </h2>
+              </div>
               <button onClick={() => { setShowPanel(false); setSelectedFarmer(null); setEditRecord(null); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
-                <X size={20} />
+                style={{ background: '#f3f4f6', border: 'none', borderRadius: '999px', width: 38, height: 38, cursor: 'pointer', color: '#374151', display: 'grid', placeItems: 'center' }}>
+                <X size={18} />
               </button>
             </div>
 

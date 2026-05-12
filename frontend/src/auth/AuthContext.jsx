@@ -1,67 +1,96 @@
 // src/auth/AuthContext.jsx
-// Added: clears stale/invalid token on first load
+// Secure cookie-based authentication (no localStorage for tokens)
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
+import API from '../api/axios';
 
 const AuthContext = createContext(null);
-
-// Helper — checks if a JWT token is expired
-// JWT payload is base64 encoded in the middle segment
-const isTokenExpired = (token) => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    // exp is in seconds, Date.now() is in milliseconds
-    return payload.exp * 1000 < Date.now();
-  } catch {
-    // If token is malformed, treat as expired
-    return true;
-  }
-};
+const SESSION_TOKEN_KEY = 'agrice_access_token';
 
 export const AuthProvider = ({ children }) => {
-  const [token, setToken] = useState(() => {
-    const savedToken = localStorage.getItem('access_token');
-    // If token exists but is expired, clear it immediately on load
-    if (savedToken && isTokenExpired(savedToken)) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('role');
-      localStorage.removeItem('is_verified');
-      localStorage.removeItem('first_name');
-      localStorage.removeItem('last_name');
-      return null; // treat as logged out
-    }
-    return savedToken;
-  });
+  const [token, setToken] = useState(() => sessionStorage.getItem(SESSION_TOKEN_KEY));
+  const [role, setRole] = useState(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [isVerified, setIsVerified] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
 
-  const [role, setRole]           = useState(() => localStorage.getItem('role'));
-  const [firstName, setFirstName] = useState(() => localStorage.getItem('first_name') || '');
-  const [lastName, setLastName]   = useState(() => localStorage.getItem('last_name') || '');
-  const [isVerified, setIsVerified] = useState(() => localStorage.getItem('is_verified') === 'true');
+  const setAuthHeader = (accessToken) => {
+    if (accessToken) {
+      API.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+    } else {
+      delete API.defaults.headers.common.Authorization;
+    }
+  };
+
+  // 🔍 Check authentication status on app mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      const existingToken = sessionStorage.getItem(SESSION_TOKEN_KEY);
+      if (existingToken) {
+        setAuthHeader(existingToken);
+      }
+
+      try {
+        // Try to fetch a protected endpoint to verify token validity
+        const res = await API.get('/accounts/verify-token/');
+        
+        if (res.data) {
+          setRole(res.data.role);
+          setIsVerified(res.data.is_verified);
+          setFirstName(res.data.first_name || '');
+          setLastName(res.data.last_name || '');
+          setToken(existingToken || 'exists');
+          setIsLoggedIn(true);
+        }
+      } catch {
+        // No valid token/cookie found
+        sessionStorage.removeItem(SESSION_TOKEN_KEY);
+        setAuthHeader(null);
+        setIsLoggedIn(false);
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   const login = (data) => {
-    localStorage.setItem('access_token', data.token);
-    localStorage.setItem('role',         data.role);
-    localStorage.setItem('is_verified',  data.is_verified);
-    localStorage.setItem('first_name',   data.first_name || '');
-    localStorage.setItem('last_name',    data.last_name  || '');
-    setToken(data.token);
+    // Use cookie-based auth when available, plus sessionStorage fallback for refresh
+    if (data.access_token) {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, data.access_token);
+      setAuthHeader(data.access_token);
+      setToken(data.access_token);
+    } else {
+      setToken('exists');
+    }
+
     setRole(data.role);
     setIsVerified(data.is_verified);
     setFirstName(data.first_name || '');
-    setLastName(data.last_name   || '');
+    setLastName(data.last_name || '');
+    setIsLoggedIn(true);
   };
 
-  const logout = () => {
-    ['access_token', 'role', 'is_verified', 'first_name', 'last_name']
-      .forEach(k => localStorage.removeItem(k));
-    setToken(null);
-    setRole(null);
-    setIsVerified(false);
-    setFirstName('');
-    setLastName('');
+  const logout = async () => {
+    try {
+      // Call logout endpoint to clear server-side session/cookie
+      await API.post('/accounts/logout/');
+    } catch {
+      // Still logout on frontend even if API fails
+    } finally {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      setAuthHeader(null);
+      setToken(null);
+      setRole(null);
+      setIsVerified(false);
+      setFirstName('');
+      setLastName('');
+      setIsLoggedIn(false);
+    }
   };
-
-  const isLoggedIn = !!token && !isTokenExpired(token);
 
   return (
     <AuthContext.Provider value={{
@@ -71,6 +100,7 @@ export const AuthProvider = ({ children }) => {
       lastName,
       isVerified,
       isLoggedIn,
+      authLoading,
       login,
       logout,
     }}>

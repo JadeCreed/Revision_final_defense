@@ -1,29 +1,19 @@
 // src/api/axios.js
 // Axios instance connected to Django backend
-// Automatically attaches JWT token to every request
+// Tokens stored securely in httpOnly cookies (not in localStorage)
 
 import axios from 'axios';
 
 const API = axios.create({
   baseURL: 'http://localhost:8000/api',
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,  // 🍪 Enable automatic cookie sending
 });
 
-// Auto-attach token on every request
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
-  return config;
-});
-
+// Response interceptor for error handling
 API.interceptors.response.use(
   response => response,
   (error) => {
-    const status = error.response?.status;
-    if (status === 401) {
-      ['access_token', 'role', 'is_verified', 'first_name', 'last_name']
-        .forEach((key) => localStorage.removeItem(key));
-    }
     return Promise.reject(error);
   }
 );
@@ -31,6 +21,10 @@ API.interceptors.response.use(
 // ===== AUTH =====
 // NOTE: field is "login" not "contact_number" — matches your new Django LoginView
 export const loginUser = (data) => API.post('/accounts/login/', data);
+// Verify authentication token (check if user is logged in)
+export const verifyToken = () => API.get('/accounts/verify-token/');
+// Logout and clear cookie
+export const logoutUser = () => API.post('/accounts/logout/');
 // Farmer self-registration
 export const registerFarmer = (data) => API.post('/accounts/register/farmer/', data);
 
@@ -55,10 +49,12 @@ export const approveFarmer      = (id, data) => API.post(`/accounts/admin/users/
 export const getFarmerMasterlist   = (params) => API.get('/accounts/admin/users/farmer-masterlist/', { params });
 export const getFarmerFullProfile  = (id)     => API.get(`/accounts/admin/users/farmers/${id}/full-profile/`);
 export const updateFarmerProfile   = (id, data) => API.put(`/accounts/admin/users/farmers/${id}/full-profile/`, data);
+export const getATFarmerDetail     = (id)     => API.get(`/crop-monitoring/at/farmers/${id}/detail/`);
 
 // ── OFFICIALS (Tab 3) ──
 export const getOfficials       = (params) => API.get('/accounts/admin/users/officials/', { params });
 export const createOfficial     = (data)   => API.post('/accounts/admin/users/officials/create/', data);
+export const updateOfficialAssignedBarangays = (id, data) => API.put(`/accounts/admin/users/${id}/assigned-barangays/`, data);
 export const deactivateUser     = (id)     => API.post(`/accounts/admin/users/${id}/deactivate/`);
 
 // ── RESET REQUESTS (Tab 4) ──
@@ -161,7 +157,7 @@ export const getATFarmers         = (params) => API.get('/crop-monitoring/at/far
 export const getATDashboardStats  = ()       => API.get('/crop-monitoring/at/stats/');
 export const createCropRecord     = (data)   => API.post('/crop-monitoring/records/', data);
 export const updateCropRecord     = (id, data) => API.put(`/crop-monitoring/records/${id}/`, data);
-export const getFarmerCropHistory = (farmerId) => API.get(`/crop-monitoring/farmers/${farmerId}/history/`);
+export const getFarmerCropHistory = (farmerId, params = {}) => API.get(`/crop-monitoring/farmers/${farmerId}/history/`, { params });
 export const getCropMonitoringBarangaySummary = () => API.get('/crop-monitoring/gis/summaries/');
 
 // Admin
