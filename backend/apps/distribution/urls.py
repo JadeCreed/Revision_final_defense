@@ -1,6 +1,7 @@
 
 from django.urls import path
 from .views import (
+    get_barangay_gis_data,
     FarmerSearchView,
     DistributionEventListCreateView,
     DistributionEventDetailView,
@@ -24,6 +25,11 @@ from .views import (
 )
 
 urlpatterns = [
+
+    # ── GIS MAP ──
+    path('gis-data/',
+         get_barangay_gis_data,
+         name='gis-data'),
 
     # ── FARMER SEARCH ──
     path('farmers/search/',

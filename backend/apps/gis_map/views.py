@@ -1,124 +1,164 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from django.db.models import Sum, Count
-from django.shortcuts import get_object_or_404
+from django.db.models import Count
+from collections import Counter
 
-from apps.accounts.permissions import IsAdminUserRole
-from .models import FarmPlot
-from .serializers import FarmPlotSerializer, FarmPlotWriteSerializer, MapSummarySerializer
+from apps.accounts.models import User
+from apps.distribution.models import DistributionEntry
+from apps.crop_monitoring.models import CropMonitoringRecord
 
 
-class FarmPlotListCreateView(APIView):
+PHASE_LABEL_MAP = {
+    'DISTRIBUTION':  'Seed Distribution',
+    'ESTABLISHMENT': 'Crop Establishment',
+    'TILLERING':     'Tillering',
+    'FLOWERING':     'Flowering',
+    'RIPENING':      'Ripening',
+    'HARVESTING':    'Harvesting',
+}
+
+PHASE_COLOR_MAP = {
+    'DISTRIBUTION':  '#9CA3AF',
+    'ESTABLISHMENT': '#3B82F6',
+    'TILLERING':     '#22C55E',
+    'FLOWERING':     '#A855F7',
+    'RIPENING':      '#FACC15',
+    'HARVESTING':    '#F97316',
+}
+
+
+class GISPlotsView(APIView):
     """
-    GET  /api/gis/plots/          — list all plots (admin) or own barangay (BRGY)
-    POST /api/gis/plots/          — create a new plot (admin only)
+    GET /api/gis/plots/
+    Returns one entry per farmer who has received seeds (approved distribution).
+    Each entry includes their latest crop phase from CropMonitoringRecord.
+    This is what the GIS map uses to color barangay polygons.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = FarmPlot.objects.select_related('farmer').all()
-        # Filter by barangay
-        barangay = request.query_params.get('barangay')
+        barangay = request.query_params.get('barangay', '')
+
+        # Get all farmers with approved distribution entries
+        entries = DistributionEntry.objects.filter(
+            batch__status='APPROVED'
+        ).select_related('farmer', 'variety', 'batch__event__seed_type')
+
         if barangay:
-            qs = qs.filter(barangay__iexact=barangay)
-        elif request.user.role == 'BRGY':
-            qs = qs.filter(barangay__iexact=getattr(request.user, 'barangay', ''))
-        # Filter by farmer
-        farmer_id = request.query_params.get('farmer')
-        if farmer_id:
-            qs = qs.filter(farmer_id=farmer_id)
+            entries = entries.filter(farmer__barangay__iexact=barangay)
 
-        serializer = FarmPlotSerializer(qs, many=True)
-        return Response(serializer.data)
+        # Build one record per farmer (deduplicate)
+        seen_farmers = {}
+        for entry in entries:
+            farmer = entry.farmer
+            if not farmer or not farmer.barangay:
+                continue
+            fid = farmer.id
+            if fid not in seen_farmers:
+                seen_farmers[fid] = {
+                    'id':             fid,
+                    'farmer':         fid,
+                    'farmer_name':    farmer.get_full_name(),
+                    'farmer_rsbsa':   farmer.rsbsa_number or '',
+                    'farmer_contact': farmer.contact_number or '',
+                    'farmer_barangay': farmer.barangay or '',
+                    'barangay':       farmer.barangay or '',
+                    'label':          'Main Farm',
+                    'latitude':       None,
+                    'longitude':      None,
+                    'area_ha':        entry.farm_area_ha,
+                    'land_type':      'Seed Distribution',  # default, updated below
+                    'created_at':     entry.batch.event.created_at.isoformat() if entry.batch.event.created_at else None,
+                }
 
-    def post(self, request):
-        if request.user.role != 'ADMIN':
-            return Response({'error': 'Admin only.'}, status=403)
-        serializer = FarmPlotWriteSerializer(data=request.data)
-        if serializer.is_valid():
-            # Auto-set barangay from farmer profile if not provided
-            plot = serializer.save()
-            if not plot.barangay:
-                plot.barangay = getattr(plot.farmer, 'barangay', '') or ''
-                plot.save()
-            return Response(FarmPlotSerializer(plot).data, status=201)
-        return Response(serializer.errors, status=400)
+        # Now enrich with latest crop phase from CropMonitoringRecord
+        farmer_ids = list(seen_farmers.keys())
+        monitoring_records = CropMonitoringRecord.objects.filter(
+            farmer_id__in=farmer_ids
+        ).order_by('farmer_id', '-date_observed', '-encoded_at')
+
+        latest_phase = {}
+        latest_date = {}
+        for rec in monitoring_records:
+            fid = rec.farmer_id
+            if fid not in latest_phase:
+                latest_phase[fid] = rec.crop_phase
+                latest_date[fid] = rec.date_observed
+
+        for fid, data in seen_farmers.items():
+            if fid in latest_phase:
+                phase_key = latest_phase[fid]
+                data['land_type'] = PHASE_LABEL_MAP.get(phase_key, 'Seed Distribution')
+            else:
+                data['land_type'] = 'Seed Distribution'
+
+        approved_counts = (
+            User.objects
+            .filter(role='FARMER', status='APPROVED', is_active=True)
+            .values('barangay')
+            .annotate(total=Count('id'))
+        )
+        approved_per_brgy = {item['barangay']: item['total'] for item in approved_counts if item['barangay']}
+
+        plots_list = list(seen_farmers.values())
+        for plot in plots_list:
+            plot['total_approved_in_brgy'] = approved_per_brgy.get(plot['barangay'], 0)
+
+        return Response(plots_list)
 
 
-class FarmPlotDetailView(APIView):
-    """
-    GET    /api/gis/plots/<id>/   — retrieve a plot
-    PATCH  /api/gis/plots/<id>/   — update a plot (admin)
-    DELETE /api/gis/plots/<id>/   — delete a plot (admin)
-    """
-    permission_classes = [IsAuthenticated]
-
-    def _get_plot(self, pk):
-        return get_object_or_404(FarmPlot, pk=pk)
-
-    def get(self, request, pk):
-        plot = self._get_plot(pk)
-        return Response(FarmPlotSerializer(plot).data)
-
-    def patch(self, request, pk):
-        if request.user.role != 'ADMIN':
-            return Response({'error': 'Admin only.'}, status=403)
-        plot = self._get_plot(pk)
-        serializer = FarmPlotWriteSerializer(plot, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(FarmPlotSerializer(plot).data)
-        return Response(serializer.errors, status=400)
-
-    def delete(self, request, pk):
-        if request.user.role != 'ADMIN':
-            return Response({'error': 'Admin only.'}, status=403)
-        plot = self._get_plot(pk)
-        plot.delete()
-        return Response(status=204)
-
-
-class MapSummaryView(APIView):
+class GISMapSummaryView(APIView):
     """
     GET /api/gis/summary/
-    Returns counts and aggregates for the map header.
+    Returns overall summary: total farmers, barangays, last updated.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = FarmPlot.objects.all()
-        if request.user.role == 'BRGY':
-            qs = qs.filter(barangay__iexact=getattr(request.user, 'barangay', ''))
+        # Total farmers with approved distribution
+        farmer_ids = DistributionEntry.objects.filter(
+            batch__status='APPROVED'
+        ).values_list('farmer_id', flat=True).distinct()
 
-        agg = qs.aggregate(
-            total_plots=Count('id'),
-            total_farmers=Count('farmer', distinct=True),
-            total_area=Sum('area_ha'),
+        total_farmers = len(set(farmer_ids))
+
+        barangays = list(
+            User.objects.filter(
+                id__in=farmer_ids,
+                role='FARMER',
+            ).values_list('barangay', flat=True).distinct().order_by('barangay')
         )
-        barangays = list(qs.values_list('barangay', flat=True).distinct().order_by('barangay'))
+        barangays = [b for b in barangays if b]
 
+        from django.utils import timezone
         return Response({
-            'total_plots':   agg['total_plots']   or 0,
-            'total_farmers': agg['total_farmers'] or 0,
-            'total_area_ha': float(agg['total_area'] or 0),
+            'total_farmers': total_farmers,
+            'total_plots':   total_farmers,
+            'total_area_ha': 0,
             'barangays':     barangays,
+            'last_updated':  timezone.now().isoformat(),
         })
 
 
-class BarangayListView(APIView):
+class GISBarangaysView(APIView):
     """
     GET /api/gis/barangays/
-    Returns distinct barangay names that have farm plots.
+    Returns list of barangay names that have farmers with approved distribution.
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        barangays = (
-            FarmPlot.objects
-            .values_list('barangay', flat=True)
-            .distinct()
-            .order_by('barangay')
+        farmer_ids = DistributionEntry.objects.filter(
+            batch__status='APPROVED'
+        ).values_list('farmer_id', flat=True).distinct()
+
+        barangays = list(
+            User.objects.filter(
+                id__in=farmer_ids,
+                role='FARMER',
+            ).values_list('barangay', flat=True).distinct().order_by('barangay')
         )
-        return Response(list(barangays))
+        barangays = [b for b in barangays if b]
+
+        return Response(barangays)

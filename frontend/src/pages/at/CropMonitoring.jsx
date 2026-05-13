@@ -111,6 +111,9 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
     fontFamily: 'inherit', backgroundColor: 'white',
   });
 
+  const [showPhaseConflict, setShowPhaseConflict] = useState(false);
+  const [allowSamePhaseOverride, setAllowSamePhaseOverride] = useState(false);
+
   const validate = () => {
     const errs = {};
     if (!form.crop_phase)    errs.crop_phase = 'Phase is required';
@@ -125,10 +128,21 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
     return errs;
   };
 
+  const samePhaseSelected = !editRecord && farmer.latest_phase && form.crop_phase === farmer.latest_phase;
+
   const handleSubmit = () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    onSave({ ...form, farmer_id: farmer.id });
+    if (samePhaseSelected && !allowSamePhaseOverride) {
+      setShowPhaseConflict(true);
+      return;
+    }
+    const payload = {
+      ...form,
+      farmer_id: farmer.id,
+      ...(samePhaseSelected ? { updateExisting: true } : {}),
+    };
+    onSave(payload);
   };
 
   return (
@@ -162,6 +176,7 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
             return (
               <button key={phase.key} type="button"
                 onClick={() => {
+                  const isSamePhase = !editRecord && farmer.latest_phase && phase.key === farmer.latest_phase;
                   setForm(p => ({
                     ...p,
                     crop_phase: phase.key,
@@ -169,6 +184,10 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
                     crop_establishment: phase.key === 'ESTABLISHMENT' ? p.crop_establishment : '',
                   }));
                   setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
+                  setAllowSamePhaseOverride(false);
+                  if (isSamePhase) {
+                    setShowPhaseConflict(true);
+                  }
                 }}
                 style={{
                   minHeight: 72,
@@ -331,6 +350,46 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
         style={{ width: '100%', padding: '1rem', backgroundColor: saving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '1rem', fontWeight: 800, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: saving ? 'none' : `0 10px 24px ${GREEN.primary}40`, transition: 'all 0.2s' }}>
         {saving ? 'Saving...' : <><CheckCircle size={18} /> {editRecord ? 'Update Record' : 'Save Observation'}</>}
       </button>
+
+      {showPhaseConflict && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 950, backgroundColor: 'rgba(0,0,0,0.45)', display: 'grid', placeItems: 'center', padding: '1rem' }}>
+          <div style={{ width: '100%', maxWidth: '540px', backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 24px 80px rgba(15,23,42,0.2)', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111827' }}>Phase already recorded</h3>
+                <p style={{ margin: '0.5rem 0 0', color: '#475569', lineHeight: 1.6, fontSize: '0.95rem' }}>
+                  This farmer already has a monitoring record for <strong>{getPhaseCfg(form.crop_phase).label}</strong> in the current season.
+                </p>
+              </div>
+              <button type="button" onClick={() => setShowPhaseConflict(false)}
+                style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1.25rem', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+            <p style={{ margin: '1rem 0 1.5rem', color: '#475569', lineHeight: 1.7, fontSize: '0.93rem' }}>
+              Update to edit the existing phase record, or Cancel to choose a different phase.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => {
+                  setAllowSamePhaseOverride(true);
+                  setShowPhaseConflict(false);
+                }}
+                style={{ flex: '1 1 160px', padding: '0.95rem 1rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Update
+              </button>
+              <button type="button" onClick={() => {
+                  setShowPhaseConflict(false);
+                  setAllowSamePhaseOverride(false);
+                  setForm(p => ({ ...p, crop_phase: '', crop_establishment: '', sowing_date: '' }));
+                  setErrors({});
+                }}
+                style={{ flex: '1 1 160px', padding: '0.95rem 1rem', backgroundColor: 'white', color: '#374151', border: '1px solid #d1d5db', borderRadius: '0.9rem', fontWeight: 700, cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -452,7 +511,15 @@ const CropMonitoring = () => {
   const handleSave = async (formData) => {
     setSaving(true);
     try {
-      if (editRecord) {
+      if (formData.updateExisting) {
+        const { updateExisting, ...payload } = formData;
+        if (!selectedFarmer?.latest_record_id) {
+          showToast('error', 'Unable to update existing phase record.');
+          return;
+        }
+        await updateCropRecord(selectedFarmer.latest_record_id, payload);
+        showToast('success', 'Existing phase record updated successfully.');
+      } else if (editRecord) {
         await updateCropRecord(editRecord.id, formData);
         showToast('success', 'Record updated successfully.');
       } else {
@@ -558,8 +625,8 @@ const CropMonitoring = () => {
           </div>
 
           {/* Barangay filter */}
-          {barangays.length > 1 && (
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.625rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
               <button onClick={() => setBrgyFilter('')}
                 style={{ padding: '0.3rem 0.75rem', border: `1.5px solid ${!brgyFilter ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: !brgyFilter ? GREEN.light : 'white', color: !brgyFilter ? GREEN.primary : '#6b7280', fontWeight: !brgyFilter ? 700 : 400, fontSize: '0.75rem', cursor: 'pointer' }}>
                 All
@@ -571,25 +638,24 @@ const CropMonitoring = () => {
                 </button>
               ))}
             </div>
-          )}
 
-          {/* Phase filter */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Phase filter
-            </label>
-            <select value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}
-              style={{ width: '100%', maxWidth: '260px', padding: '0.75rem 0.9rem', borderRadius: '0.85rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827', fontSize: '0.875rem', outline: 'none' }}>
-              <option value="">All ({farmers.length})</option>
-              <option value="NONE">Not Monitored ({phaseCounts.NONE || 0})</option>
-              {PHASES.map(p => {
-                const count = phaseCounts[p.key] || 0;
-                if (count === 0) return null;
-                return (
-                  <option key={p.key} value={p.key}>{p.label} ({count})</option>
-                );
-              })}
-            </select>
+            <div style={{ minWidth: 220, flex: '0 0 auto' }}>
+              <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.45rem' }}>
+                Phase filter
+              </label>
+              <select value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}
+                style={{ width: '100%', padding: '0.75rem 0.9rem', borderRadius: '0.85rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827', fontSize: '0.875rem', outline: 'none' }}>
+                <option value="">All ({farmers.length})</option>
+                <option value="NONE">Not Monitored ({phaseCounts.NONE || 0})</option>
+                {PHASES.map(p => {
+                  const count = phaseCounts[p.key] || 0;
+                  if (count === 0) return null;
+                  return (
+                    <option key={p.key} value={p.key}>{p.label} ({count})</option>
+                  );
+                })}
+              </select>
+            </div>
           </div>
         </div>
       </div>
@@ -785,5 +851,4 @@ const CropMonitoring = () => {
     </div>
   );
 };
-
 export default CropMonitoring;

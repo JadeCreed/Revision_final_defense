@@ -315,7 +315,7 @@ const ATFarmers = () => {
     try {
       isRefresh ? setRefreshing(true) : setLoading(true);
       const [fRes, sRes] = await Promise.all([
-        getATFarmers({ search, barangay: brgyFilter }),
+        getATFarmers({ barangay: brgyFilter }),
         getATDashboardStats(),
       ]);
       setFarmers(fRes.data?.farmers || []);
@@ -327,16 +327,12 @@ const ATFarmers = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, brgyFilter, showToast]);
+  }, [brgyFilter, showToast]);
 
-  useEffect(() => { loadList(); }, [brgyFilter]);
+  useEffect(() => { loadList(); }, [brgyFilter, loadList]);
 
-  // Debounced search
-  const searchTimer = useRef(null);
   const handleSearch = (q) => {
     setSearch(q);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadList(), 400);
   };
 
   const getSelectedSeason = () => {
@@ -403,8 +399,17 @@ const ATFarmers = () => {
   // COMPUTED
   // ─────────────────────────────────────────
 
+  const filteredFarmers = farmers.filter(f => {
+    const query = search.trim().toLowerCase();
+    if (query) {
+      const target = `${f.full_name || ''} ${f.rsbsa_number || ''} ${f.contact_number || ''}`.toLowerCase();
+      if (!target.includes(query)) return false;
+    }
+    return true;
+  });
+
   // Group farmers by barangay for the list view
-  const farmersByBrgy = farmers.reduce((acc, f) => {
+  const farmersByBrgy = filteredFarmers.reduce((acc, f) => {
     const key = f.barangay || 'Unknown';
     if (!acc[key]) acc[key] = [];
     acc[key].push(f);
@@ -598,7 +603,7 @@ const ATFarmers = () => {
           </div>
 
           {/* ── FARMER LIST — grouped by barangay ── */}
-          {farmers.length === 0 ? (
+          {filteredFarmers.length === 0 ? (
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
               <Users size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
               <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No farmers found</p>
@@ -608,7 +613,7 @@ const ATFarmers = () => {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {Object.entries(brgyFilter ? { [brgyFilter]: farmers } : farmersByBrgy).map(([brgy, brgyFarmers], gIdx) => (
+              {Object.entries(brgyFilter ? { [brgyFilter]: filteredFarmers } : farmersByBrgy).map(([brgy, brgyFarmers], gIdx) => (
                 <div key={brgy} style={{ animation: `slideUp ${0.3 + gIdx * 0.05}s ease` }}>
                   {/* Barangay header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', padding: '0 0.25rem' }}>

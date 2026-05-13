@@ -9,6 +9,8 @@ from django.db.models           import Q
 
 from apps.accounts.permissions  import IsAdminUserRole, IsBPUser
 from apps.accounts.models       import User
+from django.http                import JsonResponse
+from collections                import Counter
 from .models import (
     DistributionEvent,
     DistributionBatch,
@@ -25,6 +27,96 @@ from .serializers import (
     FarmerSearchSerializer,
     DistributionAuditSerializer,
 )
+
+
+# ═══════════════════════════════════════════════════════════
+# GIS DATA AGGREGATION
+# ═══════════════════════════════════════════════════════════
+
+PHASE_COLOR = {
+    "DISTRIBUTION": "#E5E7EB",
+    "ESTABLISHMENT": "#3B82F6",
+    "TILLERING": "#22C55E",
+    "FLOWERING": "#A855F7",
+    "RIPENING": "#FACC15",
+    "HARVESTING": "#F97316",
+}
+
+def get_barangay_gis_data(request):
+    """Aggregate distribution data by barangay for GIS map visualization."""
+    # Get all farmers who have received seeds
+    entries = DistributionEntry.objects.filter(
+        date_received__isnull=False
+    ).select_related('farmer')
+    
+    barangay_data = {}
+    
+    for entry in entries:
+        brgy = entry.farmer.barangay
+        if not brgy:
+            continue
+            
+        if brgy not in barangay_data:
+            barangay_data[brgy] = {
+                "total_farmers": set(),
+                "phases": [],
+            }
+        
+        # Track unique farmers per barangay
+        barangay_data[brgy]["total_farmers"].add(entry.farmer.id)
+        
+        # TEMP: All entries are DISTRIBUTION phase (AT integration comes later)
+        barangay_data[brgy]["phases"].append("DISTRIBUTION")
+    
+    result = []
+    overall_phases = []
+    
+    for brgy, data in barangay_data.items():
+        total_farmers = len(data["total_farmers"])
+        counter = Counter(data["phases"])
+        total_entries = sum(counter.values())
+        
+        dominant = counter.most_common(1)[0][0] if counter else "DISTRIBUTION"
+        
+        breakdown = [
+            {
+                "phase": phase,
+                "percent": round((count / total_entries) * 100)
+            }
+            for phase, count in counter.items()
+        ]
+        
+        result.append({
+            "barangay": brgy,
+            "total_farmers": total_farmers,
+            "dominant_phase": dominant,
+            "color": PHASE_COLOR.get(dominant, "#E5E7EB"),
+            "breakdown": breakdown
+        })
+        
+        overall_phases.extend(data["phases"])
+    
+    # Calculate overall summary
+    overall_counter = Counter(overall_phases)
+    overall_total = sum(overall_counter.values())
+    
+    overall_breakdown = [
+        {
+            "phase": p,
+            "percent": round((c / overall_total) * 100)
+        }
+        for p, c in overall_counter.items()
+    ] if overall_total > 0 else []
+    
+    return JsonResponse({
+        "barangays": result,
+        "overview": {
+            "total_farmers": len(set(e.farmer.id for e in entries)),
+            "total_barangays": len(result),
+            "phases": overall_breakdown,
+            "dominant": overall_counter.most_common(1)[0][0] if overall_counter else "DISTRIBUTION"
+        }
+    })
 
 
 def log_action(event=None, batch=None, user=None, action='', notes=''):

@@ -258,6 +258,28 @@ class ATCropMonitoringCreateView(APIView):
         if not date_observed:
             return Response({'error': 'Date observed is required.'}, status=400)
 
+        latest_final_seed = FinalSeed.objects.order_by('-year', '-id').first()
+        if latest_final_seed:
+            def season_months(value):
+                if value == 'WET':
+                    return [5, 6, 7, 8, 9, 10, 11]
+                if value == 'DRY':
+                    return [12, 1, 2, 3, 4]
+                return None
+
+            months = season_months(latest_final_seed.season)
+            duplicate_query = CropMonitoringRecord.objects.filter(
+                farmer=farmer,
+                crop_phase=crop_phase,
+                date_observed__year=latest_final_seed.year,
+            )
+            if months:
+                duplicate_query = duplicate_query.filter(date_observed__month__in=months)
+            if duplicate_query.exists():
+                return Response({
+                    'error': 'This farmer already has a record for the selected phase in the active season.'
+                }, status=400)
+
         # Build record
         record = CropMonitoringRecord.objects.create(
             farmer=farmer,
