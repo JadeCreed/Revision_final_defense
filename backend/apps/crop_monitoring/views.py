@@ -7,11 +7,18 @@ from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
-from apps.accounts.models import User
+from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import FinalSeed
 from .models import CropMonitoringRecord, BarangayCropSummary
+
+
+def get_at_profile(user):
+    try:
+        return user.at_profile
+    except (AttributeError, AgriculturalTechnicianProfile.DoesNotExist):
+        return None
 from .serializers import (
     CropMonitoringRecordSerializer,
     BarangayCropSummarySerializer,
@@ -32,9 +39,9 @@ class ATFarmerListView(APIView):
     permission_classes = [IsAuthenticated, IsATUser]
 
     def get(self, request):
-        at_profile = getattr(request.user, 'at_profile', None)
+        at_profile = get_at_profile(request.user)
         if not at_profile:
-            return Response({'error': 'AT profile not found.'}, status=400)
+            return Response({'farmers': [], 'barangays': []})
 
         assigned_barangays = at_profile.get_assigned_barangays()
         if not assigned_barangays:
@@ -83,6 +90,7 @@ class ATFarmerListView(APIView):
                 'latest_phase_display': (
                     latest.get_crop_phase_display() if latest else 'Not yet monitored'
                 ),
+                'latest_seed_source': latest.seed_source if latest else None,
                 'latest_observed': (
                     str(latest.date_observed) if latest else None
                 ),
@@ -127,7 +135,7 @@ class ATFarmerDetailView(APIView):
     permission_classes = [IsAuthenticated, IsATUser]
 
     def get(self, request, farmer_id):
-        at_profile = getattr(request.user, 'at_profile', None)
+        at_profile = get_at_profile(request.user)
         if not at_profile:
             return Response({'error': 'AT profile not found.'}, status=400)
 
@@ -161,6 +169,11 @@ class ATFarmerDetailView(APIView):
                 'is_distributed': bool(entry.qty_bags or entry.date_received),
             })
 
+        latest = CropMonitoringRecord.objects.filter(farmer=farmer).order_by('-date_observed', '-encoded_at').first()
+        latest_seed_source = latest.seed_source if latest else None
+        latest_phase = latest.crop_phase if latest else None
+        latest_observed = latest.date_observed.isoformat() if latest else None
+
         return Response({
             'id': farmer.id,
             'first_name': farmer.first_name,
@@ -169,6 +182,9 @@ class ATFarmerDetailView(APIView):
             'contact_number': farmer.contact_number,
             'rsbsa_number': farmer.rsbsa_number,
             'barangay': farmer.barangay,
+            'latest_phase': latest_phase,
+            'latest_seed_source': latest_seed_source,
+            'latest_observed': latest_observed,
             'profile': {
                 'gender': profile.gender if profile else None,
                 'date_of_birth': profile.date_of_birth.isoformat() if profile and profile.date_of_birth else None,
@@ -198,7 +214,7 @@ class ATCropMonitoringCreateView(APIView):
     permission_classes = [IsAuthenticated, IsATUser]
 
     def post(self, request):
-        at_profile = getattr(request.user, 'at_profile', None)
+        at_profile = get_at_profile(request.user)
         if not at_profile:
             return Response({'error': 'AT profile not found.'}, status=400)
 
@@ -237,6 +253,13 @@ class ATCropMonitoringCreateView(APIView):
         if phase_status not in valid_statuses:
             return Response({'error': f'Invalid phase status: {phase_status}'}, status=400)
 
+        seed_source = request.data.get('seed_source', '')
+        if seed_source is not None:
+            seed_source = seed_source.strip() or None
+        valid_sources = [s[0] for s in CropMonitoringRecord.SEED_SOURCE_CHOICES]
+        if seed_source and seed_source not in valid_sources:
+            return Response({'error': f'Invalid seed source: {seed_source}'}, status=400)
+
         delay_days = None
         damage_cause = ''
         if phase_status == 'DELAYED':
@@ -268,16 +291,23 @@ class ATCropMonitoringCreateView(APIView):
                 return None
 
             months = season_months(latest_final_seed.season)
+            # Block only if SAME phase + SAME seed source already recorded this season
+            # This allows same phase with different seed sources (e.g., Juan with HYBRID + OWN_SEED both in TILLERING)
             duplicate_query = CropMonitoringRecord.objects.filter(
                 farmer=farmer,
                 crop_phase=crop_phase,
+                seed_source=seed_source or '',
                 date_observed__year=latest_final_seed.year,
             )
             if months:
                 duplicate_query = duplicate_query.filter(date_observed__month__in=months)
             if duplicate_query.exists():
                 return Response({
-                    'error': 'This farmer already has a record for the selected phase in the active season.'
+                    'error': (
+                        f'This farmer already has a {crop_phase} record for '
+                        f'{seed_source or "unspecified"} seed this season. '
+                        f'Different seed source? Select Hybrid, Inbred, or Own Seed.'
+                    )
                 }, status=400)
 
         # Build record
@@ -286,6 +316,7 @@ class ATCropMonitoringCreateView(APIView):
             encoded_by=request.user,
             barangay=farmer.barangay,
             crop_phase=crop_phase,
+            seed_source=seed_source,
             phase_status=phase_status,
             delay_days=delay_days,
             damage_cause=damage_cause,
@@ -314,7 +345,7 @@ class ATFarmerHistoryView(APIView):
     permission_classes = [IsAuthenticated, IsATUser]
 
     def get(self, request, farmer_id):
-        at_profile = getattr(request.user, 'at_profile', None)
+        at_profile = get_at_profile(request.user)
         if not at_profile:
             return Response({'error': 'AT profile not found.'}, status=400)
 
@@ -420,7 +451,7 @@ class ATCropMonitoringUpdateView(APIView):
             }, status=403)
 
         allowed = [
-            'crop_phase', 'crop_establishment', 'area_monitored_ha',
+            'crop_phase', 'seed_source', 'crop_establishment', 'area_monitored_ha',
             'sowing_date', 'variety_name', 'remarks', 'date_observed',
             'phase_status', 'delay_days', 'damage_cause',
         ]
@@ -464,6 +495,14 @@ class ATCropMonitoringUpdateView(APIView):
                             return Response({'error': 'Delay days must be a whole number.'}, status=400)
                 elif field == 'damage_cause':
                     record.damage_cause = request.data.get('damage_cause', '').strip()
+                elif field == 'seed_source':
+                    seed_source = request.data.get('seed_source', '')
+                    if seed_source is not None:
+                        seed_source = seed_source.strip() or None
+                    valid_sources = [s[0] for s in CropMonitoringRecord.SEED_SOURCE_CHOICES]
+                    if seed_source and seed_source not in valid_sources:
+                        return Response({'error': f'Invalid seed source: {seed_source}'}, status=400)
+                    record.seed_source = seed_source
                 else:
                     setattr(record, field, request.data[field] or None if field != 'remarks' else request.data[field])
         record.save()
@@ -485,7 +524,7 @@ class ATDashboardStatsView(APIView):
     permission_classes = [IsAuthenticated, IsATUser]
 
     def get(self, request):
-        at_profile = getattr(request.user, 'at_profile', None)
+        at_profile = get_at_profile(request.user)
         if not at_profile:
             return Response({'error': 'AT profile not found.'}, status=400)
 

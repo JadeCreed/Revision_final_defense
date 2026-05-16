@@ -31,7 +31,6 @@ const GREEN = {
 
 // Each phase has a color, label, and icon char for the map
 const PHASES = [
-  { key: 'DISTRIBUTION',  label: 'Seed Distribution',  color: '#6b7280', bg: '#f9fafb', border: '#e5e7eb' },
   { key: 'ESTABLISHMENT', label: 'Crop Establishment', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
   { key: 'TILLERING',     label: 'Tillering',          color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
   { key: 'FLOWERING',     label: 'Flowering',          color: '#9333ea', bg: '#faf5ff', border: '#e9d5ff' },
@@ -92,6 +91,7 @@ const Toast = ({ toast }) => {
 const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
   const [form, setForm] = useState({
     crop_phase:        editRecord?.crop_phase || '',
+    seed_source:       editRecord?.seed_source || '',
     crop_establishment:editRecord?.crop_establishment || '',
     phase_status:      editRecord?.phase_status || 'NORMAL',
     delay_days:        editRecord?.delay_days ?? '',
@@ -120,6 +120,7 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
     if (!form.phase_status)  errs.phase_status = 'Status is required';
     if (form.crop_phase === 'ESTABLISHMENT' && !form.crop_establishment)
       errs.crop_establishment = 'Required for Establishment phase';
+    if (!form.seed_source)   errs.seed_source = 'Seed source is required';
     if (form.phase_status === 'DELAYED' && !form.delay_days)
       errs.delay_days = 'Delay duration is required';
     if (form.phase_status === 'DAMAGED' && !form.damage_cause.trim())
@@ -210,6 +211,41 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
           })}
         </div>
         {errors.crop_phase && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{errors.crop_phase}</p>}
+      </div>
+
+      <div>
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
+          Seed Source <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+          {[
+            { key: 'HYBRID', label: 'Hybrid' },
+            { key: 'INBRED', label: 'Inbred' },
+            { key: 'OWN_SEED', label: 'Own Seed' },
+          ].map(opt => {
+            const sel = form.seed_source === opt.key;
+            return (
+              <button key={opt.key} type="button"
+                onClick={() => {
+                  setForm(p => ({ ...p, seed_source: opt.key }));
+                  setErrors(p => ({ ...p, seed_source: '' }));
+                }}
+                style={{
+                  border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`,
+                  borderRadius: '1rem',
+                  backgroundColor: sel ? '#ecfdf5' : 'white',
+                  color: sel ? '#166534' : '#334155',
+                  fontWeight: 700,
+                  padding: '0.95rem 0.85rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+        {errors.seed_source && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.seed_source}</p>}
       </div>
 
       <div>
@@ -816,6 +852,11 @@ const CropMonitoring = () => {
                           {new Date(rec.date_observed).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       </div>
+                      {rec.seed_source && (
+                        <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 0.25rem' }}>
+                          Seed source: {rec.seed_source.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
+                        </p>
+                      )}
                       {rec.area_monitored_ha && (
                         <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 0.25rem' }}>
                           Area: {rec.area_monitored_ha} ha

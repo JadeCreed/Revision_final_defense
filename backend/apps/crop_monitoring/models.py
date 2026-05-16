@@ -89,6 +89,19 @@ class CropMonitoringRecord(models.Model):
         help_text='Crop variety observed in the field'
     )
 
+    SEED_SOURCE_CHOICES = [
+        ('HYBRID', 'Hybrid Seed'),
+        ('INBRED', 'Inbred Seed'),
+        ('OWN_SEED', 'Own Seed'),
+    ]
+    seed_source = models.CharField(
+        max_length=10,
+        choices=SEED_SOURCE_CHOICES,
+        null=True,
+        blank=True,
+        help_text='Source of seed used by the farmer for this observation'
+    )
+
     # ── NOTES ──
     remarks = models.TextField(
         blank=True,
