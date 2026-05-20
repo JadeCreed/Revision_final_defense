@@ -60,12 +60,16 @@ const Hero = () => {
             <p className="lp-eyebrow">Municipal Agriculture Office of Lucban</p>
             <h1 className="lp-hero-title">
               Smart Agriculture.<br />
-              <span className="lp-hero-title-accent">Stronger Communities.</span>
+              <span className="text-[#2d6a2d]">Stronger Communities.</span>
             </h1>
-            <div className="lp-hero-rule" />
+            <div className="w-12 h-[3px] bg-[#2d6a2d] rounded-[2px] mb-[0.9rem]" />
+            <p className="lp-hero-subheading">
+              A government-grade digital platform for Lucban's rice program.
+            </p>
             <p className="lp-hero-desc">
-              A digital platform that streamlines seed polling, beneficiary management,
-              distribution scheduling, and reporting for a more efficient and transparent rice program.
+              Designed for the Municipal Agriculture Office of Lucban, this system streamlines seed polling,
+              beneficiary management, distribution scheduling, and reporting to make operations more
+              efficient, transparent, and accountable.
             </p>
             <div className="lp-hero-ctas">
               <button className="lp-btn-primary" onClick={() => scrollTo('programs')}>
@@ -277,7 +281,7 @@ const Hero = () => {
           </div>
         </div>
         <div className="footer-bottom">
-          <span>AGRICE — Municipal Agriculture Office, Lucban © 2025. All rights reserved.</span>
+          <span>AGRICE — Municipal Agriculture Office, Lucban © 2026. All rights reserved.</span>
           <span>Powered by the Office of the Municipal Mayor</span>
         </div>
       </footer>

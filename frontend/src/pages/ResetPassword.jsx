@@ -1,8 +1,3 @@
-// src/pages/ResetPassword.jsx
-// FORGOT PASSWORD — Step 3 of 3
-// User sets a new password. Email is pre-filled (read-only).
-// On success → redirects to landing/login page
-
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { resetPassword } from '../api/axios';
@@ -10,8 +5,6 @@ import { resetPassword } from '../api/axios';
 const ResetPassword = () => {
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Email + otp passed from VerifyOTP page via navigation state
   const email = location.state?.email || '';
   const otp   = location.state?.otp   || '';
 
@@ -21,18 +14,22 @@ const ResetPassword = () => {
   const [loading, setLoading]   = useState(false);
   const [success, setSuccess]   = useState(false);
 
-  // Redirect if missing state (direct URL access)
   if (!email || !otp) {
     return (
-      <div className="register-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div className="auth-card-icon"><span style={{ fontSize: '1.5rem' }}>⚠️</span></div>
-          <h2 className="auth-card-title">Session Expired</h2>
-          <p style={{ color: 'var(--color-muted)', margin: '1rem 0' }}>
-            Your reset session has expired. Please start again.
-          </p>
+      <div style={{
+        minHeight: '100vh', paddingTop: 'var(--nav-h)',
+        backgroundColor: 'var(--color-bg)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 'calc(var(--nav-h) + 2rem) 1.25rem 3rem',
+      }}>
+        <div style={{ background: 'white', borderRadius: '16px', padding: '2.5rem 2rem', maxWidth: '420px', width: '100%', textAlign: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.10)' }}>
+          <div style={{ width: '60px', height: '60px', background: '#fef3c7', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem', fontSize: '1.5rem' }}>⚠️</div>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.75rem' }}>Session Expired</h2>
+          <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem', lineHeight: 1.65 }}>Your reset session has expired. Please start again.</p>
           <Link to="/forgot-password">
-            <button className="btn-primary">Start Over</button>
+            <button style={{ background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0.7rem 1.5rem', fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+              Start Over
+            </button>
           </Link>
         </div>
       </div>
@@ -59,7 +56,6 @@ const ResetPassword = () => {
     setLoading(true);
     setApiError('');
     try {
-      // Send email + otp (proof) + new passwords to Django
       await resetPassword({ email, otp, ...form });
       setSuccess(true);
     } catch (err) {
@@ -69,18 +65,35 @@ const ResetPassword = () => {
     }
   };
 
-  // Success screen — redirect to login
+  const cardStyle = {
+    background: 'white', borderRadius: '16px', padding: '2.5rem 2rem',
+    width: '100%', maxWidth: '420px',
+    boxShadow: '0 8px 32px rgba(0,0,0,0.10)', border: '1px solid rgba(0,0,0,0.06)',
+  };
+  const wrapStyle = {
+    minHeight: '100vh', backgroundColor: 'var(--color-bg)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 'calc(var(--nav-h) + 2rem) 1.25rem 3rem',
+  };
+  const inputStyle = (hasError) => ({
+    width: '100%', padding: '0.7rem 1rem',
+    border: `1.5px solid ${hasError ? '#fca5a5' : '#d1d5db'}`,
+    borderRadius: '8px', fontSize: '0.875rem',
+    background: '#fafafa', color: '#1a1a1a',
+    outline: 'none', boxSizing: 'border-box', display: 'block',
+  });
+
   if (success) {
     return (
-      <div className="register-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div className="auth-card-icon"><span style={{ fontSize: '1.5rem' }}>✅</span></div>
-          <h2 className="auth-card-title">Password Changed!</h2>
-          <p style={{ color: 'var(--color-muted)', margin: '1rem 0' }}>
-            Your password has been successfully updated. You can now log in with your new password.
-          </p>
+      <div style={wrapStyle}>
+        <div style={{ ...cardStyle, textAlign: 'center' }}>
+          <div style={{ width: '60px', height: '60px', background: '#dcfce7', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem', fontSize: '1.5rem' }}>✅</div>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '0.75rem' }}>Password Changed!</h2>
+          <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.875rem', lineHeight: 1.65 }}>Your password has been successfully updated. You can now log in with your new password.</p>
           <Link to="/">
-            <button className="btn-primary">Back to Login</button>
+            <button style={{ background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', padding: '0.7rem 1.5rem', fontWeight: 700, cursor: 'pointer', width: '100%' }}>
+              Back to Login
+            </button>
           </Link>
         </div>
       </div>
@@ -88,73 +101,44 @@ const ResetPassword = () => {
   }
 
   return (
-    <div className="register-page">
-      <div className="auth-card">
+    <div style={wrapStyle}>
+      <div style={cardStyle}>
+        <div style={{ width: '60px', height: '60px', background: 'var(--color-primary)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.25rem', fontSize: '1.5rem' }}>🔑</div>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, textAlign: 'center', marginBottom: '0.4rem' }}>Set New Password</h2>
+        <p style={{ fontSize: '0.82rem', color: '#6b7280', textAlign: 'center', marginBottom: '1.5rem', lineHeight: 1.6 }}>Create a strong new password for your AGRICE account.</p>
 
-        {/* Icon */}
-        <div className="auth-card-icon">
-          <span style={{ fontSize: '1.5rem' }}>🔑</span>
-        </div>
-
-        <h2 className="auth-card-title">Set New Password</h2>
-        <p className="auth-card-subtitle">
-          Create a strong new password for your AGRICE account.
-        </p>
-
-        {apiError && <div className="error-banner">{apiError}</div>}
+        {apiError && (
+          <div style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '8px', padding: '0.6rem 0.85rem', fontSize: '0.8rem', marginBottom: '1rem' }}>
+            {apiError}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
-          {/* Email — auto-filled, read-only */}
-          <div className="form-group">
-            <label>Email Address</label>
-            <input
-              className="form-input"
-              type="email"
-              value={email}
-              readOnly
-              style={{ backgroundColor: '#f3f4f6', color: 'var(--color-muted)', cursor: 'not-allowed' }}
-            />
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>Email Address</label>
+            <input type="email" value={email} readOnly style={{ ...inputStyle(false), background: '#f3f4f6', color: '#9ca3af', cursor: 'not-allowed' }} />
           </div>
-
-          {/* New Password */}
-          <div className="form-group">
-            <label>New Password</label>
-            <input
-              className={`form-input ${errors.new_password ? 'error' : ''}`}
-              type="password"
-              name="new_password"
-              placeholder="Create a new password"
-              value={form.new_password}
-              onChange={handleChange}
-              required
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>New Password</label>
+            <input type="password" name="new_password" placeholder="Create a new password" value={form.new_password} onChange={handleChange} required style={inputStyle(!!errors.new_password)}
+              onFocus={e => { e.target.style.borderColor = '#2d6a2d'; e.target.style.background = 'white'; }}
+              onBlur={e => { e.target.style.borderColor = errors.new_password ? '#fca5a5' : '#d1d5db'; e.target.style.background = '#fafafa'; }}
             />
-            {errors.new_password && <span className="error-message">{errors.new_password}</span>}
+            {errors.new_password && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>{errors.new_password}</span>}
           </div>
-
-          {/* Confirm Password */}
-          <div className="form-group">
-            <label>Confirm New Password</label>
-            <input
-              className={`form-input ${errors.confirm_password ? 'error' : ''}`}
-              type="password"
-              name="confirm_password"
-              placeholder="Confirm your new password"
-              value={form.confirm_password}
-              onChange={handleChange}
-              required
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>Confirm New Password</label>
+            <input type="password" name="confirm_password" placeholder="Confirm your new password" value={form.confirm_password} onChange={handleChange} required style={inputStyle(!!errors.confirm_password)}
+              onFocus={e => { e.target.style.borderColor = '#2d6a2d'; e.target.style.background = 'white'; }}
+              onBlur={e => { e.target.style.borderColor = errors.confirm_password ? '#fca5a5' : '#d1d5db'; e.target.style.background = '#fafafa'; }}
             />
-            {errors.confirm_password && <span className="error-message">{errors.confirm_password}</span>}
+            {errors.confirm_password && <span style={{ color: '#dc2626', fontSize: '0.75rem', marginTop: '0.25rem', display: 'block' }}>{errors.confirm_password}</span>}
           </div>
-
-          {/* Submit */}
-          <button className="btn-primary" type="submit" disabled={loading}>
+          <button type="submit" disabled={loading} style={{ width: '100%', padding: '0.75rem', background: loading ? '#86efac' : 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer' }}>
             {loading ? 'Updating...' : 'Change Password'}
           </button>
         </form>
-
-        <p className="footer-text" style={{ color: 'var(--color-muted)' }}>
-          AGRICE - Municipal Agriculture Office, Lucban
-        </p>
+        <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.68rem', color: '#d1d5db' }}>AGRICE – Municipal Agriculture Office, Lucban</p>
       </div>
     </div>
   );
