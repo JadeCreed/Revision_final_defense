@@ -39,6 +39,7 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
     pwd          = serializers.SerializerMethodField()
     arbs         = serializers.SerializerMethodField()
     four_ps      = serializers.SerializerMethodField()
+    hectares     = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -48,7 +49,7 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
             'middle_name', 'ext_name', 'date_of_birth', 'gender',
             'residency_municipality', 'residency_barangay',
             'farm_municipality', 'farm_barangay',
-            'ip', 'senior_citizen', 'pwd', 'arbs', 'four_ps',
+            'ip', 'senior_citizen', 'pwd', 'arbs', 'four_ps', 'hectares',
         ]
 
     def _get_profile(self, obj):
@@ -108,6 +109,10 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
     def get_four_ps(self, obj):
         p = self._get_profile(obj)
         return p.four_ps if p else False
+
+    def get_hectares(self, obj):
+        p = self._get_profile(obj)
+        return float(p.hectares) if p and p.hectares else 0.0
 
 
 class DistributionEntrySerializer(serializers.ModelSerializer):

@@ -113,6 +113,7 @@ const FarmerProfile = () => {
     residency_barangay:     '',
     farm_municipality:      '',
     farm_barangay:          '',
+    hectares:               '',  // Total farm hectares (NEW - REQUIRED)
     ip:             false,
     senior_citizen: false,
     pwd:            false,
@@ -160,6 +161,7 @@ const FarmerProfile = () => {
         residency_barangay:     profile.residency_barangay     || '',
         farm_municipality:      profile.farm_municipality      || '',
         farm_barangay:          profile.farm_barangay          || '',
+        hectares:               profile.hectares               || '',  // Total hectares
         ip:             profile.ip             ?? false,
         senior_citizen: profile.senior_citizen ?? false,
         pwd:            profile.pwd            ?? false,
@@ -206,6 +208,7 @@ const FarmerProfile = () => {
     if (!form.residency_barangay.trim())     errs.residency_barangay     = 'Required';
     if (!form.farm_municipality.trim())      errs.farm_municipality      = 'Required';
     if (!form.farm_barangay.trim())          errs.farm_barangay          = 'Required';
+    if (!form.hectares || parseFloat(form.hectares) <= 0) errs.hectares = 'Required - Enter total farm hectares';
     return errs;
   };
 
@@ -264,12 +267,13 @@ const FarmerProfile = () => {
           residency_barangay:     form.residency_barangay,
           farm_municipality:      form.farm_municipality,
           farm_barangay:          form.farm_barangay,
-          contact_number:     form.contact_number,
-          ip:                 form.ip,
-          senior_citizen:     form.senior_citizen,
-          pwd:                form.pwd,
-          arbs:               form.arbs,
-          four_ps:            form.four_ps,
+          hectares:               parseFloat(form.hectares) || 0,  // Total farm hectares
+          contact_number:         form.contact_number,
+          ip:                     form.ip,
+          senior_citizen:         form.senior_citizen,
+          pwd:                    form.pwd,
+          arbs:                   form.arbs,
+          four_ps:                form.four_ps,
         },
       });
 
@@ -690,6 +694,18 @@ const FarmerProfile = () => {
                 onChange={e => handleChange('farm_barangay', e.target.value)}
                 style={inputStyle(!!fieldErrors.farm_barangay)}
                 placeholder="e.g. Ayuti"
+              />
+            </Field>
+
+            <Field label="Total Farm Hectares (ha)" required error={fieldErrors.hectares}>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.hectares}
+                onChange={e => handleChange('hectares', e.target.value)}
+                style={inputStyle(!!fieldErrors.hectares)}
+                placeholder="e.g. 1.5"
               />
             </Field>
 
