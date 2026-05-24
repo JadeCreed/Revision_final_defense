@@ -1,0 +1,62 @@
+Fix 1: Remove the subtitle line
+In the render section, find this block and remove just the subtitle <p>:
+jsx{/* PAGE TITLE — outside map container, like Production dashboard */}
+{!isMobile && (
+  <div style={{ padding: '1.25rem 1.25rem 0.625rem', flexShrink: 0 }}>
+    <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+      Lucban, Quezon — Barangay map
+    </h1>
+    {/* DELETE THE LINE BELOW */}
+    <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.2rem 0 0' }}>
+      {activeTab === 'utilization'
+        ? 'Harvest utilization performance across all barangays'
+        : 'Real-time crop phase monitoring from AT field visits'}
+    </p>
+  </div>
+)}
+Replace it with just the title, no subtitle:
+jsx{!isMobile && (
+  <div style={{ padding: '1rem 1.25rem 0.5rem', flexShrink: 0 }}>
+    <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+      Lucban, Quezon — Barangay map
+    </h1>
+  </div>
+)}
+
+Fix 2: Map zoom — fit Lucban tightly on init AND after tab change
+The map is zooming out too much because fitBounds with maxZoom: 13 is too conservative. The fix is in two places.
+In the init map useEffect, change the fitBounds call:
+Find this:
+jsxif (bounds.isValid()) {
+  map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: false });
+  map.setMinZoom(map.getZoom());
+}
+Replace with:
+jsxif (bounds.isValid()) {
+  map.fitBounds(bounds, { padding: [20, 20], animate: false });
+  // Lock min zoom to whatever zoom level fits Lucban
+  map.setMinZoom(map.getZoom());
+}
+In handleBack, change all fitBounds calls that reset to full Lucban view:
+Find every instance of:
+jsxmap.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: true });
+Replace each with:
+jsxmap.fitBounds(bounds, { padding: [20, 20], animate: true });
+There are three places this appears — in handleBack, in handleTabChange, and in the polygon click handler when the same barangay is clicked twice. Replace all three the same way.
+In handleBrgyClick and the polygon onEachFeature click, the zoom-in call for a specific barangay is fine as-is. Only change the zoom-out (reset) calls.
+
+Fix 3: Tighten the overall height calculation
+Since you removed the subtitle, the height needs slight adjustment. Find:
+jsxheight: 'calc(100vh - 60px)',
+Keep this as is — it's correct. The subtitle removal already gives back that space to the map.
+
+Fix 4: Reduce title padding to give more vertical space to map
+The title area padding was 1.25rem 1.25rem 0.625rem. Since we removed the subtitle, tighten it further:
+The replacement block above already has padding: '1rem 1.25rem 0.5rem' which handles this.
+
+Summary of all changes
+These are the only lines you need to touch in your current file:
+Remove subtitle — delete the <p> tag below the <h1> in the desktop title block.
+Tighten title padding — change padding: '1.25rem 1.25rem 0.625rem' to padding: '1rem 1.25rem 0.5rem'.
+Fix fitBounds padding — change all { padding: [30, 30], maxZoom: 13, ... } to { padding: [20, 20], ... } in the init effect and the three reset/back calls. Remove maxZoom: 13 entirely from these reset calls so Leaflet picks the tightest zoom that fits the polygon.
+The reason maxZoom: 13 was causing the zoom-out issue is that it was forcing a cap, but if the computed fitBounds zoom is already 13 or higher, capping at 13 is fine — the problem is that the padding of [30, 30] combined with the container size was computing a zoom of 12 or lower. Removing the cap and reducing padding to [20, 20] lets Leaflet naturally fit Lucban as tightly as possible in the available container.

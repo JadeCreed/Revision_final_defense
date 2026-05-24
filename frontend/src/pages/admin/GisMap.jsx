@@ -706,33 +706,39 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
   );
 };
 
-// ─── MAP LEGENDS ─────────────────────────────────────────────
-const MonitoringLegend = () => (
-  <div style={{ position: 'absolute', bottom: '2.5rem', left: '1rem', zIndex: 400, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: '1rem', padding: '0.875rem 1rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)', minWidth: 155 }}>
-  <p style={{ margin: '0 0 0.6rem', fontSize: '0.65rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Crop phase</p>
-  {PHASES.map(ph => (
-    <div key={ph.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-      <span style={{ width: 11, height: 11, borderRadius: '3px', backgroundColor: ph.color, flexShrink: 0 }} />
-      <span style={{ fontSize: '0.7rem', color: '#1e293b', fontWeight: 500 }}>{ph.label}</span>
-    </div>
-  ))}
-  </div>
-);
+// ─── INLINE TOOLBAR LEGEND ────────────────────────────────
+const ToolbarLegend = ({ activeTab }) => {
+  const items = activeTab === 'utilization'
+    ? UTIL_TIERS.map(t => ({ color: t.color, label: t.label }))
+    : PHASES.map(p => ({ color: p.color, label: p.label }));
 
-const UtilizationLegend = () => (
-  <div style={{ position: 'absolute', bottom: '2.5rem', left: '1rem', zIndex: 400, backgroundColor: 'rgba(255,255,255,0.96)', borderRadius: '1rem', padding: '0.875rem 1rem', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', border: '1px solid rgba(255,255,255,0.8)', backdropFilter: 'blur(8px)', minWidth: 175 }}>
-  <p style={{ margin: '0 0 0.6rem', fontSize: '0.65rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Utilization performance</p>
-  {UTIL_TIERS.map(t => (
-    <div key={t.key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-      <span style={{ width: 11, height: 11, borderRadius: '3px', backgroundColor: t.color, flexShrink: 0 }} />
-      <span style={{ fontSize: '0.7rem', color: '#1e293b', fontWeight: 500 }}>{t.label}</span>
-      <span style={{ fontSize: '0.62rem', color: '#94a3b8', marginLeft: 'auto' }}>
-        {t.min >= 200 ? '≥200%' : t.min >= 150 ? '150–199%' : t.min >= 100 ? '100–149%' : t.min >= 75 ? '75–99%' : t.min >= 50 ? '50–74%' : '<50%'}
-      </span>
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0',
+      borderLeft: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0',
+      padding: '0 0.875rem', flexShrink: 0,
+    }}>
+      {items.map((item, idx) => (
+        <div key={item.label} style={{
+          display: 'flex', alignItems: 'center', gap: '0.3rem',
+          padding: '0 0.5rem',
+          borderRight: idx < items.length - 1 ? '1px solid #f1f5f9' : 'none',
+        }}>
+          <span style={{
+            width: 9, height: 9, borderRadius: '2px',
+            backgroundColor: item.color, flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: '0.68rem', color: '#374151', fontWeight: 500,
+            whiteSpace: 'nowrap',
+          }}>
+            {item.label}
+          </span>
+        </div>
+      ))}
     </div>
-  ))}
-  </div>
-);
+  );
+};
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────
 const GisMap = () => {
@@ -851,7 +857,7 @@ const GisMap = () => {
     const allLayer = L.geoJSON(BRGY_FEATURES);
     const bounds   = allLayer.getBounds();
     if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: false });
+      map.fitBounds(bounds, { padding: [20, 20], animate: false });
       map.setMinZoom(map.getZoom());
     }
     leafletMap.current = map;
@@ -952,7 +958,7 @@ const GisMap = () => {
           if (lastClickedBrgy === name) {
             setActiveBarangay(null); setLastClickedBrgy(null);
             const fb = L.geoJSON(BRGY_FEATURES).getBounds();
-            if (fb.isValid()) map.fitBounds(fb, { padding: [30, 30], maxZoom: 13, animate: true });
+            if (fb.isValid()) map.fitBounds(fb, { padding: [20, 20], animate: true });
           } else {
             setActiveBarangay(name); setLastClickedBrgy(name);
             setPanelAnimate(true); if (isMobile) setMobileSheet(true);
@@ -1053,7 +1059,7 @@ const GisMap = () => {
     if (panelRef.current) panelRef.current.scrollTop = 0;
     if (leafletMap.current && L) {
       const bounds = L.geoJSON(BRGY_FEATURES).getBounds();
-      if (bounds.isValid()) leafletMap.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: true });
+      if (bounds.isValid()) leafletMap.current.fitBounds(bounds, { padding: [20, 20], animate: true });
     }
   };
 
@@ -1063,11 +1069,11 @@ const GisMap = () => {
     setActiveBarangay(null); setLastClickedBrgy(null); setMobileSheet(false);
     if (leafletMap.current && L) {
       const bounds = L.geoJSON(BRGY_FEATURES).getBounds();
-      if (bounds.isValid()) leafletMap.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 13, animate: true });
+      if (bounds.isValid()) leafletMap.current.fitBounds(bounds, { padding: [20, 20], animate: true });
     }
   };
 
-  const Legend = () => activeTab === 'utilization' ? <UtilizationLegend /> : <MonitoringLegend />;
+
 
   const PanelBody = () => {
     if (!activeBarangay) {
@@ -1090,7 +1096,7 @@ const GisMap = () => {
 
   // ── RENDER ──
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+    <div style={{ height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column', backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
       <style>{`
         @keyframes gis-pop { 0%{opacity:0;transform:translateX(-50%) scale(0.88)} 70%{transform:translateX(-50%) scale(1.03)} 100%{opacity:1;transform:translateX(-50%) scale(1)} }
         @keyframes gis-fadeSlide { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
@@ -1104,51 +1110,59 @@ const GisMap = () => {
 
       <Toast toast={toast} />
 
+      {/* PAGE TITLE – outside map container, like Production dashboard */}
+      {!isMobile && (
+        <div style={{ padding: '1rem 1.25rem 0.5rem', flexShrink: 0 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
+            Lucban, Quezon — Barangay map
+          </h1>
+        </div>
+      )}
+
       {/* ── DESKTOP ── */}
       {!isMobile && (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '1rem', gap: '1rem' }}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '0.625rem 1rem 1rem', gap: '0.875rem', minHeight: 0 }}>
           {/* Map side */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
             {/* Toolbar */}
-            <div style={{ padding: '0.875rem 1.1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.95rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Layers size={16} color='#1a4d1a' />
-                Lucban, Quezon — Barangay map
-              </div>
-
-              {/* Tab toggle */}
-              <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.75rem', padding: '0.2rem', gap: '0.2rem' }}>
+            <div style={{ padding: '0.625rem 0.875rem', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '0', alignItems: 'center', overflowX: 'auto', flexShrink: 0 }}>
+              {/* Tab toggles */}
+              <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.625rem', padding: '0.175rem', gap: '0.175rem', flexShrink: 0, marginRight: '0.75rem' }}>
                 <button onClick={() => handleTabChange('monitoring')}
-                  style={{ padding: '0.4rem 0.875rem', borderRadius: '0.6rem', border: 'none', backgroundColor: activeTab === 'monitoring' ? 'white' : 'transparent', color: activeTab === 'monitoring' ? '#1a4d1a' : '#64748b', fontWeight: activeTab === 'monitoring' ? 700 : 500, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', boxShadow: activeTab === 'monitoring' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}>
-                  <Activity size={14} /> Crop monitoring
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === 'monitoring' ? 'white' : 'transparent', color: activeTab === 'monitoring' ? '#1a4d1a' : '#64748b', fontWeight: activeTab === 'monitoring' ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', boxShadow: activeTab === 'monitoring' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+                  <Activity size={13} /> Crop monitoring
                 </button>
                 <button onClick={() => handleTabChange('utilization')}
-                  style={{ padding: '0.4rem 0.875rem', borderRadius: '0.6rem', border: 'none', backgroundColor: activeTab === 'utilization' ? 'white' : 'transparent', color: activeTab === 'utilization' ? '#1a4d1a' : '#64748b', fontWeight: activeTab === 'utilization' ? 700 : 500, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', boxShadow: activeTab === 'utilization' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s' }}>
-                  <TrendingUp size={14} /> Crop utilization
+                  style={{ padding: '0.35rem 0.75rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === 'utilization' ? 'white' : 'transparent', color: activeTab === 'utilization' ? '#1a4d1a' : '#64748b', fontWeight: activeTab === 'utilization' ? 700 : 500, fontSize: '0.78rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.3rem', boxShadow: activeTab === 'utilization' ? '0 1px 4px rgba(0,0,0,0.1)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+                  <TrendingUp size={13} /> Crop utilization
                 </button>
               </div>
 
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.65rem', alignItems: 'center' }}>
+              {/* Inline legend strip – center */}
+              <ToolbarLegend activeTab={activeTab} />
+
+              {/* Search + filter + refresh – pushed right */}
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0, paddingLeft: '0.75rem' }}>
                 <div style={{ position: 'relative' }}>
-                  <Search size={13} color='#9ca3af' style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <Search size={12} color='#9ca3af' style={{ position: 'absolute', left: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                   <input value={searchQ} onChange={e => setSearchQ(e.target.value)}
                     placeholder='Search barangay...'
-                    style={{ padding: '0.5rem 0.875rem 0.5rem 2.2rem', border: '1px solid #e2e8f0', borderRadius: '0.75rem', fontSize: '0.82rem', outline: 'none', backgroundColor: '#f8fafc', width: 180, color: '#0f172a' }} />
+                    style={{ padding: '0.4rem 0.75rem 0.4rem 2rem', border: '1px solid #e2e8f0', borderRadius: '0.625rem', fontSize: '0.78rem', outline: 'none', backgroundColor: '#f8fafc', width: 155, color: '#0f172a' }} />
                 </div>
                 <select value={filterBrgy} onChange={e => { setFilterBrgy(e.target.value); if (e.target.value) handleBrgyClick(e.target.value); }}
-                  style={{ padding: '0.5rem 0.875rem', border: '1px solid #e2e8f0', borderRadius: '0.75rem', fontSize: '0.82rem', outline: 'none', backgroundColor: '#f8fafc', color: '#0f172a' }}>
+                  style={{ padding: '0.4rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.625rem', fontSize: '0.78rem', outline: 'none', backgroundColor: '#f8fafc', color: '#0f172a' }}>
                   <option value=''>All barangays</option>
                   {barangays.map(b => <option key={b} value={b}>{b}</option>)}
                 </select>
                 <button onClick={loadAll}
-                  style={{ padding: '0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <RefreshCw size={14} color='#64748b' style={{ animation: loading ? 'gis-spin 0.8s linear infinite' : 'none' }} />
+                  style={{ padding: '0.4rem 0.4rem', border: '1px solid #e2e8f0', borderRadius: '0.625rem', backgroundColor: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <RefreshCw size={13} color='#64748b' style={{ animation: loading ? 'gis-spin 0.8s linear infinite' : 'none' }} />
                 </button>
               </div>
             </div>
 
             {/* Map */}
-            <div style={{ flex: 1, position: 'relative' }}>
+            <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
               {loading && (
                 <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.9)' }}>
                   <div style={{ textAlign: 'center', color: '#64748b' }}>
@@ -1158,7 +1172,6 @@ const GisMap = () => {
                 </div>
               )}
               <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-              <Legend />
             </div>
 
             <div style={{ padding: '0.6rem 1.1rem', backgroundColor: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1172,7 +1185,7 @@ const GisMap = () => {
           </div>
 
           {/* Panel side */}
-          <div style={{ width: 340, flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden' }}>
+          <div style={{ width: 310, flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               {activeTab === 'utilization' ? <TrendingUp size={15} color='#1a4d1a' /> : <Activity size={15} color='#1a4d1a' />}
               <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
@@ -1197,7 +1210,6 @@ const GisMap = () => {
       {isMobile && (
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
-          {!mobileSheet && <div style={{ position: 'absolute', bottom: '1.5rem', left: '1rem', zIndex: 500 }}><Legend /></div>}
 
           {/* Tab toggle mobile */}
           {!mobileSheet && (
