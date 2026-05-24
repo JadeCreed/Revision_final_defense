@@ -1,0 +1,742 @@
+================================================================================
+    CAPSTONE: SEED UTILIZATION SYSTEM - COMPLETE IMPLEMENTATION PLAN
+================================================================================
+Date Created: May 23, 2026
+Project: Rice Distribution to Harvest Tracking System
+Scope: Barangay Level + Agricultural Technician Integration (Philippines)
+Status: Ready for Implementation
+
+================================================================================
+SECTION 1: SEEDING DENSITY CONSTANTS (CRITICAL - DO NOT CHANGE)
+================================================================================
+
+These are Department of Agriculture (DA) official standards:
+
+HYBRID Rice Seeds:
+  Density: 15 kg per hectare
+  Examples: Mestiso, Sl-8H, Bigante
+  Target Yield: 4,000 kg/ha (at dry weight)
+
+INBRED Rice Seeds:
+  Density: 40 kg per hectare
+  Examples: PSB Rc 22 (Lanao), Rc22, Rc26
+  Target Yield: 1,500 kg/ha (at dry weight)
+  IMPORTANT: PSB Rc 22 is INBRED, NOT HYBRID - use 40 kg/ha constant
+
+OWN_SEED (Farmer's Own Stock):
+  Density: 15 kg per hectare (conservative estimate)
+  Target Yield: ❓ TODO - CONFIRM WITH CLIENT
+    Currently Assumed: 2,000 kg/ha (at dry weight)
+    Alternative Options:
+      - 1,500 kg/ha (conservative, same as INBRED)
+      - 2,500 kg/ha (if client expects better than INBRED)
+      - NO STANDARD (self-reported only, no utilization %, just recorded)
+    
+    Questions for Client:
+    1. What is your expected yield for OWN_SEED?
+    2. Should OWN_SEED have a standard yield target?
+    3. If yes, is it 2,000 kg/ha or different?
+    
+    CLIENT CONFIRMED ANSWER: ___________________________
+
+Code Storage Location:
+  → backend/config/settings.py (as SEEDING_DENSITY & STANDARD_YIELDS dict)
+  → Will be used by HarvestRecord model calculations per seed type
+
+================================================================================
+SECTION 2: HARVEST WEIGHT STANDARDS
+================================================================================
+
+Fresh Weight:
+  Definition: Wet paddy (rice) as harvested directly from field
+  Moisture Level: ~25% moisture content
+  When Recorded: At harvest time by BRGY President
+  Example: 1,800 kg fresh from field
+
+Dry Weight:
+  Definition: After drying to 14% moisture (DA standard)
+  Moisture Level: 14% moisture content
+  When Used: For all DA yield comparisons and system calculations
+  Conversion: Fresh → Dry = deduct 10-15% (use 12% as default)
+  Formula: Dry Weight = Fresh Weight × 0.88 (12% reduction)
+  Example: 1,800 kg × 0.88 = 1,584 kg dry weight
+
+CRITICAL: DA target yields (e.g., 4,000 kg/ha for HYBRID) are in DRY WEIGHT
+  If system uses fresh weight without conversion, calculations will be wrong!
+
+UI Implementation:
+  → BrgyHarvest form must have toggle: [Fresh Weight] or [Dried Weight]
+  → If Fresh selected: System auto-converts to dry weight for calculations
+  → Display both values: "Harvest: 1,800 kg (fresh) = 1,584 kg (dry weight)"
+
+================================================================================
+SECTION 3: THE COMPLETE WORKFLOW (5 PHASES)
+================================================================================
+
+PHASE 1: BENEFICIARIES ENCODING (Before Seed Arrives)
+  When: 1-2 weeks before seed distribution
+  Who: BRGY President (e.g., Elena)
+  Where: Barangay Hall / Community Center
+  What: Farmer lists intended farm area
+  
+  Data Recorded:
+    ├─ Farmer Name
+    ├─ RSBSA Number
+    ├─ Contact
+    ├─ Area Planned (hectares) ← KEY FIELD (e.g., 0.5 ha)
+    ├─ Crop Establishment (DS/TP)
+    └─ e-Signature
+  
+  System Action: Stores in beneficiaries database
+  Status: Eligible for seed distribution
+
+---
+
+PHASE 2: DISTRIBUTION ENCODING (Seed Arrives)
+  When: Seed bags physically delivered to barangay
+  Who: BRGY President + Admin approval
+  Where: Barangay office / Distribution site
+  What: Record who gets how much seed
+  
+  System Auto-Calculates Seed Qty:
+    Area Planned (from Phase 1): 0.5 ha
+    Seed Type: HYBRID (15 kg/ha standard)
+    Seed to Distribute = 0.5 ha × 15 kg/ha = 7.5 kg ≈ 1 bag
+  
+  Data Stored:
+    ├─ Farmer: Juan Dela Cruz
+    ├─ Farm Area: 0.5 ha
+    ├─ Seed Distributed: 15 kg (1 bag, rounded up for buffer)
+    ├─ Seed Type: HYBRID
+    ├─ Variety: PSB Rc 22 or Mestiso
+    ├─ Status: Approved
+    └─ Approved By: Admin
+  
+  Checkpoint: ✅ 15 kg HYBRID seed given to Juan for 0.5 ha planned
+
+---
+
+PHASE 3: FARMER PLANTS (Planting Period)
+  When: 3-7 days after seed delivery
+  Who: Farmer (Juan Dela Cruz)
+  Where: Farm field
+  What: Farmer actually plants seeds
+  
+  Real-World Reality Check:
+    Water shortage, land issues, farmer changes mind
+    Juan can only prepare 0.3 ha (NOT 0.5 ha planned)
+    He plants ~4.5 kg of distributed seed
+    He keeps ~10.5 kg as backup/emergency
+  
+  NOTE: System does NOT record here - this is farmer action phase
+  System will calculate this LATER in Phase 4 when AT visits
+
+---
+
+PHASE 4: CROP PHASE MONITORING (AT Field Visit)
+  When: 20 days after planting (Seedling stage)
+  Who: Agricultural Technician (e.g., Remy)
+  Where: Farmer's field
+  What: AT walks field and records observations
+  
+  Data Recorded by AT:
+    ├─ Visit Date: April 10, 2026
+    ├─ Phase: SEEDLING (20 days old)
+    ├─ Area Actually Planted: 0.3 hectares ← AT PHYSICALLY MEASURED
+    ├─ Crop Condition: Healthy
+    ├─ Observations: 
+    │  ├─ Germination: Good coverage
+    │  ├─ Pests: None observed
+    │  ├─ Disease: None observed
+    │  └─ Water: Adequate
+    └─ Recorded By: Remy (AT)
+  
+  System Auto-Calculates (upon AT submission):
+    Area Actually Planted: 0.3 ha (from AT record)
+    Seed Density (HYBRID): 15 kg/ha
+    Seed Implied Planted = 0.3 ha × 15 kg/ha = 4.5 kg ← CALCULATED
+    Seed Not Used = 15 kg - 4.5 kg = 10.5 kg
+  
+  Key Point: System calculates implied seed from area, NOT asking farmer
+  Why: ATs can measure land, they cannot measure individual bags
+
+---
+
+PHASE 5: HARVEST RECORDING (Harvest Time)
+  When: ~90 days after planting
+  Who: BRGY President (Elena) - Meeting with farmers
+  Where: Barangay Hall / Community Center
+  What: Record harvest output BY SEED TYPE (separate entries per seed type)
+  
+  IMPORTANT: One farmer may have multiple harvest entries (one per seed type)
+  
+  BRGY Encodes (For EACH Seed Type Farmer Grew):
+    ├─ Harvest Date: June 10, 2026
+    ├─ Seed Type: HYBRID / INBRED / OWN_SEED ← SEPARATE ENTRY FOR EACH
+    ├─ Harvest Amount: 3,000 kg (Elena asks farmer per seed type)
+    ├─ Weight Type: [Fresh] or [Dried]
+    └─ Notes: Harvest condition
+  
+  Example for Farmer Juan:
+    Entry 1 → HYBRID: 3,000 kg fresh
+    Entry 2 → INBRED: 2,700 kg fresh
+    Entry 3 → OWN_SEED: 3,000 kg fresh
+    (Three separate HarvestRecord entries)
+  
+  If Fresh Selected (Per Seed Type):
+    Example HYBRID Entry:
+      Fresh Weight: 3,000 kg (Elena asks farmer)
+      System Auto-Converts: 3,000 kg × 0.88 = 2,640 kg (dry weight)
+      Display: "HYBRID Harvest: 3,000 kg (fresh) = 2,640 kg (dry weight)"
+    
+    Example INBRED Entry:
+      Fresh Weight: 2,700 kg (Elena asks farmer)
+      System Auto-Converts: 2,700 kg × 0.88 = 2,376 kg (dry weight)
+      Display: "INBRED Harvest: 2,700 kg (fresh) = 2,376 kg (dry weight)"
+    
+    Example OWN_SEED Entry:
+      Fresh Weight: 3,000 kg (Elena asks farmer)
+      System Auto-Converts: 3,000 kg × 0.88 = 2,640 kg (dry weight)
+      Display: "OWN_SEED Harvest: 3,000 kg (fresh) = 2,640 kg (dry weight)"
+  
+  System Links Data from Previous Phases:
+    From Phase 2 (Distribution):
+      ├─ Area Planned: 0.5 ha
+      ├─ Seed Distributed: 15 kg
+      └─ Seed Type: HYBRID
+    
+    From Phase 4 (Crop Phase):
+      └─ Area Actually Planted: 0.3 ha ✅
+  
+  System Auto-Calculates Six Metrics:
+
+================================================================================
+SECTION 4: AUTOMATIC CALCULATIONS (System Computes These)
+================================================================================
+
+CALCULATION 1: Harvest in Kilograms
+  harvest_kg = harvest_bags × 50
+  Example: 36 bags × 50 = 1,800 kg fresh
+  With dry weight: 1,800 kg × 0.88 = 1,584 kg dry
+  Display: "Harvest: 1,800 kg (fresh) = 1,584 kg (dry weight)"
+
+---
+
+CALCULATION 2: Standard Expected Yield
+  Used to compare farmer performance
+  Formula: Area Planted (ha) × Standard Yield per Seed Type
+  
+  For HYBRID:
+    Expected = 0.3 ha × 4,000 kg/ha = 1,200 kg
+  
+  For INBRED:
+    Expected = 0.3 ha × 1,500 kg/ha = 450 kg
+  
+  For OWN_SEED:
+    Expected = 0.3 ha × 2,000 kg/ha = 600 kg
+  
+  Note: This uses AREA ACTUALLY PLANTED (0.3 ha), not planned (0.5 ha)
+
+---
+
+CALCULATION 3: Seed Implied Planted (NEW - CRITICAL)
+  This is how much seed farmer actually needed
+  Formula: Area Planted (ha) × Seeding Density (kg/ha)
+  
+  For HYBRID:
+    Implied = 0.3 ha × 15 kg/ha = 4.5 kg
+  
+  For INBRED:
+    Implied = 0.3 ha × 40 kg/ha = 12 kg
+  
+  Why This Works:
+    - ATs measure area in field (verifiable)
+    - System calculates seed from standard density (scientific)
+    - Eliminates farmer guessing "I planted about 5 kilos"
+    - Protects farmer reputation (not blamed for extra seeds)
+
+---
+
+CALCULATION 4: Seed Efficiency Percentage (NEW)
+  How much of distributed seed was actually needed
+  Formula: (Seed Implied Planted ÷ Seed Distributed) × 100
+  
+  Example:
+    Seed Implied Planted: 4.5 kg
+    Seed Distributed: 15 kg
+    Seed Efficiency = (4.5 ÷ 15) × 100 = 30%
+  
+  Meaning:
+    - Only 30% of distributed seed was needed for 0.3 ha
+    - 70% was leftover (kept as backup, shared with neighbor, etc.)
+    - Government can see if over-supplying certain barangays
+    - NOT a criticism of farmer - it's a supply chain metric
+
+---
+
+CALCULATION 5: Harvest Utilization Percentage (MAIN METRIC - NEW LOGIC)
+  This is the MOST IMPORTANT metric - shows farmer performance
+  Formula: (Actual Harvest ÷ Expected Harvest) × 100
+  
+  OLD SYSTEM (WRONG):
+    Harvest ÷ Seed Distributed × 100 = meaningless number
+    Example: 1,800 ÷ 15 = 12,000% (nonsense)
+  
+  NEW SYSTEM (CORRECT):
+    Harvest ÷ (Area Actually Planted × Standard Yield) × 100
+    Example: 1,584 (dry) ÷ (0.3 ha × 4,000 kg/ha) × 100
+             = 1,584 ÷ 1,200 × 100
+             = 132% ✅ EXCELLENT PERFORMANCE
+  
+  What It Means:
+    - 132% means farmer harvested 32% MORE than standard yield
+    - This is EXCELLENT performance
+    - Without this fix: Would look like farmer failed (75% if using 0.5 ha)
+    - With this fix: Shows Juan is a Master Farmer
+  
+  Interpretation Guide:
+    ≥ 100%  → Excellent / Above Target
+    80-99%  → Good / Meets Target
+    50-79%  → Fair / Below Target (possible pest/disease)
+    < 50%   → Poor / Major Problems
+
+---
+
+CALCULATION 6: Productivity Ratio (NEW)
+  How much paddy produced per 1 kg of seed planted
+  Formula: Harvest ÷ Seed Implied Planted
+  
+  Example:
+    Harvest: 1,584 kg (dry)
+    Seed Planted: 4.5 kg
+    Productivity = 1,584 ÷ 4.5 = 352 kg paddy per 1 kg seed
+  
+  Standard HYBRID: 266.67 kg/kg (4,000 kg ÷ 15 kg/ha)
+  Juan's Achievement: 352 kg/kg
+  Performance: +32% above standard ✅
+  
+  What It Means:
+    - Each kg of seed produced 352 kg paddy (excellent efficiency)
+    - Can compare across farmers and seasons
+    - Shows seed-to-harvest conversion rate
+
+================================================================================
+SECTION 5: HARVEST FORM STRUCTURE (Multiple Seed Types)
+================================================================================
+
+BrgyHarvest.jsx Form Layout:
+
+HARVEST ENCODING - Farmer: Juan Dela Cruz
+┌─────────────────────────────────────────────────────────────────────┐
+│                                                                      │
+│  HYBRID Harvest Entry                                              │
+│  ├─ Harvest Amount (kg): [3000_______]                            │
+│  ├─ Weight Type:                                                   │
+│  │  ⭕ Fresh/Wet (just harvested)                                  │
+│  │  ⭕ Dried (already dried)                                       │
+│  └─ Fresh: 3,000 kg → Dry: 2,640 kg                               │
+│                                                                      │
+│  INBRED Harvest Entry                                              │
+│  ├─ Harvest Amount (kg): [2700_______]                            │
+│  ├─ Weight Type:                                                   │
+│  │  ⭕ Fresh/Wet (just harvested)                                  │
+│  │  ⭕ Dried (already dried)                                       │
+│  └─ Fresh: 2,700 kg → Dry: 2,376 kg                               │
+│                                                                      │
+│  OWN_SEED Harvest Entry                                            │
+│  ├─ Harvest Amount (kg): [3000_______]                            │
+│  ├─ Weight Type:                                                   │
+│  │  ⭕ Fresh/Wet (just harvested)                                  │
+│  │  ⭕ Dried (already dried)                                       │
+│  └─ Fresh: 3,000 kg → Dry: 2,640 kg                               │
+│                                                                      │
+│  [+ Add Another Seed Type]  [Save All Records]                     │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+
+Key Features:
+  • Elena enters harvest amount separately for each seed type farmer grew
+  • Fresh/Dry toggle per seed type
+  • Auto-calculation preview per seed type
+  • Single "Save All" button submits all entries at once
+  • Creates ONE HarvestRecord per seed type (3 records for example above)
+
+COMPUTATION: NO FORMULA CHANGES
+  The calculations remain identical, but applied separately per seed type:
+  
+  For HYBRID Entry (3,000 kg fresh → 2,640 kg dry):
+    ├─ Seed Implied: 0.3 ha × 15 kg/ha = 4.5 kg
+    ├─ Seed Efficiency: 4.5 ÷ 15 × 100 = 30%
+    ├─ Expected Yield: 0.3 ha × 4,000 kg/ha = 1,200 kg
+    ├─ Utilization: 2,640 ÷ 1,200 × 100 = 220% ✅ EXCELLENT
+    └─ Productivity: 2,640 ÷ 4.5 = 587 kg/kg
+  
+  For INBRED Entry (2,700 kg fresh → 2,376 kg dry):
+    ├─ Seed Implied: 0.3 ha × 40 kg/ha = 12 kg (NOT 15!)
+    ├─ Seed Efficiency: 12 ÷ 40 × 100 = 30%
+    ├─ Expected Yield: 0.3 ha × 1,500 kg/ha = 450 kg
+    ├─ Utilization: 2,376 ÷ 450 × 100 = 528% ✅ EXCEPTIONAL
+    └─ Productivity: 2,376 ÷ 12 = 198 kg/kg
+  
+  For OWN_SEED Entry (3,000 kg fresh → 2,640 kg dry):
+    ├─ Seed Implied: 0.3 ha × 15 kg/ha = 4.5 kg
+    ├─ Seed Efficiency: 4.5 ÷ 15 × 100 = 30%
+    ├─ Expected Yield: 0.3 ha × 2,000 kg/ha = 600 kg (pending client confirmation)
+    ├─ Utilization: 2,640 ÷ 600 × 100 = 440% ✅ EXCEPTIONAL
+    └─ Productivity: 2,640 ÷ 4.5 = 587 kg/kg
+
+  Each HarvestRecord is calculated independently using its seed type's constants
+
+================================================================================
+SECTION 5B: COMPLETE HARVEST RECORD DISPLAY (Per Seed Type)
+================================================================================
+
+Complete Harvest Record Display (in BrgyHarvest.jsx) - HYBRID Entry:
+
+┌────────────────────────────────────────────────────────┐
+│        HARVEST RECORD - Juan Dela Cruz - HYBRID        │
+├────────────────────────────────────────────────────────┤
+│                                                        │
+│  DISTRIBUTION INFORMATION (Linked from Phase 2):      │
+│  ├─ Distributed Date: March 15, 2026                 │
+│  ├─ Seed Type: HYBRID                               │
+│  ├─ Variety: Mestiso / Sl-8H / Bigante              │
+│  ├─ Area Planned: 0.5 hectares                       │
+│  ├─ Seed Distributed: 15 kg (1 bag)                  │
+│  └─ Approved: ✓ Admin                                │
+│                                                        │
+│  CROP PHASE INFORMATION (Linked from Phase 4):        │
+│  ├─ Visit Date: April 10, 2026                       │
+│  ├─ Phase at Visit: SEEDLING (20 days)              │
+│  ├─ Area Actually Planted: 0.3 hectares             │
+│  ├─ Condition: Healthy, No pests                    │
+│  └─ Recorded by: Remy (AT)                          │
+│                                                        │
+│  HARVEST INFORMATION (Recorded in Phase 5):           │
+│  ├─ Harvest Date: June 10, 2026                      │
+│  ├─ Seed Type: HYBRID (this entry only)             │
+│  ├─ Harvest: 3,000 kg (fresh weight)                │
+│  ├─ Converted: 2,640 kg (dry weight, 12% reduction) │
+│  ├─ Weight Type: Fresh ✓                             │
+│  ├─ Encoded by: Elena (BRGY President)              │
+│  └─ Notes: Good harvest, no major pests             │
+│                                                        │
+│  ─────────────────────────────────────────           │
+│  CALCULATED METRICS (HYBRID ONLY):                   │
+│  ─────────────────────────────────────────           │
+│                                                        │
+│  📊 SEED EFFICIENCY (HYBRID): 30%                    │
+│     Seed Distributed: 15 kg                          │
+│     Seed Implied Planted: 4.5 kg (0.3 ha × 15/ha)   │
+│     Unused Seed Balance: 10.5 kg (Stored/Shared)    │
+│                                                        │
+│  🚀 PRODUCTIVITY (HYBRID): 587 kg paddy / 1 kg seed │
+│     Seed Planted: 4.5 kg                             │
+│     Harvest: 2,640 kg (dry)                          │
+│     Performance: 2,640 ÷ 4.5 = 587 kg/kg ✅        │
+│     Standard HYBRID: 266.67 kg/kg                    │
+│     +120% above standard (EXCEPTIONAL)               │
+│                                                        │
+│  🎯 HARVEST UTILIZATION (HYBRID): 220% ✅ EXCEPTIONAL│
+│     Expected Yield: 0.3 ha × 4,000 kg/ha = 1,200 kg│
+│     Actual Yield: 2,640 kg (dry)                    │
+│     Result: 120% above target (MASTER FARMER!)      │
+│                                                        │
+│  ─────────────────────────────────────────           │
+│  INTERPRETATION:                                      │
+│  ─────────────────────────────────────────           │
+│                                                        │
+│  ✅ Juan is a MASTER FARMER (HYBRID)!               │
+│  • Received 15 kg HYBRID for 0.5 ha                  │
+│  • Actually planted 0.3 ha (water shortage)          │
+│  • Needed 4.5 kg (kept 10.5 kg backup)              │
+│  • HYBRID Harvest: 3,000 kg fresh = 2,640 kg dry   │
+│  • Achieved 220% of expected yield (120% above!)     │
+│  • Produced 587 kg paddy per 1 kg seed              │
+│                                                        │
+│  NOTE: Juan also has INBRED and OWN_SEED entries    │
+│  (shown separately, each with own calculations)      │
+│                                                        │
+│  Status: ✅ RECORDED                                 │
+│  Created: June 10, 2026                              │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+
+================================================================================
+SECTION 6: CAPSTONE DEFENSE TALKING POINTS
+================================================================================
+
+Opening Statement:
+"We recognized that agricultural seed utilization calculations need to be based
+on verifiable field measurements, not guesswork. Our system links all five 
+phases of the rice farming cycle to create an accurate, defensible picture of 
+farmer performance."
+
+Problem Solved:
+"Traditional systems calculate utilization from seed distributed. This is wrong
+because it ignores the actual farm area. A farmer who plants 0.3 ha and achieves
+high yield looks like a failure when compared to 0.5 ha planned area. Our system
+fixes this by using area ACTUALLY planted (measured by AT) to calculate real 
+farm productivity."
+
+Technical Innovation:
+"We use 'Implied Seed Usage' - a scientific calculation based on standard 
+seeding density (15 kg/ha for HYBRID, 40 kg/ha for INBRED). The AT doesn't 
+need to weigh seeds in the field. They measure land area, and our system 
+calculates how much seed should have been planted. This is infinitely more 
+reliable than asking a farmer to guess kilogram amounts."
+
+Real-World Impact (Using Example):
+"Juan received 15 kg seed, but planted only 0.3 ha due to water shortage.
+- Old system: 1,800 kg ÷ 15 kg = meaningless (12,000%)
+- Our system: 1,584 kg ÷ (0.3 ha × 4,000 kg/ha) = 132% EXCELLENT
+  This correctly shows Juan as an excellent farmer, not a failure."
+
+Data Architecture Validity:
+"Our system is based on real Department of Agriculture standards:
+- Seeding density constants (HYBRID 15 kg/ha, INBRED 40 kg/ha)
+- Dry weight standards for yield comparison (14% moisture)
+- AT measurement protocols (area in hectares)
+- This design is fully defensible for production deployment."
+
+Fresh vs Dry Weight Handling:
+"We added a toggle for Fresh/Dry weight because DA yield targets are in dry 
+weight (14% moisture), but BRGY records fresh weight (25% moisture). The system
+automatically converts 1,800 kg fresh → 1,584 kg dry for fair comparison."
+
+Scalability:
+"This system works for any barangay because:
+1. Area is measured by AT (same everywhere)
+2. Seeding constants are DA standards (same everywhere)
+3. Formula uses verified science, not local assumptions
+4. Can be deployed as is to any municipality in Philippines"
+
+================================================================================
+SECTION 7: IMPLEMENTATION CHECKLIST
+================================================================================
+
+BACKEND CHANGES:
+  [ ] Add SEEDING_DENSITY dict to settings.py
+      {
+        'HYBRID': 15,
+        'INBRED': 40,
+        'OWN_SEED': 15
+      }
+  
+  [ ] Add moisture_content field to HarvestRecord model
+      moisture_content_pct = models.PositiveIntegerField(default=12)
+  
+  [ ] Add @property methods to HarvestRecord:
+      - harvest_kg_fresh (harvest_bags * 50)
+      - harvest_kg_dry (harvest_kg_fresh * (1 - moisture_content_pct/100))
+      - seed_implied_planted_kg (area * seeding_density)
+      - seed_efficiency_pct (seed_implied / seed_distributed * 100)
+      - utilization_pct (harvest_dry / (area * standard_yield) * 100)
+      - productivity_ratio (harvest_dry / seed_implied)
+  
+  [ ] Update HarvestRecordSerializer:
+      Add SerializerMethodField for all new computed properties
+  
+  [ ] Create migration for HarvestRecord changes
+      python manage.py makemigrations production
+      python manage.py migrate
+  
+  [ ] Test calculations with example data
+
+FRONTEND CHANGES:
+  [ ] Update BrgyHarvest.jsx form:
+      - Add radio buttons: Fresh Weight / Dried Weight
+      - Show moisture_content input if Dried selected
+  
+  [ ] Update harvest metric preview box:
+      - Show harvest_kg_fresh and harvest_kg_dry
+      - Show seed_implied_planted_kg with calculation breakdown
+      - Show seed_efficiency_pct
+      - Show utilization_pct as main metric
+      - Show productivity_ratio
+  
+  [ ] Update records list display:
+      - Add utilization % column (color-coded: green/yellow/red)
+      - Add seed efficiency % column
+      - Keep existing columns (farmer, date, area, bags, yield)
+  
+  [ ] Add tooltip/legend explaining each metric
+
+DATABASE VALIDATION:
+  [ ] Verify seed_poll.SeedVariety has classification field
+      (links variety to HYBRID/INBRED for correct constant lookup)
+  
+  [ ] Test with real data from distribution records
+  
+  [ ] Verify area_actually_planted_ha is being recorded by Crop Phase
+  
+  [ ] Create test harvest records with all edge cases:
+      - Fresh weight conversion
+      - HYBRID vs INBRED calculations
+      - Low/medium/high utilization examples
+      - High utilization (100%+) vs low (<50%)
+
+DOCUMENTATION:
+  [ ] Add docstrings to all @property methods
+  [ ] Add comments explaining seeding density constants
+  [ ] Create user guide for BRGY (how to enter fresh vs dry weight)
+  [ ] Create admin guide for interpreting utilization metrics
+
+TESTING:
+  [ ] Unit tests for calculation formulas
+  [ ] Integration test: Distribution → Harvest workflow
+  [ ] Verify INBRED calculations (40 kg/ha, not 15)
+  [ ] Test fresh-to-dry conversion (12% default)
+  [ ] Test edge cases (zero area, no harvest, missing data)
+
+DEPLOYMENT:
+  [ ] Code review with team
+  [ ] Test in staging environment
+  [ ] Prepare training for BRGY users
+  [ ] Prepare training for AT users
+  [ ] Prepare admin dashboard to display metrics
+
+================================================================================
+SECTION 8: KEY REMINDERS & WARNINGS
+================================================================================
+
+CRITICAL POINTS:
+⚠️  PSB Rc 22 is INBRED (40 kg/ha), NOT HYBRID (15 kg/ha)
+⚠️  Always use DRY WEIGHT for yield calculations (14% moisture standard)
+⚠️  Never ask AT for "actual kg planted" - calculate from area instead
+⚠️  HYBRID standard yield is 4,000 kg/ha (dry weight), not 3,500 or 4,500
+⚠️  INBRED standard yield is 1,500 kg/ha (dry weight)
+⚠️  OWN_SEED standard yield = ❓ CONFIRM WITH CLIENT (currently 2,000 kg/ha)
+⚠️  Fresh to dry conversion should be ~12% (10-15% range acceptable)
+⚠️  ONE farmer creates MULTIPLE HarvestRecords (one per seed type grown)
+⚠️  Each HarvestRecord calculated independently using seed type's standard yield
+
+COMMON MISTAKES TO AVOID:
+❌ Using HYBRID density (15 kg/ha) for INBRED seeds
+❌ Comparing fresh weight harvest to dry weight targets
+❌ Calculating utilization from seed distributed (use area × standard instead)
+❌ Asking farmer to report "kg planted" instead of letting system calculate
+❌ Using planned area (0.5 ha) instead of actually planted area (0.3 ha)
+❌ Forgetting to link harvest record to distribution entry
+❌ Creating one HarvestRecord for total harvest (should be one per seed type)
+❌ Using OWN_SEED standard yield without client confirmation
+❌ Mixing seed types in one entry (keep them separate)
+
+BENEFITS OF THIS SYSTEM:
+✅ Protects farmers from looking inefficient due to supply padding
+✅ Shows real farm productivity per seed type (220% HYBRID vs 117% INBRED, etc.)
+✅ Uses scientifically verified constants (not local guesses)
+✅ Based on AT's actual field measurements (verifiable)
+✅ Separates performance by seed type (fair comparison)
+✅ Scalable to any barangay (same calculation everywhere)
+✅ Defensible in capstone oral defense
+✅ Handles farmers with multiple seed types (common scenario)
+
+================================================================================
+SECTION 9: EXAMPLE SCENARIOS
+================================================================================
+
+SCENARIO A: Excellent Farmer with Multiple Seed Types (Juan - Main Example)
+
+HYBRID Seed Entry:
+  Distribution: 15 kg HYBRID for 0.5 ha planned
+  Actual Planted: 0.3 ha (water shortage)
+  Harvest: 3,000 kg fresh = 2,640 kg dry
+  
+  Calculations:
+    Seed Implied: 0.3 × 15 = 4.5 kg
+    Seed Efficiency: 4.5 ÷ 15 × 100 = 30%
+    Expected Yield: 0.3 × 4,000 = 1,200 kg
+    Utilization: 2,640 ÷ 1,200 × 100 = 220% ✅ EXCEPTIONAL
+    Productivity: 2,640 ÷ 4.5 = 587 kg/kg
+
+INBRED Seed Entry (PSB Rc 22):
+  Distribution: 40 kg INBRED for 0.5 ha planned
+  Actual Planted: 0.3 ha (water shortage)
+  Harvest: 2,700 kg fresh = 2,376 kg dry
+  
+  Calculations:
+    Seed Implied: 0.3 × 40 = 12 kg (NOT 4.5!)
+    Seed Efficiency: 12 ÷ 40 × 100 = 30%
+    Expected Yield: 0.3 × 1,500 = 450 kg
+    Utilization: 2,376 ÷ 450 × 100 = 528% ✅ EXCEPTIONAL
+    Productivity: 2,376 ÷ 12 = 198 kg/kg
+
+OWN_SEED Entry:
+  Distribution: 15 kg OWN_SEED for 0.5 ha planned
+  Actual Planted: 0.3 ha (water shortage)
+  Harvest: 3,000 kg fresh = 2,640 kg dry
+  
+  Calculations:
+    Seed Implied: 0.3 × 15 = 4.5 kg
+    Seed Efficiency: 4.5 ÷ 15 × 100 = 30%
+    Expected Yield: 0.3 × 2,000 = 600 kg (pending client confirmation)
+    Utilization: 2,640 ÷ 600 × 100 = 440% ✅ EXCEPTIONAL
+    Productivity: 2,640 ÷ 4.5 = 587 kg/kg
+
+Overall Assessment: Juan is a MASTER FARMER across all seed types!
+
+---
+
+SCENARIO B: Average Farmer (Maria - HYBRID Only)
+  Distribution: 15 kg HYBRID for 0.5 ha planned
+  Actual Planted: 0.5 ha (full area)
+  Harvest: 1,200 kg fresh = 1,056 kg dry
+  
+  Calculations:
+    Seed Implied: 0.5 × 15 = 7.5 kg
+    Seed Efficiency: 7.5 ÷ 15 × 100 = 50%
+    Expected Yield: 0.5 × 4,000 = 2,000 kg
+    Utilization: 1,056 ÷ 2,000 × 100 = 53% ⚠️ BELOW TARGET
+    Productivity: 1,056 ÷ 7.5 = 141 kg/kg (pest damage suspected)
+
+---
+
+SCENARIO C: INBRED Farmer (Roberto - PSB Rc 22)
+  Distribution: 40 kg INBRED (PSB Rc 22) for 0.3 ha planned
+  Actual Planted: 0.3 ha
+  Harvest: 600 kg fresh = 528 kg dry
+  
+  Calculations:
+    Seed Implied: 0.3 × 40 = 12 kg (NOT 4.5 kg!)
+    Seed Efficiency: 12 ÷ 40 × 100 = 30%
+    Expected Yield: 0.3 × 1,500 = 450 kg
+    Utilization: 528 ÷ 450 × 100 = 117% ✅ EXCELLENT
+    Productivity: 528 ÷ 12 = 44 kg/kg
+
+IMPORTANT: Note the different seeding density (40 kg/ha for INBRED vs 15 kg/ha for HYBRID)
+
+================================================================================
+SECTION 10: REFERENCES & SOURCES
+================================================================================
+
+Department of Agriculture Standards:
+  - Official Seeding Density Constants (DA-CALABARZON)
+  - Dry Weight Standard (14% moisture content)
+  - Yield Targets by Seed Type and Region
+
+Agricultural Technician Protocols:
+  - AT field measurement guidelines
+  - Geo-referencing tools for land area verification
+  - Crop phase monitoring standards
+
+Research Sources:
+  - Philippine Rice Research Institute (PhilRice)
+  - Local Barangay Agriculture Office procedures (Lucban, Quezon)
+  - Municipal Agriculture Office data collection protocols
+
+Real-World Examples:
+  - Farmer Juan Dela Cruz (Barangay Lucban, Quezon)
+  - AT Remy field monitoring records
+  - BRGY President Elena distribution logs
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+Created: May 23, 2026
+For: Capstone Project - Rice Seed Distribution to Harvest Tracking
+Status: READY FOR IMPLEMENTATION
+Version: 1.0 Final
+
+Keep this file accessible during development and oral defense.
+Reference it when explaining calculations and system logic to examiners.

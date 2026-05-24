@@ -182,3 +182,20 @@ EMAIL_HOST_USER = config("BREVO_SENDER_EMAIL")
 EMAIL_HOST_PASSWORD = config("BREVO_API_KEY")
 
 DEFAULT_FROM_EMAIL = "dumpchlb121@gmail.com"
+
+# =========================
+# 🌾 AGRICULTURE CONSTANTS
+# =========================
+# Seeding density (kg/ha) per seed type - DA standard
+SEEDING_DENSITY = {
+    'HYBRID': 15,      # kg/ha
+    'INBRED': 40,      # kg/ha
+    'OWN_SEED': 15,    # kg/ha
+}
+
+# Standard yield (kg/ha dry weight) per seed type
+STANDARD_YIELDS = {
+    'HYBRID': 4000,    # kg/ha
+    'INBRED': 1500,    # kg/ha
+    'OWN_SEED': 2000,  # kg/ha (pending client confirmation)
+}

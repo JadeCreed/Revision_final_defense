@@ -54,6 +54,7 @@ export const MENU_CONFIG = {
     { label: 'Farmers',       path: '/brgy/farmers',        icon: Tractor     },
     { label: 'Beneficiaries', path: '/brgy/beneficiaries',  icon: Package     }, 
     { label: 'Distribution',  path: '/brgy/distribution',   icon: Truck       }, 
+    { label: 'Harvest',       path: '/brgy/harvest',        icon: BarChart3   },
     { label: 'Crop Phase',    path: '/brgy/crop-phase',     icon: Wheat       },
     { label: 'Announcements', path: '/brgy/announcements',  icon: Megaphone   },
     { label: 'Reports',       path: '/brgy/reports',        icon: ClipboardList},

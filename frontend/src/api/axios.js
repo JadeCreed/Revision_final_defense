@@ -203,4 +203,19 @@ export const deleteGisPlot  = (id)     => API.delete(`/gis/plots/${id}/`);
 export const getMapSummary  = ()       => API.get('/gis/summary/');
 export const getGisBarangays= ()       => API.get('/gis/barangays/');
 
+// ── PRODUCTION ──
+export const getHarvestRecords        = (params = {}) => API.get('/production/harvest/', { params });
+export const createHarvestRecord      = (data)        => API.post('/production/harvest/', data);
+export const getHarvestRecord         = (id)          => API.get(`/production/harvest/${id}/`);
+export const updateHarvestRecord      = (id, data)    => API.put(`/production/harvest/${id}/`, data);
+export const deleteHarvestRecord      = (id)          => API.delete(`/production/harvest/${id}/`);
+
+// Production analytics (Admin only)
+export const getProductionSummary     = ()            => API.get('/production/summary/');
+export const getProductionBySeedType  = ()            => API.get('/production/by-seed-type/');
+export const getProductionByBarangay  = ()            => API.get('/production/by-barangay/');
+export const getProductionLowPerformers = (threshold = 100) =>
+  API.get(`/production/low-performers/?threshold=${threshold}`);
+export const getProductionGISSummary  = ()            => API.get('/production/gis-summary/');
+
 export default API;
