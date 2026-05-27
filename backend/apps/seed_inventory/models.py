@@ -1,5 +1,6 @@
 from django.db import models
 from django.db.models import Sum
+from django.core.exceptions import ValidationError
 from apps.accounts.models import User
 from apps.seed_poll.models import SeedType, SeedVariety
 
@@ -24,6 +25,11 @@ class SeedDelivery(models.Model):
         User, on_delete=models.SET_NULL, null=True,
         related_name='seed_deliveries'
     )
+    # Optional link to the finalized season selection used for this delivery
+    final_seed = models.ForeignKey(
+        'seed_poll.FinalSeed', on_delete=models.PROTECT,
+        null=True, blank=True, related_name='deliveries'
+    )
     created_at    = models.DateTimeField(auto_now_add=True)
     updated_at    = models.DateTimeField(auto_now=True)
 
@@ -44,6 +50,24 @@ class SeedDelivery(models.Model):
     @property
     def season_display(self):
         return dict(self.SEASON_CHOICES).get(self.season, self.season)
+
+    def clean(self):
+        """Ensure final_seed (if set) matches this delivery's seed_type, season and year."""
+        super().clean()
+        if self.final_seed:
+            final_type = getattr(self.final_seed, 'seed_type', None)
+            if final_type and self.seed_type and final_type.id != self.seed_type.id:
+                raise ValidationError('final_seed.seed_type must match delivery.seed_type')
+            if getattr(self.final_seed, 'season', None) and getattr(self.final_seed, 'year', None):
+                if self.final_seed.season != self.season or self.final_seed.year != self.year:
+                    raise ValidationError('final_seed season/year must match delivery season/year')
+
+    def save(self, *args, **kwargs):
+        try:
+            self.full_clean(validate_unique=False)
+        except ValidationError:
+            raise
+        return super().save(*args, **kwargs)
 
 
 class BrgyAllocation(models.Model):

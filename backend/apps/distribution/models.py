@@ -13,6 +13,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 
 class DistributionEvent(models.Model):
@@ -50,6 +51,14 @@ class DistributionEvent(models.Model):
         on_delete=models.PROTECT,
         related_name='distribution_events',
         null=True, blank=True
+    )
+
+    # Optional link to the finalized season selection (auditability)
+    final_seed = models.ForeignKey(
+        'seed_poll.FinalSeed',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='events'
     )
 
     # ── SEASON / PROGRAM INFO ──
@@ -119,6 +128,30 @@ class DistributionEvent(models.Model):
 
     def get_batch_count(self):
         return self.batches.count()
+
+    def clean(self):
+        """
+        Validate that when `final_seed` is set it matches the event's season/year and seed_type.
+        Validation only runs when `final_seed` is not None.
+        """
+        super().clean()
+        if self.final_seed:
+            # seed_type may be None on older rows — compare IDs when possible
+            final_type = getattr(self.final_seed, 'seed_type', None)
+            if final_type and self.seed_type and final_type.id != self.seed_type.id:
+                raise ValidationError('final_seed.seed_type must match event.seed_type')
+            if getattr(self.final_seed, 'season', None) and getattr(self.final_seed, 'year', None):
+                if self.final_seed.season != self.season or self.final_seed.year != self.year:
+                    raise ValidationError('final_seed season/year must match event season/year')
+
+    def save(self, *args, **kwargs):
+        # run validation to prevent mismatches being saved
+        try:
+            self.full_clean(validate_unique=False)
+        except ValidationError:
+            # re-raise so callers (views/serializers) can see validation errors
+            raise
+        return super().save(*args, **kwargs)
 
 
 class DistributionBatch(models.Model):

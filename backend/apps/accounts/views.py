@@ -6,11 +6,13 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import PasswordResetOTP
 from .utils import generate_otp, send_otp_email
+from .rate_limit import LoginRateLimiter
 from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 import secrets
 import string
+import re
 
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -52,37 +54,140 @@ User = get_user_model()
 
 # ----------------Authentication Views----------------
 class LoginView(APIView):
+    """
+    Comprehensive login endpoint with validation, rate limiting, and security checks.
+    
+    Error codes:
+    - 400: Validation error (empty fields, invalid format)
+    - 401: Authentication failed (invalid credentials, not verified, account inactive)
+    - 429: Too many attempts (rate limited)
+    - 500: Server error
+    """
 
     def post(self, request):
         try:
-            login_value = request.data.get("login")
-            password = request.data.get("password")
+            login_value = (request.data.get("login") or "").strip()
+            password = request.data.get("password") or ""
+            remember_me = request.data.get("remember_me", False)
 
-            if not login_value or not password:
-                return Response({
-                    "error": "Login and password are required"
-                }, status=400)
+            # ─────────────────────────────────────
+            # 1️⃣ EMPTY FIELD VALIDATION
+            # ─────────────────────────────────────
+            if not login_value and not password:
+                return Response(
+                    {"error": "Email or Contact Number and password are required"},
+                    status=400
+                )
+            if not login_value:
+                return Response(
+                    {"error": "Email or Contact Number is required"},
+                    status=400
+                )
+            if not password:
+                return Response(
+                    {"error": "Password is required"},
+                    status=400
+                )
 
-            # 🔍 Find user by email OR phone
+            # ─────────────────────────────────────
+            # 2️⃣ RATE LIMITING CHECK
+            # ─────────────────────────────────────
+            if LoginRateLimiter.is_locked(login_value):
+                remaining = LoginRateLimiter.get_remaining_time(login_value)
+                return Response(
+                    {"error": f"Too many failed login attempts. Please try again after {remaining} seconds."},
+                    status=429
+                )
+
+            user = None
+            identifier = login_value  # For rate limiting
+
+            # ─────────────────────────────────────
+            # 3️⃣ FORMAT VALIDATION & USER LOOKUP
+            # ─────────────────────────────────────
             if "@" in login_value:
-                user = User.objects.filter(email=login_value).first()
+                # 📧 Email path
+                email = login_value.strip().lower()
+                
+                # Validate email format
+                if not re.match(r'^[a-zA-Z0-9._%+-]+@gmail\.com$', email):
+                    return Response(
+                        {"error": "Please enter a valid email address or 11-digit contact number"},
+                        status=400
+                    )
+                
+                user = User.objects.filter(email__iexact=email).first()
+                identifier = email
             else:
-                user = User.objects.filter(contact_number=login_value).first()
+                # 📞 Phone path
+                normalized = normalize_contact_number(login_value)
+                
+                if not normalized:
+                    return Response(
+                        {"error": "Please enter a valid email address or 11-digit contact number"},
+                        status=400
+                    )
+                
+                if len(normalized) != 11 or not normalized.isdigit() or not normalized.startswith('09'):
+                    return Response(
+                        {"error": "Contact number must be 11 digits starting with 09"},
+                        status=400
+                    )
+                
+                user = User.objects.filter(contact_number=normalized).first()
+                identifier = normalized
 
+            # ─────────────────────────────────────
+            # 4️⃣ AUTHENTICATION CHECK
+            # ─────────────────────────────────────
             if user is None or not user.check_password(password):
-                return Response({
-                    "error": "Invalid credentials"
-                }, status=401)
+                # Record failed attempt for rate limiting
+                LoginRateLimiter.record_failed_attempt(identifier)
+                return Response(
+                    {"error": "Invalid email/contact number or password"},
+                    status=401
+                )
 
-            # 🚫 Optional: check if active
+            # ─────────────────────────────────────
+            # 5️⃣ ACCOUNT STATUS CHECKS
+            # ─────────────────────────────────────
+            
+            # Check if account is active
             if not user.is_active:
-                return Response({
-                    "error": "Account is deactivated"
-                }, status=403)
+                LoginRateLimiter.record_failed_attempt(identifier)
+                return Response(
+                    {"error": "Your account has been deactivated. Please contact the administrator."},
+                    status=403
+                )
+
+            # Check if account is verified
+            if not user.is_verified:
+                LoginRateLimiter.record_failed_attempt(identifier)
+                return Response(
+                    {"error": "Your account is not yet verified. Please check your email."},
+                    status=401
+                )
+
+            # ─────────────────────────────────────
+            # 6️⃣ SUCCESSFUL LOGIN
+            # ─────────────────────────────────────
+            
+            # Reset failed attempts on successful login
+            LoginRateLimiter.reset_failed_attempts(identifier)
 
             # 🔐 Generate JWT
             refresh = RefreshToken.for_user(user)
             access_token = str(refresh.access_token)
+
+            # Determine token lifetime based on remember_me
+            if remember_me:
+                # 30 days for "Remember Me"
+                access_token_lifetime = timedelta(days=30)
+                max_age = 30 * 24 * 60 * 60  # 30 days in seconds
+            else:
+                # 1 hour for regular session
+                access_token_lifetime = timedelta(hours=1)
+                max_age = 3600  # 1 hour
 
             response = Response({
                 "access_token": access_token,
@@ -90,25 +195,27 @@ class LoginView(APIView):
                 "is_verified": user.is_verified,
                 "first_name": user.first_name,
                 "last_name": user.last_name,
+                "contact_number": getattr(user, 'contact_number', None),
                 "message": "Login successful"
             })
-            
+
             # 🍪 Set httpOnly cookie (secure token storage)
             response.set_cookie(
                 key='access_token',
                 value=access_token,
                 httponly=True,
                 secure=False,  # Set to True in production (HTTPS only)
-                samesite='None',  # Required for cross-origin localhost dev
-                max_age=3600  # 1 hour (matches JWT_ACCESS_TOKEN_LIFETIME)
+                samesite='Lax',  # Updated from 'None' to 'Lax' for dev HTTP
+                max_age=max_age
             )
 
             return response
 
         except Exception as e:
-            return Response({
-                "error": str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 # 🔓 Logout View — Clears the httpOnly cookie
 class LogoutView(APIView):
@@ -123,6 +230,78 @@ class LogoutView(APIView):
         response.delete_cookie('access_token')
         
         return response
+
+
+# 🔄 Forgot Password View — Request password reset
+class ForgotPasswordView(APIView):
+    """
+    Request a password reset OTP via email or contact number.
+    Never confirms whether account exists (security best practice).
+    """
+
+    def post(self, request):
+        try:
+            identifier = (request.data.get("email_or_phone") or "").strip()
+
+            if not identifier:
+                return Response(
+                    {"error": "Email or contact number is required"},
+                    status=400
+                )
+
+            user = None
+
+            # 📧 Email path
+            if "@" in identifier:
+                email = identifier.lower()
+                if not re.match(r'^[a-zA-Z0-9._%+-]+@gmail\.com$', email):
+                    # Generic response to avoid account enumeration
+                    return Response(
+                        {"message": "If this account exists, a reset code will be sent"},
+                        status=200
+                    )
+                user = User.objects.filter(email__iexact=email).first()
+            else:
+                # 📞 Phone path
+                normalized = normalize_contact_number(identifier)
+                if normalized and len(normalized) == 11 and normalized.isdigit():
+                    user = User.objects.filter(contact_number=normalized).first()
+
+            # 🔒 Always return the same generic message for security
+            # Never confirm if account exists or not
+            if user:
+                # Generate OTP
+                otp_code = generate_otp()
+                
+                # Clear any existing OTPs
+                PasswordResetOTP.objects.filter(user=user).delete()
+                
+                # Create new OTP record (expires in 5 minutes)
+                PasswordResetOTP.objects.create(
+                    user=user,
+                    otp=otp_code,
+                    is_used=False
+                )
+                
+                # Send OTP via email if user has email
+                if user.email:
+                    try:
+                        send_otp_email(user.email, otp_code, user.first_name)
+                    except Exception as e:
+                        # Log error but don't fail the response
+                        print(f"Error sending OTP email: {e}")
+
+            # Always return the same generic message
+            return Response(
+                {"message": "If this account exists, a reset code will be sent"},
+                status=200
+            )
+
+        except Exception as e:
+            return Response(
+                {"error": str(e)},
+                status=500
+            )
 
 
 # ✅ Verify Token View — Check if user is authenticated
@@ -1042,9 +1221,6 @@ class AdminUpdateATAssignedBarangaysView(APIView):
             if barangay_obj.assigned_at_id != at_profile.id:
                 barangay_obj.assigned_at = at_profile
                 barangay_obj.save()
-
-        at_profile.assigned_barangay = desired_barangays[0]
-        at_profile.save()
 
         return Response({
             "message": "Assigned barangays updated",

@@ -8,15 +8,53 @@ import logo from '../assets/logo.png';
 const ROLE_ROUTES = { ADMIN: '/admin', FARMER: '/farmer', AT: '/at', BRGY: '/brgy' };
 
 const AuthBox = () => {
-  const [form, setForm] = useState({ login: '', password: '' });
+  const [form, setForm] = useState({ login: '', password: '', remember_me: false });
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({ login: '', password: '' });
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Real-time field validation
+  const validateLoginField = (value) => {
+    if (!value.trim()) return '';
+    
+    // Check if it looks like an email
+    if (value.includes('@')) {
+      if (!value.endsWith('@gmail.com')) {
+        return 'Only Gmail addresses are accepted (e.g. juan@gmail.com)';
+      }
+    } else {
+      // Check if it's a contact number
+      if (!/^\d+$/.test(value)) {
+        return ''; // Allow user to type
+      }
+      if (!value.startsWith('09')) {
+        return 'Contact number must start with 09';
+      }
+      if (value.length < 11) {
+        return 'Contact number must be exactly 11 digits';
+      }
+      if (value.length > 11) {
+        return 'Contact number must be exactly 11 digits';
+      }
+    }
+    return '';
+  };
+
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value, type, checked } = e.target;
+    
+    if (name === 'login') {
+      const fieldError = validateLoginField(value);
+      setFieldErrors({ ...fieldErrors, login: fieldError });
+    }
+    
+    setForm({ 
+      ...form, 
+      [name]: type === 'checkbox' ? checked : value 
+    });
     setError('');
   };
 
@@ -24,12 +62,59 @@ const AuthBox = () => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    
     try {
-      const res = await loginUser(form);
+      // Frontend validation before sending to backend
+      const trimmedLogin = form.login.trim();
+      const trimmedPassword = form.password.trim();
+
+      if (!trimmedLogin && !trimmedPassword) {
+        setError('Email or Contact Number and password are required');
+        setLoading(false);
+        return;
+      }
+      if (!trimmedLogin) {
+        setError('Email or Contact Number is required');
+        setLoading(false);
+        return;
+      }
+      if (!trimmedPassword) {
+        setError('Password is required');
+        setLoading(false);
+        return;
+      }
+
+      // Check for field-level validation errors
+      if (fieldErrors.login) {
+        setError('Please fix the errors below before submitting');
+        setLoading(false);
+        return;
+      }
+
+      const res = await loginUser({
+        login: trimmedLogin,
+        password: trimmedPassword,
+        remember_me: form.remember_me
+      });
+      
       login(res.data);
       navigate(ROLE_ROUTES[res.data.role] || '/');
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      // Handle different HTTP status codes with appropriate messages
+      const status = err.response?.status;
+      const errorMsg = err.response?.data?.error;
+
+      if (status === 429) {
+        setError(errorMsg || 'Too many failed login attempts. Please try again later.');
+      } else if (status === 403) {
+        setError(errorMsg || 'Your account has been deactivated. Please contact the administrator.');
+      } else if (status === 401) {
+        setError(errorMsg || 'Invalid email/contact number or password');
+      } else if (status === 400) {
+        setError(errorMsg || 'Please check your email/contact number format');
+      } else {
+        setError(errorMsg || 'Login failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -54,12 +139,12 @@ const AuthBox = () => {
             <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>
             </svg>
-            {error}
+            <span>{error}</span>
           </div>
         )}
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* EMAIL */}
+          {/* EMAIL/CONTACT */}
           <div className="authbox-field">
             <label className="authbox-label">Email or Contact Number</label>
             <div className="authbox-input-wrap">
@@ -67,16 +152,21 @@ const AuthBox = () => {
                 <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
               </svg>
               <input
-                className={`authbox-input${error ? ' authbox-input--error' : ''}`}
+                className={`authbox-input${fieldErrors.login ? ' authbox-input--error' : ''}`}
                 type="text"
                 name="login"
-                placeholder="Email or Contact Number"
+                placeholder="Enter email or contact number"
                 value={form.login}
                 onChange={handleChange}
                 required
                 autoComplete="username"
               />
             </div>
+            {fieldErrors.login && (
+              <small style={{ color: '#dc2626', display: 'block', marginTop: '4px', fontSize: '13px' }}>
+                {fieldErrors.login}
+              </small>
+            )}
           </div>
 
           {/* PASSWORD */}
@@ -87,7 +177,7 @@ const AuthBox = () => {
                 <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
               <input
-                className={`authbox-input${error ? ' authbox-input--error' : ''}`}
+                className={`authbox-input${error && error.includes('password') ? ' authbox-input--error' : ''}`}
                 type={showPass ? 'text' : 'password'}
                 name="password"
                 placeholder="Enter your password"
@@ -115,10 +205,16 @@ const AuthBox = () => {
             </div>
           </div>
 
-          {/* REMEMBER + FORGOT */}
+          {/* REMEMBER ME + FORGOT */}
           <div className="authbox-row">
             <label className="authbox-remember">
-              <input type="checkbox" /> Remember me
+              <input 
+                type="checkbox" 
+                name="remember_me"
+                checked={form.remember_me}
+                onChange={handleChange}
+              />
+              <span>Remember me</span>
             </label>
             <Link to="/forgot-password" className="authbox-forgot">Forgot Password?</Link>
           </div>
@@ -161,10 +257,10 @@ const AuthBox = () => {
       </div>
       {/* ── END CARD ── */}
 
-      {/* ── BELOW CARD: footer + socials on cream bg (help removed) ── */}
+      {/* ── BELOW CARD: footer + socials on cream bg ── */}
       <div className="authbox-below">
         <p className="authbox-footer">
-          AGRICE – Municipal Agriculture Office, Lucban<br />© 2026 A rights reserved.
+          AGRICE – Municipal Agriculture Office, Lucban<br />© 2026 All rights reserved.
         </p>
         <div className="authbox-socials">
           <a href="#" className="authbox-social-btn" aria-label="Facebook">
@@ -189,5 +285,4 @@ const AuthBox = () => {
     </div>
   );
 };
-
 export default AuthBox;

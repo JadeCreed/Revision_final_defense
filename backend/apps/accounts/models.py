@@ -118,10 +118,7 @@ class FarmerProfile(models.Model):
     four_ps = models.BooleanField(default=False)
 
     # 🔹 Contact
-    email = models.EmailField(blank=True, null=True)
-    contact_number = models.CharField(max_length=11, blank=True, null=True)
-
-    # 🔹 Timestamp
+        # 🔹 Timestamp
     date_completed = models.DateTimeField(auto_now=True)
 
     def is_complete(self):
@@ -147,7 +144,6 @@ class FarmerProfile(models.Model):
 # Agricultural Technician profile
 class AgriculturalTechnicianProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='at_profile')
-    assigned_barangay = models.CharField(max_length=50, choices=BARANGAY_CHOICES)
 
     def get_assigned_barangays(self):
         """Returns list of barangay names assigned to this AT"""
@@ -191,10 +187,9 @@ class Barangay(models.Model):
 # Brgy President profile
 class BrgyPresidentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='bp_profile')
-    barangay = models.CharField(max_length=50, choices=BARANGAY_CHOICES)
 
     def __str__(self):
-        return f"BP {self.user.first_name} {self.user.last_name} | {self.barangay}"
+        return f"BP {self.user.first_name} {self.user.last_name} | {self.user.barangay or 'Unassigned'}"
 
 # =========================
 # 🔐 PASSWORD RESET OTP

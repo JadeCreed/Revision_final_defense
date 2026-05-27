@@ -135,6 +135,14 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# ─── CACHING (for rate limiting and session storage) ───
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'agrice-cache',
+    }
+}
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -150,16 +158,17 @@ SIMPLE_JWT = {
 # ── HARVEST WEIGHT AND COOKIE DEFAULTS ──
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = False  # True in production (HTTPS only)
-SESSION_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_SAMESITE = 'Lax'  # Use 'None'+Secure for cross-site in production
 
-CSRF_COOKIE_HTTPONLY = True
+# Allow admin/login JS to access CSRF cookie in dev; keep secure defaults in prod
+CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SECURE = False  # True in production
-CSRF_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'Lax'
 
 # JWT Token can be accessed via cookies
 JWT_AUTH_COOKIE = 'access_token'
-JWT_AUTH_COOKIE_SECURE = False  # True in production
-JWT_AUTH_COOKIE_SAMESITE = 'None'
+JWT_AUTH_COOKIE_SECURE = False  # True in production (HTTPS)
+JWT_AUTH_COOKIE_SAMESITE = 'Lax'  # Allow in dev over HTTP; use 'None' with Secure in prod
 
 
 # =========================

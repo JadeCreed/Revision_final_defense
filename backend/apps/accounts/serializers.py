@@ -146,10 +146,7 @@ class AdminCreateATSerializer(serializers.ModelSerializer):
         user.role        = 'AT'
         user.save()
 
-        at_profile = AgriculturalTechnicianProfile.objects.create(
-            user=user,
-            assigned_barangay=barangay_names[0] if barangay_names else ''
-        )
+        at_profile = AgriculturalTechnicianProfile.objects.create(user=user)
 
         for name in barangay_names:
             barangay_obj, _ = Barangay.objects.get_or_create(name=name)
@@ -225,8 +222,8 @@ class AdminCreateBPSerializer(serializers.ModelSerializer):
         user.role        = 'BRGY'
         user.save()
 
-        # Create BP profile (empty for now, can add fields later)
-        BrgyPresidentProfile.objects.create(user=user, barangay=user.barangay)
+        # Create BP profile (barangay stored on User record)
+        BrgyPresidentProfile.objects.create(user=user)
         return user
 
 class FarmerProfileSerializer(serializers.ModelSerializer):
@@ -237,10 +234,6 @@ class FarmerProfileSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Pre-fill profile from User data if creating
-        user = validated_data.get('user')
-        if user:
-            validated_data.setdefault('contact_number', user.contact_number)
-            validated_data.setdefault('email', user.email)
         return super().create(validated_data)
     
     def update(self, instance, validated_data):
@@ -265,10 +258,19 @@ class AgriculturalTechnicianProfileSerializer(serializers.ModelSerializer):
 # -----------------------
 # NEW: Barangay President Profile Serializer
 class BrgyPresidentProfileSerializer(serializers.ModelSerializer):
+    barangay = serializers.CharField(source='user.barangay', allow_blank=True, required=False)
+
     class Meta:
         model = BrgyPresidentProfile
-        fields = '__all__'
+        fields = ['user', 'barangay']
         read_only_fields = ['user']
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.get('user', {})
+        if 'barangay' in user_data:
+            instance.user.barangay = user_data['barangay']
+            instance.user.save()
+        return instance
 
 class AdminUserSimpleSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -374,12 +376,9 @@ class OfficialListSerializer(serializers.ModelSerializer):
         return []
 
     def get_brgy_barangay(self, obj):
-        # Only BRGY users have a single barangay
+        # Only BRGY users have a single barangay stored on the User record
         if obj.role == 'BRGY':
-            try:
-                return obj.bp_profile.barangay
-            except BrgyPresidentProfile.DoesNotExist:
-                return None
+            return obj.barangay
         return None
 
 class ArchiveUserSerializer(serializers.ModelSerializer):
