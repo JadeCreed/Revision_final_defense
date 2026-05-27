@@ -116,7 +116,7 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
             return 0.0
         # Use getattr for safe field access in case migration hasn't run
         hectares = getattr(p, 'hectares', None)
-        return float(hectares) if hectares else 0.0
+        return float(hectares) if hectares is not None else 0.0
 
 
 class DistributionEntrySerializer(serializers.ModelSerializer):

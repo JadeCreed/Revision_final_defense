@@ -191,7 +191,7 @@ const FarmerPoll = () => {
   const showResults = isLocked;
 
   return (
-    <div style={{ padding: '1.25rem', paddingBottom: '2rem' }}>
+    <div style={{ padding: '1.25rem 1.25rem 2rem 1.25rem' }}>
 
       {/* ── POLL HEADER CARD ── */}
       <div style={{

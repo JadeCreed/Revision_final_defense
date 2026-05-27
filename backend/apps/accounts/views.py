@@ -7,7 +7,7 @@ from rest_framework.pagination import PageNumberPagination
 from .models import PasswordResetOTP
 from .utils import generate_otp, send_otp_email
 from .rate_limit import LoginRateLimiter
-from django.db.models import Q
+from django.db.models import Q, Case, When, IntegerField
 from django.utils import timezone
 from datetime import timedelta
 import secrets
@@ -38,7 +38,7 @@ from .serializers import (
 
 from django.contrib.auth import get_user_model
 
-ALLOWED_ORDERING = ['date_joined', '-date_joined', 'last_name', '-last_name', 'first_name', '-first_name']
+ALLOWED_ORDERING = ['status_priority', 'date_joined', '-date_joined', 'last_name', '-last_name', 'first_name', '-first_name']
 
 
 def normalize_contact_number(value):
@@ -160,8 +160,9 @@ class LoginView(APIView):
                     status=403
                 )
 
-            # Check if account is verified
-            if not user.is_verified:
+            # Allow farmers to login even if not yet verified, so they can complete their profile.
+            # Only block internal users if they are not verified yet.
+            if user.role != 'FARMER' and not user.is_verified:
                 LoginRateLimiter.record_failed_attempt(identifier)
                 return Response(
                     {"error": "Your account is not yet verified. Please check your email."},
@@ -976,7 +977,7 @@ class AdminFarmerRequestsView(ListAPIView):
     Supports: ?status=PENDING|COMPLETE|APPROVED|REJECTED
               ?barangay=Abang
               ?search=name/contact/rsbsa
-              ?ordering=date_joined (default newest first)
+              ?ordering=status_priority (default status priority then newest)
     """
     serializer_class   = FarmerListSerializer
     permission_classes = [IsAuthenticated, IsAdminUserRole]
@@ -1006,10 +1007,25 @@ class AdminFarmerRequestsView(ListAPIView):
                 Q(rsbsa_number__icontains=search)
             )
          # ✅ Sorting support — whitelist prevents injection
-        ordering = self.request.query_params.get('ordering', '-date_joined')
+        ordering = self.request.query_params.get('ordering', 'status_priority')
         if ordering not in ALLOWED_ORDERING:
-            ordering = '-date_joined'
-        return queryset.order_by(ordering)
+            ordering = 'status_priority'
+
+        if ordering == 'status_priority':
+            queryset = queryset.annotate(
+                status_rank=Case(
+                    When(status='COMPLETE', then=0),
+                    When(status='PENDING', then=1),
+                    When(status='APPROVED', then=2),
+                    When(status='REJECTED', then=3),
+                    default=4,
+                    output_field=IntegerField(),
+                )
+            ).order_by('status_rank', '-date_joined')
+        else:
+            queryset = queryset.order_by(ordering)
+
+        return queryset
 
 class AdminApproveFarmerView(APIView):
     """

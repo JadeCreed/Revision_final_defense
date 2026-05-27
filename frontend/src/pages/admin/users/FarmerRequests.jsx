@@ -25,6 +25,7 @@ const BARANGAYS = [
 ];
 
 const SORT_OPTIONS = [
+  { value: 'status_priority', label: 'Status Priority' },
   { value: '-date_joined', label: 'Newest First' },
   { value: 'date_joined',  label: 'Oldest First' },
   { value: 'last_name',    label: 'Name A–Z' },
@@ -44,7 +45,7 @@ const FarmerRequests = () => {
   const [search, setSearch]             = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [barangayFilter, setBarangayFilter] = useState('');
-  const [sort, setSort]                 = useState('-date_joined');
+  const [sort, setSort]                 = useState('status_priority');
 
   // ── NEW badge tracking ──
   const [newIds, setNewIds] = useState(new Set());

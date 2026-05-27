@@ -25,6 +25,16 @@ const SEASON_OPTIONS = [
   { value: 'DRY', label: 'Dry Season' },
 ];
 
+const getDetectedSeason = () => {
+  const month = new Date().getMonth() + 1;
+  return month >= 6 && month <= 11 ? 'WET' : 'DRY';
+};
+
+const getSuggestedTitle = (season, year) => {
+  const seasonLabel = season === 'WET' ? 'Wet Season' : 'Dry Season';
+  return `${seasonLabel} ${year} Seed Preference Poll`;
+};
+
 const StatusBadge = ({ status }) => {
   const config = {
     OPEN:   { bg: '#dcfce7', color: '#166534', label: 'Open',   Icon: CheckCircle },
@@ -110,10 +120,12 @@ const SeedPoll = () => {
   const [activePollExists, setActivePollExists] = useState(false);
   const [deletingPollId, setDeletingPollId] = useState(null);
 
-  const [form, setForm] = useState({ title: '', season: 'WET', year: new Date().getFullYear(), end_date: '' });
+  const [form, setForm] = useState({ title: '', season: getDetectedSeason(), year: new Date().getFullYear(), end_date: '' });
   const [formErrors, setFormErrors]     = useState({});
   const [formLoading, setFormLoading]   = useState(false);
   const [formError, setFormError]       = useState('');
+  const [seasonOverride, setSeasonOverride] = useState(false);
+  const [manualTitle, setManualTitle]   = useState(false);
 
   // ── SEED TYPE STATE ──
   const [seedTypes, setSeedTypes]                 = useState([]);
@@ -223,11 +235,43 @@ const SeedPoll = () => {
     }
   }, [activeTab, selectedPollId, fetchResults]);
 
+  const detectedSeason = getDetectedSeason();
+
   // ── POLL HANDLERS ──
   const handleField = (key, value) => {
+    // Simple field updater; title auto-generation is handled by an effect below
     setForm(prev => ({ ...prev, [key]: value }));
+
+    if (key === 'title') {
+      setManualTitle(true);
+    }
+
+    if (key === 'season') {
+      setSeasonOverride(value !== detectedSeason);
+    }
+
     setFormErrors(prev => ({ ...prev, [key]: '' }));
   };
+
+  const openCreateModal = () => {
+    const season = getDetectedSeason();
+    const year = new Date().getFullYear();
+    setForm({ title: getSuggestedTitle(season, year), season, year, end_date: '' });
+    setFormErrors({});
+    setFormError('');
+    setSeasonOverride(false);
+    setManualTitle(false);
+    setCreateModal(true);
+  };
+
+  // Auto-update suggested title when season/year change — only when admin hasn't typed a custom title
+  useEffect(() => {
+    if (manualTitle) return;
+    const suggested = getSuggestedTitle(form.season, form.year);
+    if (form.title !== suggested) {
+      setForm(prev => ({ ...prev, title: suggested }));
+    }
+  }, [form.season, form.year, manualTitle]);
 
   const validatePollForm = () => {
     const errs = {};
@@ -535,7 +579,7 @@ const SeedPoll = () => {
               <Wheat size={48} color="#d1d5db" style={{ margin: '0 auto 1rem', display: 'block' }} />
               <p style={{ fontWeight: 700, fontSize: '1.1rem', color: '#374151', margin: '0 0 0.5rem' }}>No Active Poll</p>
               <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0 0 1.5rem' }}>Create a new poll to start collecting seed preferences from farmers.</p>
-              <button onClick={() => setCreateModal(true)}
+              <button onClick={openCreateModal}
                 style={{ padding: '0.625rem 1.5rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
                 <Plus size={16} /> Create New Poll
               </button>
@@ -916,20 +960,61 @@ const SeedPoll = () => {
             {formError && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{formError}</div>}
             <div style={{ marginBottom: '0.875rem' }}>
               <label style={labelStyle}>Poll Title *</label>
-              <input value={form.title} onChange={e => handleField('title', e.target.value)} placeholder="e.g. Wet Season 2026 Seed Preference Poll" style={inputStyle(!!formErrors.title)} />
+              <input value={form.title} onChange={e => handleField('title', e.target.value)} placeholder={getSuggestedTitle(form.season, form.year)} style={inputStyle(!!formErrors.title)} />
               {formErrors.title && <span style={{ fontSize: '0.72rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>{formErrors.title}</span>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
               <div>
                 <label style={labelStyle}>Season *</label>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {SEASON_OPTIONS.map(opt => (
-                    <button key={opt.value} type="button" onClick={() => handleField('season', opt.value)}
-                      style={{ flex: 1, padding: '0.5rem', border: `2px solid ${form.season === opt.value ? '#2d6a2d' : '#d1d5db'}`, borderRadius: '0.5rem', backgroundColor: form.season === opt.value ? '#2d6a2d' : 'white', color: form.season === opt.value ? 'white' : '#374151', fontWeight: 600, cursor: 'pointer', fontSize: '0.8rem' }}>
-                      {opt.label}
-                    </button>
-                  ))}
+                  {SEASON_OPTIONS.map(opt => {
+                    const isActive = form.season === opt.value;
+                    const isAuto = isActive && !seasonOverride && opt.value === detectedSeason;
+                    return (
+                      <button key={opt.value} type="button" onClick={() => handleField('season', opt.value)}
+                        style={{
+                          minWidth: '140px',
+                          height: '40px',
+                          position: 'relative',
+                          padding: '0 0.9rem',
+                          border: `2px solid ${isActive ? '#2d6a2d' : '#d1d5db'}`,
+                          borderRadius: '0.5rem',
+                          backgroundColor: isActive ? '#2d6a2d' : 'white',
+                          color: isActive ? 'white' : '#374151',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'visible',
+                        }}>
+                        <span style={{ whiteSpace: 'nowrap' }}>{opt.label}</span>
+                        {isAuto && (
+                          <span style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-10px',
+                            backgroundColor: 'rgba(255,255,255,0.95)',
+                            color: '#166534',
+                            fontSize: '0.65rem',
+                            fontWeight: 700,
+                            padding: '0.15rem 0.4rem',
+                            borderRadius: '999px',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
+                          }}>
+                            Auto
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+                <p style={{ fontSize: '0.75rem', margin: '0.5rem 0 0', color: seasonOverride ? '#c2410b' : '#166534' }}>
+                  {seasonOverride
+                    ? 'Manually overridden'
+                    : `Auto-detected: ${detectedSeason === 'WET' ? 'Wet Season' : 'Dry Season'} (Current)`}
+                </p>
               </div>
               <div>
                 <label style={labelStyle}>Year *</label>

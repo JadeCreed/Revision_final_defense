@@ -178,6 +178,8 @@ class FarmerSearchView(APIView):
             profile__farm_municipality__isnull=False,
             profile__farm_barangay__isnull=False,
             profile__gender__isnull=False,
+            profile__hectares__isnull=False,
+            profile__hectares__gt=0,
             contact_number__isnull=False,  # Contact required
         )
 

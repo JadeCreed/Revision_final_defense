@@ -127,8 +127,8 @@ const Sidebar = () => {
     display: 'flex', alignItems: 'center', gap: '0.75rem',
     padding: '0.75rem 3rem 0.75rem 1.5rem', textDecoration: 'none',
     fontSize: '0.875rem', transition: 'all 0.15s ease',
-    borderLeft: '3px solid transparent',
-    width: '100%', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer',
+      borderLeft: '3px solid transparent',
+      width: '100%', textAlign: 'left', background: 'none', cursor: 'pointer',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
   };
