@@ -112,7 +112,11 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
 
     def get_hectares(self, obj):
         p = self._get_profile(obj)
-        return float(p.hectares) if p and p.hectares else 0.0
+        if not p:
+            return 0.0
+        # Use getattr for safe field access in case migration hasn't run
+        hectares = getattr(p, 'hectares', None)
+        return float(hectares) if hectares else 0.0
 
 
 class DistributionEntrySerializer(serializers.ModelSerializer):

@@ -468,6 +468,9 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
   const brgyPlots  = useMemo(() => plots.filter(p => p.barangay === barangayName), [plots, barangayName]);
   const utilBrgy   = utilizationData[barangayName] || null;
 
+  const distFarmerCount = useMemo(() => new Set(brgyPlots.filter(p => p.has_distribution).map(p => p.farmer)).size, [brgyPlots]);
+  const harvestFarmerCount = useMemo(() => new Set(brgyPlots.filter(p => p.has_harvest).map(p => p.farmer)).size, [brgyPlots]);
+
   // Monitoring data
   const phaseCounts = useMemo(() => {
     const c = {};
@@ -673,7 +676,21 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
 
       {/* Farmer list — monitoring tab only */}
       {activeTab === 'monitoring' && brgyPlots.length > 0 && (
-        <div style={{ borderTop: '1px solid #f1f5f9' }}>
+        <>
+          {(distFarmerCount > 0 || harvestFarmerCount > 0) && (
+            <div style={{ padding: '1rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.75rem' }}>
+              {[
+                { label: 'Approved distribution', value: distFarmerCount > 0 ? `${distFarmerCount} farmer${distFarmerCount !== 1 ? 's' : ''}` : 'None' },
+                { label: 'Harvest records', value: harvestFarmerCount > 0 ? `${harvestFarmerCount} farmer${harvestFarmerCount !== 1 ? 's' : ''}` : 'None' },
+              ].map(item => (
+                <div key={item.label} style={{ backgroundColor: 'white', borderRadius: '0.75rem', padding: '0.85rem', border: '1px solid #e2e8f0' }}>
+                  <p style={{ margin: 0, fontSize: '0.68rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 700 }}>{item.label}</p>
+                  <p style={{ margin: '0.4rem 0 0', fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ borderTop: '1px solid #f1f5f9' }}>
           <div style={{ padding: '0.875rem 1.25rem', backgroundColor: '#fafafa' }}>
             <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Farmers in this barangay
@@ -693,6 +710,16 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
                   <p style={{ margin: '0.15rem 0 0', fontSize: '0.7rem', color: '#64748b' }}>
                     {plot.label}{plot.area_ha ? ` · ${plot.area_ha} ha` : ''}
                   </p>
+                  {(plot.has_distribution || plot.has_harvest) && (
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: '0.35rem' }}>
+                      {plot.has_distribution && (
+                        <span style={{ backgroundColor: '#ecfdf5', color: '#15803d', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.1rem 0.4rem', fontSize: '0.65rem', fontWeight: 700 }}>Distribution</span>
+                      )}
+                      {plot.has_harvest && (
+                        <span style={{ backgroundColor: '#fdf2f8', color: '#9d174d', border: '1px solid #fbcfe8', borderRadius: '999px', padding: '0.1rem 0.4rem', fontSize: '0.65rem', fontWeight: 700 }}>Harvest</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <span style={{ backgroundColor: cfg.bg || '#f9fafb', color: cfg.color, border: `1px solid ${PHASE_MAP[plot.land_type]?.border || '#e5e7eb'}`, borderRadius: '999px', padding: '0.12rem 0.5rem', fontSize: '0.62rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
                   {cfg.label}
@@ -701,6 +728,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
             );
           })}
         </div>
+      </>
       )}
     </div>
   );

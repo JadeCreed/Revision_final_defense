@@ -164,12 +164,21 @@ class FarmerSearchView(APIView):
         if not barangay:
             return Response({"error": "No barangay assigned to this account."}, status=400)
 
-        # APPROVED farmers in the BRGY's barangay only
+        # APPROVED farmers = farmers with COMPLETE profiles in the BRGY's barangay
+        # A profile is complete when all required fields are filled
         qs = User.objects.filter(
             role='FARMER',
-            status='APPROVED',
             is_active=True,
             barangay=barangay,
+            profile__isnull=False,  # Must have a profile
+            # All required fields must be filled
+            profile__date_of_birth__isnull=False,
+            profile__residency_municipality__isnull=False,
+            profile__residency_barangay__isnull=False,
+            profile__farm_municipality__isnull=False,
+            profile__farm_barangay__isnull=False,
+            profile__gender__isnull=False,
+            contact_number__isnull=False,  # Contact required
         )
 
         if search:

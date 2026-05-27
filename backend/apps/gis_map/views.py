@@ -8,6 +8,7 @@ import logging
 from apps.accounts.models import User
 from apps.distribution.models import DistributionEntry
 from apps.crop_monitoring.models import CropMonitoringRecord
+from apps.production.models import HarvestRecord
 
 logger = logging.getLogger(__name__)
 
@@ -112,14 +113,165 @@ class GISPlotsView(APIView):
                 'date_observed':    str(rec.date_observed) if rec.date_observed else None,
                 'created_at':       created_at,
                 'has_distribution': False,
+                'has_harvest':      False,
+                'harvest_count':    0,
+                'last_harvest_date': None,
+                'harvest_variety':  None,
+                'harvest_area_ha':  None,
+                'harvest_bags':     None,
+                'harvest_mt':       None,
                 'total_approved_in_brgy': 0,
                 'total_approved_area_ha_in_brgy': 0,
                 'distributed_variety':   None,
                 'distributed_seed_type': None,
+                'distributed_area_ha':   None,
             }
 
-        if not seen:
-            return Response([])
+        # Attach approved distribution info, even for farmers without monitoring data
+        try:
+            dist_entries = DistributionEntry.objects.filter(
+                batch__status='APPROVED',
+            )
+            if barangay_filter:
+                dist_entries = dist_entries.filter(farmer__barangay__iexact=barangay_filter)
+
+            dist_entries = dist_entries.select_related(
+                'farmer', 'variety', 'batch__event__seed_type'
+            ).order_by('farmer_id', '-batch__approved_at')
+
+            distribution_seen = set()
+            for entry in dist_entries:
+                farmer = entry.farmer
+                if not farmer or not farmer.barangay:
+                    continue
+
+                seed_type_name = None
+                if entry.batch and entry.batch.event and entry.batch.event.seed_type:
+                    seed_type_name = entry.batch.event.seed_type.name
+                seed_src = ''
+                if seed_type_name:
+                    if 'HYBRID' in seed_type_name.upper() or seed_type_name.upper() in ['NRP', 'RFO']:
+                        seed_src = 'HYBRID'
+                    elif 'INBRED' in seed_type_name.upper() or seed_type_name.upper() == 'RCEF':
+                        seed_src = 'INBRED'
+                    else:
+                        seed_src = 'OWN_SEED'
+                else:
+                    seed_src = 'OWN_SEED'
+
+                combo_key = f"{farmer.id}__{seed_src}"
+                data = seen.get(combo_key)
+                if not data:
+                    data = {
+                        'id': combo_key,
+                        'farmer': farmer.id,
+                        'farmer_name': farmer.get_full_name() or 'Unknown',
+                        'farmer_rsbsa': farmer.rsbsa_number or '',
+                        'farmer_contact': farmer.contact_number or '',
+                        'farmer_barangay': farmer.barangay or '',
+                        'barangay': farmer.barangay or '',
+                        'label': 'Distribution only',
+                        'latitude': None,
+                        'longitude': None,
+                        'area_ha': None,
+                        'land_type': 'No monitoring yet',
+                        'crop_phase_key': None,
+                        'seed_source': seed_src,
+                        'seed_source_label': SEED_SOURCE_LABEL.get(seed_src, 'Unspecified'),
+                        'encoded_by': None,
+                        'date_observed': None,
+                        'created_at': None,
+                        'has_distribution': False,
+                        'has_harvest': False,
+                        'harvest_count': 0,
+                        'last_harvest_date': None,
+                        'harvest_variety': None,
+                        'harvest_area_ha': None,
+                        'harvest_bags': None,
+                        'harvest_mt': None,
+                        'total_approved_in_brgy': 0,
+                        'total_approved_area_ha_in_brgy': 0,
+                        'distributed_variety': None,
+                        'distributed_seed_type': None,
+                        'distributed_area_ha': None,
+                    }
+                    seen[combo_key] = data
+
+                data['has_distribution'] = True
+                if combo_key not in distribution_seen:
+                    distribution_seen.add(combo_key)
+                    data['distributed_variety'] = entry.variety.name if entry.variety else None
+                    data['distributed_seed_type'] = seed_type_name
+                    data['distributed_area_ha'] = float(entry.farm_area_ha) if entry.farm_area_ha else None
+                    if not data['area_ha'] and data['distributed_area_ha']:
+                        data['area_ha'] = data['distributed_area_ha']
+        except Exception as e:
+            logger.warning(f'GIS plots: dist info error: {e}')
+
+        # Attach harvest record indicators and latest harvest details
+        try:
+            harvest_qs = HarvestRecord.objects.select_related('farmer').order_by('farmer_id', 'seed_source', '-harvest_date', '-created_at')
+            if barangay_filter:
+                harvest_qs = harvest_qs.filter(barangay__iexact=barangay_filter)
+
+            harvest_seen = set()
+            for rec in harvest_qs:
+                farmer = rec.farmer
+                if not farmer or not farmer.barangay:
+                    continue
+
+                seed_src = rec.seed_source or 'OWN_SEED'
+                combo_key = f"{farmer.id}__{seed_src}"
+                data = seen.get(combo_key)
+                if not data:
+                    data = {
+                        'id': combo_key,
+                        'farmer': farmer.id,
+                        'farmer_name': farmer.get_full_name() or 'Unknown',
+                        'farmer_rsbsa': farmer.rsbsa_number or '',
+                        'farmer_contact': farmer.contact_number or '',
+                        'farmer_barangay': farmer.barangay or '',
+                        'barangay': farmer.barangay or '',
+                        'label': 'Harvest only',
+                        'latitude': None,
+                        'longitude': None,
+                        'area_ha': float(rec.harvest_area_ha) if rec.harvest_area_ha else None,
+                        'land_type': 'No monitoring yet',
+                        'crop_phase_key': None,
+                        'seed_source': seed_src,
+                        'seed_source_label': SEED_SOURCE_LABEL.get(seed_src, 'Unspecified'),
+                        'encoded_by': None,
+                        'date_observed': None,
+                        'created_at': None,
+                        'has_distribution': False,
+                        'has_harvest': False,
+                        'harvest_count': 0,
+                        'last_harvest_date': None,
+                        'harvest_variety': None,
+                        'harvest_area_ha': None,
+                        'harvest_bags': None,
+                        'harvest_mt': None,
+                        'total_approved_in_brgy': 0,
+                        'total_approved_area_ha_in_brgy': 0,
+                        'distributed_variety': None,
+                        'distributed_seed_type': None,
+                        'distributed_area_ha': None,
+                    }
+                    seen[combo_key] = data
+
+                data['has_harvest'] = True
+                data['harvest_count'] = data.get('harvest_count', 0) + 1
+                if combo_key not in harvest_seen:
+                    harvest_seen.add(combo_key)
+                    data['last_harvest_date'] = str(rec.harvest_date) if rec.harvest_date else None
+                    data['harvest_variety'] = rec.variety
+                    data['harvest_area_ha'] = float(rec.harvest_area_ha) if rec.harvest_area_ha else None
+                    data['harvest_bags'] = rec.harvest_bags
+                    data['harvest_mt'] = float(rec.harvest_mt) if getattr(rec, 'harvest_mt', None) is not None else None
+                    if not data['area_ha'] and data['harvest_area_ha']:
+                        data['area_ha'] = data['harvest_area_ha']
+        except Exception as e:
+            logger.warning(f'GIS plots: harvest info error: {e}')
 
         # Get unique farmer IDs from our results
         farmer_ids = list(set(v['farmer'] for v in seen.values()))
@@ -137,43 +289,51 @@ class GISPlotsView(APIView):
         except Exception as e:
             logger.warning(f'GIS plots: distribution flag error: {e}')
 
-        # Attach distribution variety info (latest approved per farmer)
+        # Total approved farmers per barangay (for percentage denominator)
         try:
-            dist_entries = DistributionEntry.objects.filter(
-                farmer_id__in=farmer_ids,
-                batch__status='APPROVED',
-            ).select_related(
-                'variety', 'batch__event__seed_type'
-            ).order_by('farmer_id', '-batch__approved_at')
-
-            dist_info_by_farmer = {}
-            for entry in dist_entries:
-                fid = entry.farmer_id
-                if fid in dist_info_by_farmer:
-                    continue
-                try:
-                    variety_name = entry.variety.name if entry.variety else None
-                    seed_type_name = None
-                    if entry.batch and entry.batch.event and entry.batch.event.seed_type:
-                        seed_type_name = entry.batch.event.seed_type.name
-                    dist_info_by_farmer[fid] = {
-                        'variety': variety_name,
-                        'seed_type': seed_type_name,
-                        'farm_area_ha': float(entry.farm_area_ha) if entry.farm_area_ha else None,
-                    }
-                except Exception as e:
-                    logger.warning(f'GIS: dist entry error farmer {fid}: {e}')
-
+            approved_counts = (
+                User.objects
+                .filter(role='FARMER', status='APPROVED', is_active=True)
+                .values('barangay')
+                .annotate(total=Count('id'))
+            )
+            approved_per_brgy = {
+                item['barangay']: item['total']
+                for item in approved_counts
+                if item['barangay']
+            }
             for data in seen.values():
-                fid = data['farmer']
-                info = dist_info_by_farmer.get(fid)
-                if info:
-                    data['distributed_variety'] = info['variety']
-                    data['distributed_seed_type'] = info['seed_type']
-                    if not data['area_ha'] and info['farm_area_ha']:
-                        data['area_ha'] = info['farm_area_ha']
+                data['total_approved_in_brgy'] = approved_per_brgy.get(data['barangay'], 0)
         except Exception as e:
-            logger.warning(f'GIS plots: dist info error: {e}')
+            logger.warning(f'GIS plots: approved count error: {e}')
+
+        # Total approved area per barangay
+        try:
+            area_by_brgy = {}
+            seen_area_farmers = set()
+            for entry in DistributionEntry.objects.filter(
+                batch__status='APPROVED'
+            ).select_related('farmer').order_by('farmer_id'):
+                if not entry.farmer or not entry.farmer.barangay:
+                    continue
+                if entry.farmer_id in seen_area_farmers:
+                    continue
+                seen_area_farmers.add(entry.farmer_id)
+                if entry.farm_area_ha:
+                    brgy = entry.farmer.barangay
+                    area_by_brgy[brgy] = area_by_brgy.get(brgy, 0) + float(entry.farm_area_ha)
+            for data in seen.values():
+                data['total_approved_area_ha_in_brgy'] = round(
+                    area_by_brgy.get(data['barangay'], 0), 2
+                )
+        except Exception as e:
+            logger.warning(f'GIS plots: area error: {e}')
+
+        return Response({
+            'plots': list(seen.values()),
+            'approved_counts': approved_per_brgy,
+            'area_by_brgy': area_by_brgy,
+        })
 
         # Total approved farmers per barangay (for percentage denominator)
         try:
