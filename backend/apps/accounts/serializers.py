@@ -332,15 +332,34 @@ class FarmerFullDetailSerializer(serializers.ModelSerializer):
 class FarmerListSerializer(serializers.ModelSerializer):
     # Shows profile completion status
     profile_complete = serializers.SerializerMethodField()
+    gender = serializers.SerializerMethodField()
+    hectares = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
         fields = [
             'id', 'first_name', 'last_name', 'contact_number',
-            'barangay', 'rsbsa_number', 'status',
+            'barangay', 'rsbsa_number', 'gender', 'hectares', 'status',
             'is_verified', 'is_active', 'date_joined',
             'profile_complete'
         ]
+
+    def get_gender(self, obj):
+        if hasattr(obj, 'gender'):
+            return obj.gender or ''
+        try:
+            return obj.profile.gender or ''
+        except (FarmerProfile.DoesNotExist, AttributeError):
+            return ''
+
+    def get_hectares(self, obj):
+        if hasattr(obj, 'hectares'):
+            return float(obj.hectares) if obj.hectares is not None else 0.0
+        try:
+            hectares = getattr(obj.profile, 'hectares', None)
+            return float(hectares) if hectares is not None else 0.0
+        except (FarmerProfile.DoesNotExist, AttributeError):
+            return 0.0
 
     def get_profile_complete(self, obj):
         # Check if farmer has completed their full profile form

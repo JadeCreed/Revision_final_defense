@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count
+from django.db.models import Count, Q
 from collections import defaultdict
 import logging
 
@@ -13,6 +13,7 @@ from apps.production.models import HarvestRecord
 logger = logging.getLogger(__name__)
 
 PHASE_LABEL_MAP = {
+    'DISTRIBUTION':  'Seed Distribution',
     'ESTABLISHMENT': 'Crop Establishment',
     'TILLERING':     'Tillering',
     'FLOWERING':     'Flowering',
@@ -130,7 +131,10 @@ class GISPlotsView(APIView):
         # Attach approved distribution info, even for farmers without monitoring data
         try:
             dist_entries = DistributionEntry.objects.filter(
-                batch__status='APPROVED',
+                batch__status='APPROVED'
+            ).filter(
+                Q(qty_bags__isnull=False) |
+                Q(date_received__isnull=False)
             )
             if barangay_filter:
                 dist_entries = dist_entries.filter(farmer__barangay__iexact=barangay_filter)
@@ -170,12 +174,12 @@ class GISPlotsView(APIView):
                         'farmer_contact': farmer.contact_number or '',
                         'farmer_barangay': farmer.barangay or '',
                         'barangay': farmer.barangay or '',
-                        'label': 'Distribution only',
+                        'label': 'Seed distributed',
                         'latitude': None,
                         'longitude': None,
                         'area_ha': None,
-                        'land_type': 'No monitoring yet',
-                        'crop_phase_key': None,
+                        'land_type': 'Seed Distribution',
+                        'crop_phase_key': 'Seed Distribution',
                         'seed_source': seed_src,
                         'seed_source_label': SEED_SOURCE_LABEL.get(seed_src, 'Unspecified'),
                         'encoded_by': None,
@@ -406,6 +410,23 @@ class GISMapSummaryView(APIView):
             total_monitored = 0
 
         try:
+            distributed_farmer_ids = set(
+                DistributionEntry.objects.filter(
+                    batch__status='APPROVED'
+                ).filter(
+                    Q(qty_bags__isnull=False) |
+                    Q(date_received__isnull=False)
+                ).values_list('farmer_id', flat=True)
+                .distinct()
+            )
+        except Exception as e:
+            logger.error(f'GIS summary: distribution error: {e}')
+            distributed_farmer_ids = set()
+
+        current_farmer_ids = monitored_farmer_ids | distributed_farmer_ids
+        total_current = len(current_farmer_ids)
+
+        try:
             total_approved = User.objects.filter(
                 role='FARMER', status='APPROVED', is_active=True
             ).count()
@@ -423,6 +444,21 @@ class GISMapSummaryView(APIView):
         except Exception as e:
             logger.error(f'GIS summary: active brgy error: {e}')
             active_barangays = []
+
+        try:
+            dist_barangays = list(
+                DistributionEntry.objects.filter(
+                    batch__status='APPROVED'
+                ).filter(
+                    Q(qty_bags__isnull=False) |
+                    Q(date_received__isnull=False)
+                ).values_list('farmer__barangay', flat=True)
+                .distinct().order_by('farmer__barangay')
+            )
+            dist_barangays = [b for b in dist_barangays if b]
+            active_barangays = sorted(set(active_barangays) | set(dist_barangays))
+        except Exception as e:
+            logger.error(f'GIS summary: distribution brgy error: {e}')
 
         try:
             all_barangays = list(
@@ -457,17 +493,47 @@ class GISMapSummaryView(APIView):
                     }
                 seed_breakdown[src]['total_farmers'] += 1
                 seed_breakdown[src]['phases'][phase] = seed_breakdown[src]['phases'].get(phase, 0) + 1
+
+            for entry in DistributionEntry.objects.filter(
+                batch__status='APPROVED'
+            ).filter(
+                Q(qty_bags__isnull=False) |
+                Q(date_received__isnull=False)
+            ).select_related('batch__event__seed_type').order_by('farmer_id', '-batch__approved_at'):
+                src = 'OWN_SEED'
+                seed_type_name = None
+                if entry.batch and entry.batch.event and entry.batch.event.seed_type:
+                    seed_type_name = entry.batch.event.seed_type.name
+                if seed_type_name:
+                    if 'HYBRID' in seed_type_name.upper() or seed_type_name.upper() in ['NRP', 'RFO']:
+                        src = 'HYBRID'
+                    elif 'INBRED' in seed_type_name.upper() or seed_type_name.upper() == 'RCEF':
+                        src = 'INBRED'
+                    else:
+                        src = 'OWN_SEED'
+                combo = f"{entry.farmer_id}__{src}"
+                if combo in seen_combos:
+                    continue
+                seen_combos.add(combo)
+                if src not in seed_breakdown:
+                    seed_breakdown[src] = {
+                        'label': SEED_SOURCE_LABEL.get(src, src),
+                        'total_farmers': 0,
+                        'phases': {},
+                    }
+                seed_breakdown[src]['total_farmers'] += 1
+                seed_breakdown[src]['phases']['Seed Distribution'] = seed_breakdown[src]['phases'].get('Seed Distribution', 0) + 1
         except Exception as e:
             logger.error(f'GIS summary: seed breakdown error: {e}')
             seed_breakdown = {}
 
         return Response({
-            'current_farmers':          total_monitored,
+            'current_farmers':          total_current,
             'total_approved_farmers':   total_approved,
             'current_active_barangays': len(active_barangays),
             'total_active_barangays':   len(all_barangays),
-            'total_farmers':            total_monitored,
-            'total_plots':              total_monitored,
+            'total_farmers':            total_current,
+            'total_plots':              total_current,
             'barangays':                active_barangays,
             'all_barangays':            all_barangays,
             'seed_breakdown':           seed_breakdown,

@@ -169,19 +169,10 @@ class FarmerSearchView(APIView):
         qs = User.objects.filter(
             role='FARMER',
             is_active=True,
+            status='APPROVED',
             barangay=barangay,
-            profile__isnull=False,  # Must have a profile
-            # All required fields must be filled
-            profile__date_of_birth__isnull=False,
-            profile__residency_municipality__isnull=False,
-            profile__residency_barangay__isnull=False,
-            profile__farm_municipality__isnull=False,
-            profile__farm_barangay__isnull=False,
-            profile__gender__isnull=False,
-            profile__hectares__isnull=False,
-            profile__hectares__gt=0,
             contact_number__isnull=False,  # Contact required
-        )
+        ).select_related('profile')
 
         if search:
             qs = qs.filter(
@@ -191,14 +182,36 @@ class FarmerSearchView(APIView):
             )
 
         # Exclude farmers already enrolled in this event (any batch)
+        season = None
+        year = None
         if event_id:
+            try:
+                event = DistributionEvent.objects.get(id=event_id)
+                season = event.season
+                year = event.year
+            except DistributionEvent.DoesNotExist:
+                pass
+
+        approved_batch_only = request.query_params.get('approved_batch_only', '').lower() in ('1', 'true', 'yes')
+        batch_id = request.query_params.get('batch_id', None)
+
+        if approved_batch_only:
+            entry_qs = DistributionEntry.objects.filter(batch__status='APPROVED')
+            if batch_id:
+                entry_qs = entry_qs.filter(batch_id=batch_id)
+            elif event_id:
+                entry_qs = entry_qs.filter(batch__event_id=event_id)
+
+            approved_farmer_ids = entry_qs.values_list('farmer_id', flat=True).distinct()
+            qs = qs.filter(id__in=approved_farmer_ids)
+        elif event_id:
             already_enrolled = DistributionEntry.objects.filter(
                 batch__event_id=event_id
             ).values_list('farmer_id', flat=True)
             qs = qs.exclude(id__in=already_enrolled)
 
         qs = qs.order_by('last_name', 'first_name')[:50]
-        serializer = FarmerSearchSerializer(qs, many=True)
+        serializer = FarmerSearchSerializer(qs, many=True, context={'season': season, 'year': year})
         return Response(serializer.data)
 
 
@@ -328,13 +341,6 @@ class DistributionBatchListCreateView(APIView):
             brgy = getattr(request.user, 'barangay', None)
             if event.barangay != brgy:
                 return Response({"error": "Access denied."}, status=403)
-
-        # Check if total_members limit would be exceeded
-        current_total = event.get_total_encoded()
-        if current_total >= event.total_members:
-            return Response({
-                "error": f"Cannot create new batch. All {event.total_members} farmers already encoded."
-            }, status=400)
 
         # Check if last batch is still a draft (force them to use it first)
         last_batch = event.batches.order_by('-batch_number').first()
@@ -582,13 +588,6 @@ class DistributionEntryCreateView(APIView):
         # Capacity check
         if batch.is_full():
             return Response({"error": "Batch is full (10 farmers max). Create a new batch."}, status=400)
-
-        # Total members check
-        current_total = event.get_total_encoded()
-        if current_total >= event.total_members:
-            return Response({
-                "error": f"Event is at capacity ({event.total_members} farmers)."
-            }, status=400)
 
         # Get farmer
         farmer_id = request.data.get('farmer_id')

@@ -116,6 +116,7 @@ class FarmerProfile(models.Model):
     pwd = models.BooleanField(default=False)
     arbs = models.BooleanField(default=False)
     four_ps = models.BooleanField(default=False)
+    hectares = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text='Total farm hectares')
 
     # 🔹 Contact
         # 🔹 Timestamp

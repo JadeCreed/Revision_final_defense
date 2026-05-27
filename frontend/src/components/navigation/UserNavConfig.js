@@ -35,14 +35,14 @@ const AT_NAV = [
 // ── BRGY PRESIDENT: 5 nav items ──
 // Home → News → Farmers → Harvest (encode for farmers) → Reports
 const BRGY_NAV = [
-  { label: 'Home',    path: '/brgy',                 icon: Home        },
-  { label: 'News',    path: '/brgy/announcements',   icon: Megaphone   },
-  { label: 'Farmers', path: '/brgy/farmers',         icon: Users       },
-  { label: 'Poll',    path: '/brgy/poll',            icon: Sprout      },
-  { label: 'Harvest', path: '/brgy/harvest',         icon: Wheat       },
-  { label: 'Reports', path: '/brgy/reports',         icon: FileText    },
-  { label: 'Beneficiaries', path: '/brgy/beneficiaries', icon: Package },
-  { label: 'Distribution', path: '/brgy/distribution', icon: Truck   },
+  { label: 'Home',          path: '/brgy',                 icon: Home        },
+  { label: 'News',          path: '/brgy/announcements',   icon: Megaphone   },
+  { label: 'Poll',          path: '/brgy/poll',            icon: Sprout      },
+  { label: 'Farmers',       path: '/brgy/farmers',         icon: Users       },
+  { label: 'Beneficiaries', path: '/brgy/beneficiaries',   icon: Package     },
+  { label: 'Distribution',  path: '/brgy/distribution',    icon: Truck       },
+  { label: 'Harvest',       path: '/brgy/harvest',         icon: Wheat       },
+  { label: 'Reports',       path: '/brgy/reports',         icon: FileText    },
 ];
 
 // ── EXPORTED MAP: role string → nav array ──

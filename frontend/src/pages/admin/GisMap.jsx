@@ -65,8 +65,26 @@ const normalizePhase = (value) => {
   const phase = (value || '').toString().trim();
   if (!phase) return 'Seed Distribution';
   if (/^seed[\s_-]*distribution$/i.test(phase)) return 'Seed Distribution';
+  if (/^distribution$/i.test(phase)) return 'Seed Distribution';
   if (/^crop[\s_-]*establishment$/i.test(phase)) return 'Crop Establishment';
+  if (/^no[\s_-]*monitoring[\s_-]*yet$/i.test(phase)) return 'Seed Distribution';
+  if (/^distribution[\s_-]*only$/i.test(phase)) return 'Seed Distribution';
   return Object.keys(PHASE_MAP).find(k => k.toLowerCase() === phase.toLowerCase()) || phase;
+};
+
+const buildNormalizedPhaseCounts = (plots) => {
+  const counts = {};
+  const seen = new Set();
+
+  plots.forEach(plot => {
+    const phase = normalizePhase(plot.land_type);
+    const key = `${plot.farmer || 'unknown'}::${phase}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    counts[phase] = (counts[phase] || 0) + 1;
+  });
+
+  return counts;
 };
 
 const fmtNum = (n, d = 2) =>
@@ -206,13 +224,9 @@ const MonitoringOverviewPanel = ({ plots, summary, animate }) => {
   const currentBrgys   = summary?.current_active_barangays ?? new Set(plots.map(p => p.barangay).filter(Boolean)).size;
   const totalBrgys     = summary?.total_active_barangays ?? currentBrgys;
 
-  const phaseCounts = useMemo(() => {
-    const c = {};
-    plots.forEach(p => { const k = normalizePhase(p.land_type); c[k] = (c[k] || 0) + 1; });
-    return c;
-  }, [plots]);
+  const phaseCounts = useMemo(() => buildNormalizedPhaseCounts(plots), [plots]);
 
-  const total = Math.max(1, plots.length);
+  const total = Math.max(1, currentFarmers);
   const activePhases = PHASES
     .map(ph => ({ ...ph, count: phaseCounts[ph.key] || 0, percent: Math.round(((phaseCounts[ph.key] || 0) / total) * 100) }))
     .filter(ph => ph.count > 0)
@@ -470,19 +484,16 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
 
   const distFarmerCount = useMemo(() => new Set(brgyPlots.filter(p => p.has_distribution).map(p => p.farmer)).size, [brgyPlots]);
   const harvestFarmerCount = useMemo(() => new Set(brgyPlots.filter(p => p.has_harvest).map(p => p.farmer)).size, [brgyPlots]);
+  const farmerCount = useMemo(() => new Set(brgyPlots.map(p => p.farmer)).size, [brgyPlots]);
 
   // Monitoring data
-  const phaseCounts = useMemo(() => {
-    const c = {};
-    brgyPlots.forEach(p => { const k = normalizePhase(p.land_type); c[k] = (c[k] || 0) + 1; });
-    return c;
-  }, [brgyPlots]);
+  const phaseCounts = useMemo(() => buildNormalizedPhaseCounts(brgyPlots), [brgyPlots]);
 
   const totalHa        = brgyPlots.reduce((s, p) => s + (parseFloat(p.area_ha) || 0), 0);
   const totalApproved  = approvedCounts?.[barangayName] ?? brgyPlots[0]?.total_approved_in_brgy ?? 0;
   const totalAreaInBrgy= brgyPlots[0]?.total_approved_area_ha_in_brgy ?? totalHa;
 
-  const total          = Math.max(1, brgyPlots.length);
+  const total          = Math.max(1, farmerCount);
   const activePhases   = PHASES
     .map(ph => ({ ...ph, count: phaseCounts[ph.key] || 0, percent: Math.round(((phaseCounts[ph.key] || 0) / total) * 100) }))
     .filter(ph => ph.count > 0)
@@ -527,7 +538,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, utilizationData, a
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginTop: '1rem' }}>
           {activeTab === 'monitoring'
             ? [
-                { label: 'Farmers', value: totalApproved ? `${brgyPlots.length}/${totalApproved}` : `${brgyPlots.length}` },
+                { label: 'Farmers', value: totalApproved ? `${farmerCount}/${totalApproved}` : `${farmerCount}` },
                 { label: 'Area', value: totalHa > 0 ? `${totalHa.toFixed(1)} ha` : '—' },
                 { label: 'Plots', value: brgyPlots.length },
               ].map(item => (

@@ -119,6 +119,7 @@ const FarmerMasterlist = () => {
         residency_barangay: res.data.profile?.residency_barangay || '',
         farm_municipality: res.data.profile?.farm_municipality || '',
         farm_barangay: res.data.profile?.farm_barangay || '',
+        hectares: res.data.profile?.hectares ?? '',
         ip: res.data.profile?.ip || false,
         senior_citizen: res.data.profile?.senior_citizen || false,
         pwd: res.data.profile?.pwd || false,
@@ -144,6 +145,7 @@ const FarmerMasterlist = () => {
           residency_barangay: editForm.residency_barangay,
           farm_municipality: editForm.farm_municipality,
           farm_barangay: editForm.farm_barangay,
+          hectares: editForm.hectares,
           ip: editForm.ip, senior_citizen: editForm.senior_citizen,
           pwd: editForm.pwd, arbs: editForm.arbs, four_ps: editForm.four_ps,
         }
@@ -203,6 +205,7 @@ const FarmerMasterlist = () => {
                   ['Contact', COL_WIDTHS.contact],
                   ['Barangay', COL_WIDTHS.barangay],
                   ['Gender', '90px'],
+                  ['Hectares', '90px'],
                   ['Date Joined', COL_WIDTHS.date],
                   ['Details', COL_WIDTHS.details],   // ← separate column
                   ['Action',  COL_WIDTHS.actions],    // ← separate column
@@ -225,7 +228,8 @@ const FarmerMasterlist = () => {
                   </td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.contact }}>{f.contact_number}</td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.barangay }}>{f.barangay || '—'}</td>
-                  <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>—</td>
+                  <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{f.gender || '—'}</td>
+                  <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{typeof f.hectares === 'number' ? f.hectares.toFixed(2) : '—'}</td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(f.date_joined)}</td>
                   {/* Separate Details column */}
                   <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.details }}>
@@ -296,13 +300,17 @@ const FarmerMasterlist = () => {
               ))}
             </div>
 
-            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Demographics</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '0.5rem', marginBottom: '1.5rem' }}>
-              {[['IP','ip'],['Senior Citizen','senior_citizen'],['PWD','pwd'],['ARB','arbs'],['4Ps','four_ps']].map(([l,k]) => (
-                <label key={k} style={{ display:'flex', alignItems:'center', gap:'0.5rem', fontSize:'0.85rem', cursor:'pointer' }}>
-                  <input type="checkbox" checked={!!editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.checked}))} /> {l}
-                </label>
-              ))}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={labelStyle}>Total Farm Hectares (ha)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={editForm.hectares}
+                onChange={e => setEditForm(p => ({ ...p, hectares: e.target.value }))}
+                style={inputStyle}
+                placeholder="e.g. 1.50"
+              />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1.25rem' }}>

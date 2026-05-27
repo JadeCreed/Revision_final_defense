@@ -9,13 +9,13 @@ export const MENU_CONFIG = {
   ADMIN: [
     { label: 'Dashboard',      path: '/admin',              icon: Home        },
     { label: 'Seed Poll',      path: '/admin/seed-poll',    icon: Sprout      },
-    { label: 'Announcement',   path: '/admin/announcement', icon: Megaphone   },
+    { label: 'Beneficiaries',  path: '/admin/beneficiaries', icon: Package     },
+    { label: 'GIS Map',        path: '/admin/gis',          icon: Map         },
     { label: 'Seed Inventory', path: '/admin/inventory',    icon: Archive     },
-    { label: 'Beneficiaries',  path: '/admin/beneficiaries',icon: Package     }, // ← updated path
-    { label: 'Distribution',   path: '/admin/distribution', icon: Truck       }, // ← bagong menu
+    { label: 'Distribution',   path: '/admin/distribution', icon: Truck       },
     { label: 'Crop Phase',     path: '/admin/crop-phase',   icon: Wheat       },
     { label: 'Production',     path: '/admin/production',   icon: BarChart3   },
-    { label: 'GIS Map',        path: '/admin/gis',          icon: Map         },
+    { label: 'Announcement',   path: '/admin/announcement', icon: Megaphone   },
     {
       label: 'User Management',
       icon:  Users,
@@ -33,31 +33,30 @@ export const MENU_CONFIG = {
   ],
 
   FARMER: [
-    { label: 'Dashboard',       path: '/farmer',               icon: Home        },
-    { label: 'My Profile',      path: '/farmer/profile',       icon: UserCircle  },
-    { label: 'Crop Monitoring', path: '/farmer/crops',         icon: Wheat       },
-    { label: 'Announcements',   path: '/farmer/announcements', icon: Megaphone   },
-    { label: 'Seed Poll',       path: '/farmer/poll',          icon: Sprout      },
+    { label: 'Home',    path: '/farmer',               icon: Home        },
+    { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
+    { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
+    { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
+    { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
   ],
 
   AT: [
-    { label: 'Dashboard',       path: '/at',                 icon: Home        },
-    { label: 'Crop Monitoring', path: '/at/crop-monitoring', icon: Wheat       },
-    { label: 'Farmers',         path: '/at/farmers',         icon: Tractor     },
-    { label: 'GIS Map',         path: '/at/gis',             icon: Map         },
-    { label: 'Reports',         path: '/at/reports',         icon: ClipboardList},
-    { label: 'Announcements',   path: '/at/announcements',   icon: Megaphone   },
+    { label: 'Home',    path: '/at',                   icon: Home        },
+    { label: 'News',    path: '/at/announcements',     icon: Megaphone   },
+    { label: 'Farmers', path: '/at/farmers',           icon: Tractor     },
+    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Wheat       },
+    { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
   ],
 
   BRGY: [
-    { label: 'Dashboard',     path: '/brgy',                icon: Home        },
-    { label: 'Farmers',       path: '/brgy/farmers',        icon: Tractor     },
-    { label: 'Beneficiaries', path: '/brgy/beneficiaries',  icon: Package     }, 
-    { label: 'Distribution',  path: '/brgy/distribution',   icon: Truck       }, 
-    { label: 'Harvest',       path: '/brgy/harvest',        icon: BarChart3   },
-    { label: 'Crop Phase',    path: '/brgy/crop-phase',     icon: Wheat       },
-    { label: 'Announcements', path: '/brgy/announcements',  icon: Megaphone   },
-    { label: 'Reports',       path: '/brgy/reports',        icon: ClipboardList},
+    { label: 'Home',            path: '/brgy',                 icon: Home        },
+    { label: 'News',            path: '/brgy/announcements',   icon: Megaphone   },
+    { label: 'Poll',            path: '/brgy/poll',            icon: Sprout      },
+    { label: 'Farmers',         path: '/brgy/farmers',         icon: Tractor     },
+    { label: 'Beneficiaries',   path: '/brgy/beneficiaries',   icon: Package     },
+    { label: 'Distribution',    path: '/brgy/distribution',    icon: Truck       },
+    { label: 'Harvest',         path: '/brgy/harvest',         icon: BarChart3   },
+    { label: 'Reports',         path: '/brgy/reports',         icon: ClipboardList },
   ],
 };
 
@@ -71,26 +70,26 @@ export const ROLE_LABELS = {
 export const BOTTOM_NAV_CONFIG = {
   ADMIN: [
     { label: 'Dashboard', path: '/admin',                       icon: Home },
-    { label: 'Users',     path: '/admin/users/farmer-requests', icon: Users },
-    { label: 'GIS',       path: '/admin/gis',                   icon: Map },
+    { label: 'Seed Poll', path: '/admin/seed-poll',             icon: Sprout },
+    { label: 'Beneficiaries', path: '/admin/beneficiaries',     icon: Package },
     { label: 'Reports',   path: '/admin/reports',               icon: ClipboardList },
   ],
   FARMER: [
-    { label: 'Dashboard', path: '/farmer',               icon: Home },
-    { label: 'Profile',   path: '/farmer/profile',       icon: UserCircle },
-    { label: 'Crops',     path: '/farmer/crops',         icon: Wheat },
-    { label: 'News',      path: '/farmer/announcements', icon: Megaphone },
+    { label: 'Home',    path: '/farmer',               icon: Home },
+    { label: 'News',    path: '/farmer/announcements', icon: Megaphone },
+    { label: 'Poll',    path: '/farmer/poll',          icon: Sprout },
+    { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat },
   ],
   AT: [
-    { label: 'Dashboard', path: '/at',                 icon: Home },
-    { label: 'Crops',     path: '/at/crop-monitoring', icon: Wheat },
-    { label: 'Farmers',   path: '/at/farmers',         icon: Tractor },
-    { label: 'Map',       path: '/at/gis',             icon: Map },
+    { label: 'Home',    path: '/at',                   icon: Home },
+    { label: 'News',    path: '/at/announcements',     icon: Megaphone },
+    { label: 'Farmers', path: '/at/farmers',           icon: Tractor },
+    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Wheat },
   ],
   BRGY: [
-    { label: 'Dashboard', path: '/brgy',              icon: Home },
-    { label: 'Farmers',   path: '/brgy/farmers',      icon: Tractor },
-    { label: 'Crops',     path: '/brgy/crop-phase',   icon: Wheat },
-    { label: 'News',      path: '/brgy/announcements',icon: Megaphone },
+    { label: 'Home',          path: '/brgy',                 icon: Home },
+    { label: 'News',          path: '/brgy/announcements',   icon: Megaphone },
+    { label: 'Poll',          path: '/brgy/poll',            icon: Sprout },
+    { label: 'Farmers',       path: '/brgy/farmers',         icon: Tractor },
   ],
 };

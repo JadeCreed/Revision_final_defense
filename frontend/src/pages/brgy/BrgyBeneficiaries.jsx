@@ -320,11 +320,6 @@ const BrgyBeneficiaries = () => {
     return Math.max(expected, totalFarmers || 0);
   };
 
-  const eventNeedsMoreEntries = (event) => {
-    if (!event) return false;
-    return (event.total_encoded || 0) < getEffectiveTotalMembers(event);
-  };
-
   const compareEntries = (a, b) => {
     if (a.created_at && b.created_at) {
       return new Date(b.created_at) - new Date(a.created_at);
@@ -333,32 +328,6 @@ const BrgyBeneficiaries = () => {
       return Number(b.id) - Number(a.id);
     }
     return 0;
-  };
-
-  // ─────────────────────────────────────────
-  // HECTARE TRACKING HELPER
-  // ─────────────────────────────────────────
-  // Calculate farmer's allocated hectares in current event
-  const calculateFarmerHectares = (farmerId) => {
-    const farmerEntries = allEncodedEntries.filter(entry => entry.farmer_id === farmerId);
-    const allocatedHa = farmerEntries.reduce((sum, entry) => {
-      const area = parseFloat(entry.farm_area_ha || entry.area_planted || 0) || 0;
-      return sum + area;
-    }, 0);
-    return allocatedHa;
-  };
-
-  // Get farmer's remaining hectares based on their profile record
-  const getFarmerRemainingHectares = (farmer) => {
-    if (!farmer || typeof farmer.hectares === 'undefined' || farmer.hectares === null) return null;
-    const totalHa = parseFloat(farmer.hectares) || 0;
-    const allocatedHa = calculateFarmerHectares(farmer.id);
-    return {
-      total: totalHa,
-      allocated: allocatedHa,
-      remaining: Math.max(0, totalHa - allocatedHa),
-      isExceeded: allocatedHa >= totalHa,
-    };
   };
 
   const loadAllBatchDetails = useCallback(async (batchList) => {
@@ -444,7 +413,6 @@ const BrgyBeneficiaries = () => {
       const allBatches = bRes.data || [];
       setBatches(allBatches);
       await loadAllBatchDetails(allBatches);
-      const incomplete = eventNeedsMoreEntries(evRes.data);
       const rejectedBatch = allBatches.find(b => b.status === 'REJECTED');
       const draftBatches = allBatches.filter(b => b.status === 'DRAFT');
       const latestDraft = draftBatches.length > 0
@@ -457,7 +425,7 @@ const BrgyBeneficiaries = () => {
         setCurrentBatch(openBatch);
         const det = await getBatchDetail(openBatch.id);
         setBatchData(det.data);
-      } else if (allBatches.length === 0 || incomplete) {
+      } else if (allBatches.length === 0 || evRes.data.status === 'ACTIVE') {
         const nb = await createBatch(evRes.data.id);
         setBatches(prev => [...prev, nb.data]);
         setCurrentBatch(nb.data);
@@ -578,24 +546,6 @@ const BrgyBeneficiaries = () => {
     if (eventFinalVarieties.length > 1 && !encodeForm.selected_variety_id)
       errs.variety = 'Please select a variety';
     
-    // ─ HECTARE VALIDATION ─
-    if (currentFarmer) {
-      const inputArea = parseFloat(eventIsHybrid ? encodeForm.farm_area_ha : encodeForm.area_planted) || 0;
-      const hectareInfo = getFarmerRemainingHectares(currentFarmer);
-      if (hectareInfo) {
-        const allowedArea = hectareInfo.remaining;
-        // For edit mode, we need to account for the existing allocation being replaced
-        let maxAllowedArea = hectareInfo.remaining;
-        if (editEntry) {
-          const existingArea = parseFloat(editEntry.farm_area_ha || editEntry.area_planted || 0) || 0;
-          maxAllowedArea = hectareInfo.remaining + existingArea;
-        }
-        if (inputArea > maxAllowedArea) {
-          const fieldName = eventIsHybrid ? 'farm_area_ha' : 'area_planted';
-          errs[fieldName] = `Farmer only has ${maxAllowedArea.toFixed(2)} ha remaining.`;
-        }
-      }
-    }
     
     if (view === 'encode' && (!sigRef.current || sigRef.current.isEmpty()))
       errs.signature = 'Signature is required';
@@ -1175,10 +1125,9 @@ const BrgyBeneficiaries = () => {
             </div>
           )}
 
-          {/* Farmer search — keep available until all approved farmers are encoded */}
+          {/* Farmer search — available while the program is active and the current batch can still accept entries */}
           {currentEvent.status === 'ACTIVE' && batchData && (
-            ((batchData.status === 'DRAFT' || batchData.status === 'REJECTED') && !batchData.is_full)
-            || eventNeedsMoreEntries(currentEvent)
+            (batchData.status === 'DRAFT' || batchData.status === 'REJECTED') && !batchData.is_full
           ) && (
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem', border: '1px solid #f3f4f6' }}>
               <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: '0 0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1202,26 +1151,18 @@ const BrgyBeneficiaries = () => {
               {farmerResults.length > 0 && (
                 <div style={{ marginTop: '0.625rem', border: '1px solid #e5e7eb', borderRadius: '0.875rem', overflow: 'hidden' }}>
                   {farmerResults.map((farmer, idx) => {
-                    const hectareInfo = getFarmerRemainingHectares(farmer);
-                    const canAdd = !hectareInfo?.isExceeded;
                     return (
                       <div key={farmer.id} className="row-hover"
-                        onClick={() => {
-                          if (canAdd) {
-                            openEncode(farmer);
-                          } else {
-                            showToast('warning', `${farmer.first_name} ${farmer.last_name} has reached their hectare allocation limit.`);
-                          }
-                        }}
+                        onClick={() => openEncode(farmer)}
                         style={{ 
                           padding: '0.875rem 1rem', 
                           borderBottom: idx < farmerResults.length - 1 ? '1px solid #f3f4f6' : 'none', 
-                          cursor: canAdd ? 'pointer' : 'not-allowed',
+                          cursor: 'pointer',
                           display: 'flex', 
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
-                          backgroundColor: canAdd ? 'white' : '#f9fafb',
-                          opacity: canAdd ? 1 : 0.6,
+                          backgroundColor: 'white',
+                          opacity: 1,
                           transition: 'background 0.15s' 
                         }}>
                         <div style={{ flex: 1 }}>
@@ -1231,14 +1172,8 @@ const BrgyBeneficiaries = () => {
                           <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>
                             {farmer.rsbsa_number || 'No RSBSA'} · {farmer.barangay}
                           </p>
-                          {hectareInfo && (
-                            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: canAdd ? GREEN.accent : '#991b1b', margin: '0.375rem 0 0' }}>
-                              {hectareInfo.total} ha total {hectareInfo.allocated > 0 && `(${hectareInfo.remaining} ha remaining)`}
-                              {!canAdd && ' — Allocation limit reached'}
-                            </p>
-                          )}
                         </div>
-                        {canAdd && <ChevronRight size={14} color="#9ca3af" />}
+                        <ChevronRight size={14} color="#9ca3af" />
                       </div>
                     );
                   })}
@@ -1427,8 +1362,6 @@ const BrgyBeneficiaries = () => {
 
             {/* Hybrid: Farm Area */}
             {eventIsHybrid && (() => {
-              const hectareInfo = currentFarmer ? getFarmerRemainingHectares(currentFarmer) : null;
-              const isAtLimit = hectareInfo?.isExceeded;
               return (
                 <div style={{ marginBottom: '0.875rem' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
@@ -1436,21 +1369,8 @@ const BrgyBeneficiaries = () => {
                   </label>
                   <input type="number" step="0.01" min="0.01" value={encodeForm.farm_area_ha}
                     onChange={e => { setEncodeForm(p => ({ ...p, farm_area_ha: e.target.value })); setEncodeErrors(p => ({ ...p, farm_area_ha: '' })); }}
-                    disabled={isAtLimit}
                     placeholder="e.g. 0.50" 
-                    style={{ 
-                      ...inp(!!encodeErrors.farm_area_ha),
-                      backgroundColor: isAtLimit ? '#f3f4f6' : undefined,
-                      opacity: isAtLimit ? 0.6 : 1,
-                    }} />
-                  {hectareInfo && (
-                    <p style={{ fontSize: '0.7rem', color: isAtLimit ? '#991b1b' : '#9ca3af', margin: '0.375rem 0 0', fontWeight: isAtLimit ? 700 : 400 }}>
-                      {isAtLimit 
-                        ? `❌ Hectare allocation limit reached (${hectareInfo.total} ha total)`
-                        : `📍 Total: ${hectareInfo.total} ha | Remaining: ${hectareInfo.remaining.toFixed(2)} ha`
-                      }
-                    </p>
-                  )}
+                    style={{ ...inp(!!encodeErrors.farm_area_ha) }} />
                   {encodeErrors.farm_area_ha && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{encodeErrors.farm_area_ha}</p>}
                 </div>
               );
@@ -1458,8 +1378,6 @@ const BrgyBeneficiaries = () => {
 
             {/* Inbred: Area to be planted */}
             {eventIsInbred && (() => {
-              const hectareInfo = currentFarmer ? getFarmerRemainingHectares(currentFarmer) : null;
-              const isAtLimit = hectareInfo?.isExceeded;
               return (
                 <div style={{ marginBottom: '0.875rem' }}>
                   <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
@@ -1467,21 +1385,8 @@ const BrgyBeneficiaries = () => {
                   </label>
                   <input type="number" step="0.01" min="0.01" value={encodeForm.area_planted}
                     onChange={e => { setEncodeForm(p => ({ ...p, area_planted: e.target.value })); setEncodeErrors(p => ({ ...p, area_planted: '' })); }}
-                    disabled={isAtLimit}
                     placeholder="e.g. 0.50" 
-                    style={{ 
-                      ...inp(!!encodeErrors.area_planted),
-                      backgroundColor: isAtLimit ? '#f3f4f6' : undefined,
-                      opacity: isAtLimit ? 0.6 : 1,
-                    }} />
-                  {hectareInfo && (
-                    <p style={{ fontSize: '0.7rem', color: isAtLimit ? '#991b1b' : '#9ca3af', margin: '0.375rem 0 0', fontWeight: isAtLimit ? 700 : 400 }}>
-                      {isAtLimit 
-                        ? `❌ Hectare allocation limit reached (${hectareInfo.total} ha total)`
-                        : `📍 Total: ${hectareInfo.total} ha | Remaining: ${hectareInfo.remaining.toFixed(2)} ha`
-                      }
-                    </p>
-                  )}
+                    style={{ ...inp(!!encodeErrors.area_planted) }} />
                   {encodeErrors.area_planted && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{encodeErrors.area_planted}</p>}
                 </div>
               );

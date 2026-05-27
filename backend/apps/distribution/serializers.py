@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db.models import Sum
 from django.utils   import timezone
 from .models import (
     DistributionEvent,
@@ -40,6 +41,8 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
     arbs         = serializers.SerializerMethodField()
     four_ps      = serializers.SerializerMethodField()
     hectares     = serializers.SerializerMethodField()
+    allocated_hectares = serializers.SerializerMethodField()
+    remaining_hectares = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -50,6 +53,7 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
             'residency_municipality', 'residency_barangay',
             'farm_municipality', 'farm_barangay',
             'ip', 'senior_citizen', 'pwd', 'arbs', 'four_ps', 'hectares',
+            'allocated_hectares', 'remaining_hectares',
         ]
 
     def _get_profile(self, obj):
@@ -114,9 +118,36 @@ class FarmerSearchSerializer(serializers.ModelSerializer):
         p = self._get_profile(obj)
         if not p:
             return 0.0
-        # Use getattr for safe field access in case migration hasn't run
         hectares = getattr(p, 'hectares', None)
         return float(hectares) if hectares is not None else 0.0
+
+    def get_allocated_hectares(self, obj):
+        season = self.context.get('season')
+        year = self.context.get('year')
+
+        entries = DistributionEntry.objects.filter(
+            farmer=obj
+        ).exclude(
+            batch__status='REJECTED'
+        )
+
+        if season is not None:
+            entries = entries.filter(batch__event__season=season)
+        if year is not None:
+            entries = entries.filter(batch__event__year=year)
+
+        totals = entries.aggregate(
+            hybrid_total=Sum('farm_area_ha'),
+            inbred_total=Sum('area_planted')
+        )
+        hybrid = float(totals.get('hybrid_total') or 0)
+        inbred = float(totals.get('inbred_total') or 0)
+        return round(hybrid + inbred, 2)
+
+    def get_remaining_hectares(self, obj):
+        total = self.get_hectares(obj)
+        allocated = self.get_allocated_hectares(obj)
+        return round(max(0, total - allocated), 2)
 
 
 class DistributionEntrySerializer(serializers.ModelSerializer):

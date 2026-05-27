@@ -268,7 +268,6 @@ const FarmerProfile = () => {
           farm_municipality:      form.farm_municipality,
           farm_barangay:          form.farm_barangay,
           hectares:               parseFloat(form.hectares) || 0,  // Total farm hectares
-          contact_number:         form.contact_number,
           ip:                     form.ip,
           senior_citizen:         form.senior_citizen,
           pwd:                    form.pwd,

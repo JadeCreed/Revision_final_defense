@@ -921,11 +921,17 @@ const BrgyHarvest = () => {
   const handleSave = async (formData) => {
     setSaving(true);
     try {
+      const payload = { ...formData };
+      if (payload.farmer_id !== undefined && payload.farmer_id !== '') {
+        payload.farmer = Number(payload.farmer_id);
+      }
+      delete payload.farmer_id;
+
       if (editData?.id) {
-        await API.patch(`/production/harvest/${editData.id}/`, formData);
+        await API.patch(`/production/harvest/${editData.id}/`, payload);
         pushToast('Harvest record updated successfully.');
       } else {
-        await API.post('/production/harvest/', formData);
+        await API.post('/production/harvest/', payload);
         pushToast('Harvest record saved.');
       }
       setShowForm(false);
