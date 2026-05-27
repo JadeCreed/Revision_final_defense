@@ -31,10 +31,11 @@ class CustomUserManager(BaseUserManager):
         Create and return a superuser (admin)
         """
 
-        # ✅ FORCE REQUIRED ADMIN FIELDSa
+        # ✅ FORCE REQUIRED ADMIN FIELDS
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('role', 'ADMIN')
+        extra_fields.setdefault('is_verified', True)
 
         # 🔴 VALIDATION (VERY IMPORTANT)
         if extra_fields.get('is_staff') is not True:
@@ -42,6 +43,9 @@ class CustomUserManager(BaseUserManager):
 
         if extra_fields.get('is_superuser') is not True:
             raise ValueError("Superuser must have is_superuser=True")
+
+        if extra_fields.get('is_verified') is not True:
+            raise ValueError("Superuser must have is_verified=True")
 
         # ✅ CREATE SUPERUSER
         return self.create_user(contact_number, password, **extra_fields)
