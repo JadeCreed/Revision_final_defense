@@ -1,5 +1,3 @@
-# Generated migration to add hectares field to FarmerProfile
-
 from django.db import migrations, models
 
 

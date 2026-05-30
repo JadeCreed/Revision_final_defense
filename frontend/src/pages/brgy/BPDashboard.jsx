@@ -325,6 +325,29 @@ const BPDashboard = () => {
                 </div>
               ))}
             </div>
+
+            <button
+              onClick={() => navigate('/brgy/beneficiaries')}
+              style={{
+                marginTop: '1rem',
+                width: '100%',
+                padding: '0.875rem 1.25rem',
+                backgroundColor: '#166534',
+                color: 'white',
+                border: 'none',
+                borderRadius: '0.875rem',
+                cursor: 'pointer',
+                fontWeight: 800,
+                fontSize: '0.9rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <ClipboardList size={18} />
+              Create Beneficiary List
+            </button>
           </div>
         )}
 

@@ -35,7 +35,7 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('role', 'ADMIN')
-        extra_fields.setdefault('is_verified', True)
+        extra_fields['is_verified'] = True  # always force admin accounts to be verified
 
         # 🔴 VALIDATION (VERY IMPORTANT)
         if extra_fields.get('is_staff') is not True:

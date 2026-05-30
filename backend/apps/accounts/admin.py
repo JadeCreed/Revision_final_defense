@@ -16,7 +16,6 @@ class FarmerProfileInline(admin.StackedInline):
         'residency_municipality', 'residency_barangay',
         'farm_municipality', 'farm_barangay',
         'gender', 'ip', 'senior_citizen', 'pwd', 'arbs', 'four_ps',
-        'hectares',
     ]
 
     # Only include fields that actually exist on the model

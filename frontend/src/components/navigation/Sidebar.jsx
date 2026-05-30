@@ -6,6 +6,7 @@ import { useAuth } from '../../auth/AuthContext';
 import { MENU_CONFIG } from './MenuConfig';
 import { getBadgeCount } from '../../api/axios';
 import { LogOut, ChevronDown } from 'lucide-react';
+import logo from '../../assets/logo.png';
 
 // ── localStorage helpers ──
 const LS_KEY = 'agrice_badge_seen';
@@ -182,8 +183,8 @@ const Sidebar = () => {
     }}>
       {/* LOGO */}
       <div style={{ padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.625rem', borderBottom: '1px solid rgba(255,255,255,0.1)', flexShrink: 0 }}>
-        <div style={{ width: 36, height: 36, backgroundColor: '#f5c842', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          🌾
+        <div style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent' }}>
+          <img src={logo} alt="AGRICE logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
         <span style={{ color: 'white', fontWeight: 800, fontSize: '1.25rem' }}>AGRICE</span>
       </div>

@@ -192,7 +192,31 @@ class AdminPollListCreateView(APIView):
 
         serializer = PollSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
-            serializer.save(created_by=request.user, status='OPEN')
+            poll = serializer.save(created_by=request.user, status='OPEN')
+
+            # ── AUTO-CREATE ANNOUNCEMENT when poll is created ──
+            try:
+                from apps.announcements.models import Announcement
+                end_date_str = poll.end_date.strftime('%B %d, %Y at %I:%M %p') if poll.end_date else 'TBA'
+                Announcement.objects.create(
+                    title=f"Seed Preference Poll Now Open — {poll.get_season_display()} {poll.year}",
+                    content=(
+                        f"The Municipal Agriculture Office has launched the {poll.title}.\n\n"
+                        f"All registered and approved farmers are encouraged to participate by casting "
+                        f"their seed variety preference for the upcoming {poll.get_season_display()} {poll.year} planting season.\n\n"
+                        f"Voting Period: Now until {end_date_str}.\n\n"
+                        f"Log in to the AGRICE app to submit your seed preference. "
+                        f"Your vote helps the MAO plan the seed distribution program for your barangay.\n\n"
+                        f"Thank you for your participation."
+                    ),
+                    target_role='ALL',
+                    target_barangays='',
+                    posted_by=request.user,
+                    is_active=True,
+                )
+            except Exception:
+                pass  # Never block poll creation if announcement fails
+
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -559,6 +583,37 @@ class FinalSeedListCreateView(APIView):
             varieties = SeedVariety.objects.filter(id__in=variety_ids, seed_type=seed_type)
             final_seed.varieties.set(varieties)
             saved.append(final_seed)
+
+        # ── AUTO-CREATE ANNOUNCEMENT when seeds are finalized ──
+        try:
+            from apps.announcements.models import Announcement
+
+            variety_lines = []
+            for fs in saved:
+                variety_names = ', '.join([v.name for v in fs.varieties.all()])
+                if variety_names:
+                    variety_lines.append(f"• {fs.seed_type.name}: {variety_names}")
+            variety_summary = '\n'.join(variety_lines) if variety_lines else 'Details to follow.'
+
+            Announcement.objects.create(
+                title=f"Finalized Seed Varieties — {latest_poll.get_season_display()} {latest_poll.year}",
+                content=(
+                    f"The Municipal Agriculture Office has finalized the seed varieties "
+                    f"for the {latest_poll.get_season_display()} {latest_poll.year} planting season.\n\n"
+                    f"Confirmed Seed Varieties:\n{variety_summary}\n\n"
+                    f"Barangay Presidents may now proceed to create their Beneficiary Lists "
+                    f"based on these confirmed varieties. Farmers will receive seeds according "
+                    f"to their barangay's distribution schedule.\n\n"
+                    f"Please coordinate with your Barangay Agricultural Technician for further details.\n\n"
+                    f"Thank you."
+                ),
+                target_role='ALL',
+                target_barangays='',
+                posted_by=request.user,
+                is_active=True,
+            )
+        except Exception:
+            pass  # Never block seed finalization if announcement fails
 
         return Response({
             "message": f"Final seeds saved for {latest_poll.get_season_display()} {latest_poll.year}.",
