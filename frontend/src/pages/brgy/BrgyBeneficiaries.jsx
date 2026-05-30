@@ -244,6 +244,7 @@ const BrgyBeneficiaries = () => {
   const [reportBatchData, setReportBatchData] = useState(null);
   const [reportLoading, setReportLoading]     = useState(false);
   const [submitting, setSubmitting]           = useState(false);
+  const [nextStepBanner, setNextStepBanner]   = useState(null);
 
   // ── MODALS / TOASTS ──
   const [toast, setToast]             = useState(null);
@@ -665,6 +666,7 @@ const BrgyBeneficiaries = () => {
       await refreshDetail();
       if (view === 'report') await loadReportBatch(batchId);
       showToast('success', 'Batch submitted to admin for review.');
+      setNextStepBanner('beneficiaries');
     } catch (err) {
       showToast('error', err.response?.data?.error || 'Failed to submit.');
     } finally {
@@ -916,6 +918,40 @@ const BrgyBeneficiaries = () => {
                 {submitting ? 'Submitting...' : 'Submit Batch'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── NEXT STEP BANNER ── */}
+      {nextStepBanner === 'beneficiaries' && (
+        <div style={{
+          position: 'fixed', bottom: '5.5rem', left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 550, width: 'min(100%, 420px)',
+          animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '1rem',
+            padding: '1.25rem',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+            border: `1px solid ${GREEN.border}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <p style={{ fontWeight: 700, color: '#166534', margin: 0, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <CheckCircle size={15} color="#166534" /> Batch submitted!
+              </p>
+              <button onClick={() => setNextStepBanner(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1.1rem', padding: 0 }}>×</button>
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: '0 0 0.875rem', lineHeight: 1.5 }}>
+              Next step: wait for admin approval, then proceed to Distribution to encode seed delivery details.
+            </p>
+            <button
+              onClick={() => setNextStepBanner(null)}
+              style={{ width: '100%', padding: '0.625rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}
+            >
+              Got it
+            </button>
           </div>
         </div>
       )}

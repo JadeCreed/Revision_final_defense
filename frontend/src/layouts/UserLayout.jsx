@@ -13,6 +13,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Bell, X, LogOut, User, ChevronRight } from 'lucide-react'; // ✅ single import
 import { getUnreadCount } from '../api/axios';
 import { USER_NAV, ROLE_COLORS, ROLE_LABELS } from '../components/navigation/UserNavConfig';
+import logo from '../assets/logo.png';
 
 const DESKTOP_BREAKPOINT = 768;
 
@@ -191,12 +192,13 @@ const UserLayout = () => {
           }}>
             <div style={{
               width: '36px', height: '36px',
-              backgroundColor: colors.accent,
-              borderRadius: '8px',
+              borderRadius: '50%',
+              overflow: 'hidden',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.1rem', flexShrink: 0,
+              flexShrink: 0,
+              backgroundColor: 'transparent'
             }}>
-              🌾
+              <img src={logo} alt="AGRICE logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             </div>
             <span style={{ color: 'white', fontWeight: 800, fontSize: '1.25rem' }}>AGRICE</span>
           </div>
@@ -294,7 +296,16 @@ const UserLayout = () => {
           {/* Left side */}
           {!isDesktop ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ fontSize: '1.4rem' }}>🌾</span>
+              <div style={{
+                width: '32px', height: '32px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                flexShrink: 0,
+                backgroundColor: 'transparent'
+              }}>
+                <img src={logo} alt="AGRICE logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
               <span style={{ color: 'white', fontWeight: 800, fontSize: '1.1rem' }}>AGRICE</span>
             </div>
           ) : (

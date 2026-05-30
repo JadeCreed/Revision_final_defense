@@ -55,7 +55,7 @@ export const getATFarmerDetail     = (id)     => API.get(`/crop-monitoring/at/fa
 export const getOfficials       = (params) => API.get('/accounts/admin/users/officials/', { params });
 export const createOfficial     = (data)   => API.post('/accounts/admin/users/officials/create/', data);
 export const updateOfficialAssignedBarangays = (id, data) => API.put(`/accounts/admin/users/${id}/assigned-barangays/`, data);
-export const deactivateUser     = (id)     => API.post(`/accounts/admin/users/${id}/deactivate/`);
+export const deactivateUser     = (id, data = {}) => API.post(`/accounts/admin/users/${id}/deactivate/`, data);
 
 // ── RESET REQUESTS (Tab 4) ──
 export const getResetRequests    = (params) => API.get('/accounts/admin/users/reset-requests/', { params });

@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.generics import ListCreateAPIView, RetrieveUpdateDestroyAPIView
+from django.conf import settings
 from django.db.models import Avg, Sum, Count, Q, F
 from django.db.models.functions import Coalesce
 from decimal import Decimal
@@ -12,9 +13,9 @@ from apps.accounts.permissions import IsAdminUserRole, IsBPUser
 from .models import HarvestRecord
 from .serializers import HarvestRecordSerializer
 
-# DA official constants — never change without DA confirmation
-SEEDING_DENSITY    = {'HYBRID': 15,   'INBRED': 40,   'OWN_SEED': 15}
-STANDARD_YIELD_KG  = {'HYBRID': 4000, 'INBRED': 1500, 'OWN_SEED': 2000}
+# DA official constants — kept in shared settings for consistency
+SEEDING_DENSITY    = settings.SEEDING_DENSITY
+STANDARD_YIELD_KG  = settings.STANDARD_YIELDS
 SEED_LABELS        = {
     'HYBRID':   'Hybrid seeds',
     'INBRED':   'Certified seeds',

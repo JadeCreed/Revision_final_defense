@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Search, Plus, Edit3, Trash2, BarChart3,
   Users, Layers, ShieldCheck, CheckCircle2,
-  AlertTriangle, Droplets, Sun, X,
+  AlertTriangle, Droplets, Sun, X, Trophy,
 } from 'lucide-react';
 import API from '../../api/axios';
 
@@ -55,22 +55,28 @@ const SEED_SOURCES = [
 const getSeedCfg = (key) =>
   SEED_SOURCES.find(s => s.key === key) || SEED_SOURCES[2];
 
+const getSeedIcon = (key) => {
+  if (key === 'HYBRID') return Layers;
+  if (key === 'INBRED') return ShieldCheck;
+  return Sun;
+};
+
 // Utilization tier system based on real Lucban data
 // Standard stays at DA constants, but tiers reflect actual performance range
 const getUtilTier = (pct) => {
   if (pct === null || pct === undefined)
-    return { label: 'N/A', color: '#94a3b8', bg: '#f9fafb', border: '#e5e7eb', icon: '—' };
+    return { label: 'N/A', color: '#94a3b8', bg: '#f9fafb', border: '#e5e7eb', icon: null };
   if (pct >= 200)
-    return { label: 'Master Farmer', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', icon: '🏆' };
+    return { label: 'Master Farmer', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', icon: <Trophy size={12} /> };
   if (pct >= 150)
-    return { label: 'Exceptional', color: '#1a4d1a', bg: '#dcfce7', border: '#86efac', icon: '✅' };
+    return { label: 'Exceptional', color: '#1a4d1a', bg: '#dcfce7', border: '#86efac', icon: <CheckCircle2 size={12} /> };
   if (pct >= 100)
-    return { label: 'Excellent', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: '✅' };
+    return { label: 'Excellent', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: <CheckCircle2 size={12} /> };
   if (pct >= 75)
-    return { label: 'Good', color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: '⚠️' };
+    return { label: 'Good', color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: <AlertTriangle size={12} /> };
   if (pct >= 50)
-    return { label: 'Below target', color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', icon: '⚠️' };
-  return { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: '❌' };
+    return { label: 'Below target', color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', icon: <AlertTriangle size={12} /> };
+  return { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={12} /> };
 };
 
 // Dry weight conversion: Fresh × (1 - moisture/100)
@@ -765,10 +771,12 @@ const HarvestRow = ({ rec, idx, total, onEdit, onDelete }) => {
         backgroundColor: `${seedCfg.color}15`,
         border: `1.5px solid ${seedCfg.color}`,
         display: 'grid', placeItems: 'center',
-        fontSize: '0.68rem', fontWeight: 800, color: seedCfg.color,
+        color: seedCfg.color,
       }}>
-        {rec.seed_source === 'HYBRID' ? 'HYB'
-          : rec.seed_source === 'INBRED' ? 'CRT' : 'FSS'}
+        {(() => {
+          const SeedIcon = getSeedIcon(rec.seed_source);
+          return <SeedIcon size={18} />;
+        })()}
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1235,12 +1243,12 @@ const BrgyHarvest = () => {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               {[
-                { range: '≥ 200%', label: 'Master Farmer', icon: '🏆', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '150–199%', label: 'Exceptional', icon: '✅', color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
-                { range: '100–149%', label: 'Excellent', icon: '✅', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '75–99%', label: 'Good', icon: '⚠️', color: '#b45309', bg: '#fefce8', border: '#fde68a' },
-                { range: '50–74%', label: 'Below target', icon: '⚠️', color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
-                { range: '< 50%', label: 'Needs attention', icon: '❌', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
+                { range: '≥ 200%', label: 'Master Farmer', icon: <Trophy size={12} />, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+                { range: '150–199%', label: 'Exceptional', icon: <CheckCircle2 size={12} />, color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
+                { range: '100–149%', label: 'Excellent', icon: <CheckCircle2 size={12} />, color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
+                { range: '75–99%', label: 'Good', icon: <AlertTriangle size={12} />, color: '#b45309', bg: '#fefce8', border: '#fde68a' },
+                { range: '50–74%', label: 'Below target', icon: <AlertTriangle size={12} />, color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
+                { range: '< 50%', label: 'Needs attention', icon: <X size={12} />, color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
               ].map(t => (
                 <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                   <span style={{ backgroundColor: t.bg, color: t.color, border: `1px solid ${t.border}`, borderRadius: '999px', padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700, minWidth: 130, textAlign: 'center' }}>

@@ -143,6 +143,7 @@ const BrgyDistribution = () => {
   const [distErrors, setDistErrors] = useState({});
   const [saving, setSaving]         = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [nextStepBanner, setNextStepBanner] = useState(false);
 
   // Report
   const [reportBatchId, setReportBatchId]     = useState(null);
@@ -354,6 +355,7 @@ const BrgyDistribution = () => {
       };
       await updateEntry(currentEntry.id, payload);
       showToast('success', `Distribution data saved for ${currentEntry.farmer_name}.`);
+      setNextStepBanner(true);
       setTimeout(async () => {
         setView('report');
         await loadReportBatch(selectedBatch.id);
@@ -453,6 +455,40 @@ const BrgyDistribution = () => {
         onCancel={() => setConfirmSnack(null)}
       />
       <SignatureModal sig={viewSig} onClose={() => setViewSig(null)} />
+
+      {/* ── NEXT STEP BANNER ── */}
+      {nextStepBanner && (
+        <div style={{
+          position: 'fixed', bottom: '5.5rem', left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 550, width: 'min(100%, 420px)',
+          animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '1rem',
+            padding: '1.25rem',
+            boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
+            border: `1px solid ${GREEN.border}`,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+              <p style={{ fontWeight: 700, color: '#166534', margin: 0, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <CheckCircle size={15} color="#166534" /> Seed distributed!
+              </p>
+              <button onClick={() => setNextStepBanner(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: '1.1rem', padding: 0 }}>×</button>
+            </div>
+            <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: '0 0 0.875rem', lineHeight: 1.5 }}>
+              Next step: farmers can now encode their yield data in the Yield Encode menu after harvest.
+            </p>
+            <button
+              onClick={() => setNextStepBanner(false)}
+              style={{ width: '100%', padding: '0.625rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Submit Confirm */}
       {submitConfirm && (

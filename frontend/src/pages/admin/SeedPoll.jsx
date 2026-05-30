@@ -548,6 +548,27 @@ const SeedPoll = () => {
                 ))}
               </div>
 
+{currentPoll.status === 'CLOSED' && (
+              <div style={{
+                backgroundColor: '#f3f4f6',
+                border: '1.5px solid #d1d5db',
+                borderRadius: '0.75rem',
+                padding: '0.875rem 1.25rem',
+                marginBottom: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.625rem',
+              }}>
+                <XCircle size={18} color="#6b7280" />
+                <div>
+                  <p style={{ fontWeight: 700, color: '#374151', margin: 0, fontSize: '0.875rem' }}>Poll Closed</p>
+                  <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: '0.125rem 0 0' }}>
+                    This poll is closed. Finalize seed varieties to make them available to all users.
+                  </p>
+                </div>
+              </div>
+            )}
+
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                 <button onClick={() => { setSelectedPollId(currentPoll.id); setActiveTab('results'); }}
                   style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
@@ -565,12 +586,46 @@ const SeedPoll = () => {
                   <XCircle size={16} />
                   {actionLoading[currentPoll.id] === 'close' ? 'Closing...' : 'Close Poll'}
                 </button>
-                {/* Finalize button after lock/close */}
                 {(currentPoll.status === 'LOCKED' || currentPoll.status === 'CLOSED') && (
-                  <button onClick={handleOpenFinalize}
-                    style={{ padding: '0.5rem 1.25rem', backgroundColor: '#166534', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem', boxShadow: '0 2px 8px rgba(22,101,52,0.3)' }}>
-                    <Leaf size={16} /> Finalize Seed Varieties
-                  </button>
+                  <div style={{ width: '100%', marginTop: '1rem' }}>
+                    <div style={{
+                      backgroundColor: '#f0fdf4',
+                      border: '1.5px solid #bbf7d0',
+                      borderRadius: '0.875rem',
+                      padding: '1rem 1.25rem',
+                      marginBottom: '1.25rem',
+                    }}>
+                      <p style={{ fontWeight: 700, color: '#166534', margin: '0 0 0.375rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                        <Leaf size={16} /> Finalize Seed Varieties
+                      </p>
+                      <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+                        Select and confirm which seed varieties are available for this season.
+                        The finalized varieties will be used as the seed choices in Beneficiaries
+                        when the Barangay President creates a distribution program.
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleOpenFinalize}
+                      style={{
+                        width: '100%',
+                        padding: '1rem 1.5rem',
+                        backgroundColor: '#166534',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '0.75rem',
+                        cursor: 'pointer',
+                        fontWeight: 800,
+                        fontSize: '0.95rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        boxShadow: '0 4px 16px rgba(22,101,52,0.35)',
+                      }}
+                    >
+                      <Leaf size={18} /> Finalize Seed Varieties
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -588,10 +643,41 @@ const SeedPoll = () => {
 
           {/* Finalize button when no current poll but past closed polls exist */}
           {!currentPoll && canFinalize && (
-            <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ marginBottom: '1.5rem', backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '2px dashed #bbf7d0' }}>
+              <div style={{
+                backgroundColor: '#f0fdf4',
+                border: '1.5px solid #bbf7d0',
+                borderRadius: '0.875rem',
+                padding: '1rem 1.25rem',
+                marginBottom: '1.25rem',
+              }}>
+                <p style={{ fontWeight: 700, color: '#166534', margin: '0 0 0.375rem', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                  <Leaf size={16} /> Finalize Seed Varieties
+                </p>
+                <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0, lineHeight: 1.5 }}>
+                  Select and confirm which seed varieties are available for this season.
+                  The finalized varieties will be used as the seed choices in Beneficiaries
+                  when the Barangay President creates a distribution program.
+                </p>
+              </div>
               <button onClick={handleOpenFinalize}
-                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#166534', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem', boxShadow: '0 2px 8px rgba(22,101,52,0.3)' }}>
-                <Leaf size={16} /> Finalize Seed Varieties
+                style={{
+                  width: '100%',
+                  padding: '1rem 1.5rem',
+                  backgroundColor: '#166534',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '0.75rem',
+                  cursor: 'pointer',
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.5rem',
+                  boxShadow: '0 4px 16px rgba(22,101,52,0.35)',
+                }}>
+                <Leaf size={18} /> Finalize Seed Varieties
               </button>
             </div>
           )}

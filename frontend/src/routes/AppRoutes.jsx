@@ -31,6 +31,7 @@ import Settings        from '../pages/admin/Settings';
 // Admin — User Management sub-pages
 import FarmerRequests    from '../pages/admin/users/FarmerRequests';
 import FarmerMasterlist  from '../pages/admin/users/FarmerMasterlist';
+import FarmerRecords     from '../pages/admin/users/FarmerRecords';
 import SystemUsers       from '../pages/admin/users/SystemUsers';
 import ResetRequests     from '../pages/admin/users/ResetRequests';
 import Archive           from '../pages/admin/users/Archive';
@@ -100,6 +101,7 @@ const AppRoutes = () => (
           <Route path="/admin/reports"        element={<Reports />} />
           <Route path="/admin/settings"       element={<Settings />} />
           <Route path="/admin/users"          element={<Navigate to="/admin/users/farmer-requests" replace />} />
+          <Route path="/admin/users/farmers"      element={<FarmerRecords />} />
           <Route path="/admin/users/farmer-requests"  element={<FarmerRequests />} />
           <Route path="/admin/users/farmer-masterlist" element={<FarmerMasterlist />} />
           <Route path="/admin/users/officials"         element={<SystemUsers />} />
