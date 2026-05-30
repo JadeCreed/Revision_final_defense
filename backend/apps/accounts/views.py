@@ -3,6 +3,7 @@ from rest_framework.generics import ListAPIView, RetrieveUpdateDestroyAPIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.pagination import PageNumberPagination
+from rest_framework import parsers
 
 from .models import PasswordResetOTP
 from .utils import generate_otp, send_otp_email
@@ -13,6 +14,7 @@ from datetime import timedelta
 import secrets
 import string
 import re
+import os
 
 from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -484,63 +486,95 @@ class FarmerDashboardView(APIView):
 
 class FarmerProfileView(APIView):
     permission_classes = [IsAuthenticated, IsFarmer]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser]
 
     def get(self, request):
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
-        serializer = FarmerProfileSerializer(profile)
+        serializer = FarmerProfileSerializer(profile, context={'request': request})
         return Response({
             "user": {
-                "first_name":    request.user.first_name,
-                "last_name":     request.user.last_name,
-                "email":         request.user.email,
+                "first_name":     request.user.first_name,
+                "last_name":      request.user.last_name,
+                "email":          request.user.email,
                 "contact_number": request.user.contact_number,
-                "barangay":      request.user.barangay,
-                "rsbsa_number":  request.user.rsbsa_number,
-                "status":        request.user.status,
+                "barangay":       request.user.barangay,
+                "rsbsa_number":   request.user.rsbsa_number,
+                "status":         request.user.status,
             },
             "profile": serializer.data
         })
 
-
     def put(self, request):
-
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         user = request.user
-        user_data = request.data.get("user", {})
 
-        # ── UPDATE USER FIELDS ──
-        # Use queryset.update() to bypass full_clean() / save() validation issues
-        # full_clean() was causing silent failures on contact number uniqueness check
-        user_update_fields = {}
-        allowed_user_fields = ['first_name', 'last_name', 'email', 'contact_number', 'barangay', 'rsbsa_number']
-        for field in allowed_user_fields:
-            if field in user_data:
-                user_update_fields[field] = user_data[field]
+        # ── Detect if this is multipart (has file) or JSON ──
+        is_multipart = hasattr(request.data, 'getlist')
 
-        if user_update_fields:
-            User.objects.filter(pk=user.pk).update(**user_update_fields)
-            # Refresh user object so status check below is accurate
-            user.refresh_from_db()
+        if is_multipart:
+            # File upload request — only update id_card
+            id_card = request.FILES.get('id_card')
+            if not id_card:
+                return Response({"error": "No file provided."}, status=400)
 
-        # ── UPDATE FARMER PROFILE ──
-        profile_data = request.data.get("profile", {})
-        serializer = FarmerProfileSerializer(profile, data=profile_data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            # Reload profile to check completeness
-            profile.refresh_from_db()
+            # Security: validate mimetype
+            allowed_mimetypes = ['image/jpeg', 'image/jpg', 'image/png']
+            if id_card.content_type not in allowed_mimetypes:
+                return Response({"error": "Only JPG and PNG files are allowed."}, status=400)
 
-            # ── STATUS UPGRADE ──
-            # If profile is now complete AND status is PENDING → set to COMPLETE
-            # COMPLETE = admin can now review and approve
-            user.refresh_from_db()
-            if profile.is_complete():
-                if user.status in ('PENDING', 'REJECTED'):
-                    User.objects.filter(pk=user.pk).update(status='COMPLETE')
+            # Security: validate size (5MB)
+            if id_card.size > 5 * 1024 * 1024:
+                return Response({"error": "File size must not exceed 5MB."}, status=400)
 
-            return Response({"message": "Profile updated successfully"})
+            # Delete old file if exists to avoid clutter
+            if profile.id_card:
+                try:
+                    old_path = profile.id_card.path
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+                except Exception:
+                    pass
 
-        return Response(serializer.errors, status=400)
+            profile.id_card = id_card
+            profile.save()
+            return Response({"message": "ID card uploaded successfully."})
+
+        else:
+            # JSON request — update profile fields (original logic, fixed)
+            user_data = request.data.get("user", {})
+
+            user_update_fields = {}
+            allowed_user_fields = ['first_name', 'last_name', 'email', 'contact_number', 'barangay', 'rsbsa_number']
+            for field in allowed_user_fields:
+                if field in user_data:
+                    user_update_fields[field] = user_data[field]
+
+            if user_update_fields:
+                User.objects.filter(pk=user.pk).update(**user_update_fields)
+                user.refresh_from_db()
+
+            profile_data = request.data.get("profile", {})
+
+            # ── FIX: explicitly cast hectares to Decimal-safe string ──
+            if 'hectares' in profile_data:
+                try:
+                    profile_data['hectares'] = str(float(profile_data['hectares']))
+                except (TypeError, ValueError):
+                    profile_data.pop('hectares')
+
+            serializer = FarmerProfileSerializer(profile, data=profile_data, partial=True, context={'request': request})
+            if serializer.is_valid():
+                serializer.save()
+                profile.refresh_from_db()
+                user.refresh_from_db()
+
+                if profile.is_complete():
+                    if user.status in ('PENDING', 'REJECTED'):
+                        User.objects.filter(pk=user.pk).update(status='COMPLETE')
+
+                return Response({"message": "Profile updated successfully"})
+
+            return Response(serializer.errors, status=400)
 
 # List all farmers (Admin)
 # List all farmers (Admin) with optional filtering for inactive users

@@ -227,17 +227,25 @@ class AdminCreateBPSerializer(serializers.ModelSerializer):
         return user
 
 class FarmerProfileSerializer(serializers.ModelSerializer):
+    id_card_url = serializers.SerializerMethodField()
+
     class Meta:
         model = FarmerProfile
         fields = '__all__'
-        read_only_fields = ['user']  # link automatically to request.user
+        read_only_fields = ['user']
+        extra_kwargs = {
+            'id_card': {'required': False}
+        }
 
-    def create(self, validated_data):
-        # Pre-fill profile from User data if creating
-        return super().create(validated_data)
-    
+    def get_id_card_url(self, obj):
+        if obj.id_card:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.id_card.url)
+            return obj.id_card.url
+        return None
+
     def update(self, instance, validated_data):
-        # Allow partial update
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -333,12 +341,13 @@ class FarmerListSerializer(serializers.ModelSerializer):
     # Shows profile completion status
     profile_complete = serializers.SerializerMethodField()
     gender = serializers.SerializerMethodField()
+    hectares = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
         fields = [
             'id', 'first_name', 'last_name', 'contact_number',
-            'barangay', 'rsbsa_number', 'gender', 'status',
+            'barangay', 'rsbsa_number', 'gender', 'hectares', 'status',
             'is_verified', 'is_active', 'date_joined',
             'profile_complete'
         ]
@@ -350,6 +359,13 @@ class FarmerListSerializer(serializers.ModelSerializer):
             return obj.profile.gender or ''
         except (FarmerProfile.DoesNotExist, AttributeError):
             return ''
+
+    def get_hectares(self, obj):
+        try:
+            h = obj.profile.hectares
+            return float(h) if h is not None else None
+        except (FarmerProfile.DoesNotExist, AttributeError):
+            return None
 
     def get_profile_complete(self, obj):
         # Check if farmer has completed their full profile form

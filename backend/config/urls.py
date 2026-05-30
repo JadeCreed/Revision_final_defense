@@ -15,7 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path,include
+from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -30,3 +32,6 @@ urlpatterns = [
     path('api/crop-monitoring/', include('apps.crop_monitoring.urls')),
     # path('api/crop-phase/', include('apps.crop_phase.urls')),
 ]
+
+# Serve media files in development
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

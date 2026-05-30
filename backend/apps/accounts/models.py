@@ -7,6 +7,31 @@ from django.core.exceptions import ValidationError
 import random
 from django.utils import timezone
 from datetime import timedelta
+import os
+
+def farmer_id_upload_path(instance, filename):
+    """
+    Rename uploaded file to farmer_{user_id}_id.{ext}
+    Stored in media/farmer_ids/
+    Never trust the original filename.
+    """
+    ext = filename.rsplit('.', 1)[-1].lower()
+    return f'farmer_ids/farmer_{instance.user_id}_id.{ext}'
+
+def validate_id_card(file):
+    """
+    Security checks for uploaded ID card image.
+    1. File size max 5MB
+    2. Only jpg/jpeg/png allowed (by extension AND mimetype)
+    """
+    max_size = 5 * 1024 * 1024  # 5MB
+    if file.size > max_size:
+        raise ValidationError("File size must not exceed 5MB.")
+    
+    allowed_extensions = ['jpg', 'jpeg', 'png']
+    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+    if ext not in allowed_extensions:
+        raise ValidationError("Only JPG and PNG files are allowed.")
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -116,8 +141,16 @@ class FarmerProfile(models.Model):
     pwd = models.BooleanField(default=False)
     arbs = models.BooleanField(default=False)
     four_ps = models.BooleanField(default=False)
+    hectares = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text='Total farm hectares')  # Total farm hectares
 
-    # 🔹 Contact
+    # 🔹 ID Card upload (NEW)
+    id_card = models.ImageField(
+        upload_to=farmer_id_upload_path,
+        blank=True,
+        null=True,
+        validators=[validate_id_card]
+    )
+
     # 🔹 Timestamp
     date_completed = models.DateTimeField(auto_now=True)
 
@@ -125,7 +158,7 @@ class FarmerProfile(models.Model):
         """
         Returns True if farmer filled all required fields.
         Admin can only approve if this returns True.
-        Required: dob, residency, farm location, gender, contact
+        Required: dob, residency, farm location, gender, contact, hectares
         """
         return all([
             self.date_of_birth,
@@ -135,6 +168,7 @@ class FarmerProfile(models.Model):
             self.farm_barangay,
             self.gender,
             self.user.contact_number,
+            self.hectares,  # Required: farmer must specify total hectares
         ])
 
     def __str__(self):

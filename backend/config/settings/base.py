@@ -2,6 +2,7 @@
 Django base settings moved from config/settings.py.
 Shared settings for all environments.
 """
+import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config
@@ -200,3 +201,9 @@ STANDARD_YIELDS = {
     'INBRED': 4000,    # kg/ha
     'OWN_SEED': 3000,  # kg/ha (pending client confirmation)
 }
+
+# =========================
+# 📁 MEDIA FILES (Farmer ID Card Uploads)
+# =========================
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
