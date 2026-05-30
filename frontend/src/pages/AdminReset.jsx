@@ -1,20 +1,40 @@
-// src/pages/AdminReset.jsx
-// FORGOT PASSWORD — Alternative flow (no email)
-// User enters their contact number → system checks if it exists
-// → notifies admin to manually reset → user waits for admin action
-// Admin will see this request in User Management (to be built later)
-
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import logo from '../assets/logo.png';
 import API from '../api/axios';
 
 const AdminReset = () => {
   const [contactNumber, setContactNumber] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = async (e) => {
+  const [showOTPModal, setShowOTPModal] = useState(false);
+  const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
+  const [otpError, setOtpError] = useState('');
+  const [countdown, setCountdown] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+  const timerRef = useRef(null);
+  const inputRefs = useRef([]);
+
+  const startCountdown = () => {
+    setCountdown(60);
+    setCanResend(false);
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current);
+          setCanResend(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  const handleSendCode = async (e) => {
     e.preventDefault();
     if (contactNumber.length !== 11) {
       setError('Please enter a valid 11-digit contact number.');
@@ -23,100 +43,240 @@ const AdminReset = () => {
     setLoading(true);
     setError('');
     try {
-      // Call backend to verify number exists + notify admin
-      // Endpoint: POST /api/accounts/request-admin-reset/
-      // (you will create this Django view later)
-      await API.post('/admin-reset-request/', { contact_number: contactNumber });
-      setSubmitted(true);
+      await API.post('/accounts/admin-reset-request/', { contact_number: contactNumber });
+      setShowOTPModal(true);
+      setOtpValues(['', '', '', '', '', '']);
+      setOtpError('');
+      startCountdown();
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
-      setError(err.response?.data?.error || 'Contact number not found in our records.');
+      setError(
+        err.response?.data?.error ||
+        'We could not process your request. Please check your contact number and try again.'
+      );
+      setShowOTPModal(false);
     } finally {
       setLoading(false);
     }
   };
 
-  // Success screen
-  if (submitted) {
-    return (
-      <div className="register-page">
-        <div className="auth-card" style={{ textAlign: 'center' }}>
-          <div className="auth-card-icon"><span style={{ fontSize: '1.5rem' }}>📋</span></div>
-          <h2 className="auth-card-title">Request Submitted</h2>
-          <p style={{ color: 'var(--color-muted)', margin: '1rem 0', lineHeight: 1.6 }}>
-            Your password reset request has been sent to the administrator.
-            Please wait for the admin to verify your account and reset your password.
-            You may contact the MAO office directly for faster assistance.
-          </p>
-          <Link to="/">
-            <button className="btn-primary">Back to Login</button>
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const handleOtpChange = (index, value) => {
+    if (!/^[0-9]?$/.test(value)) return;
+    const next = [...otpValues];
+    next[index] = value;
+    setOtpValues(next);
+    setOtpError('');
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otpValues[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (pasted.length === 6) {
+      setOtpValues(pasted.split(''));
+      inputRefs.current[5]?.focus();
+    }
+  };
 
   return (
-    <div className="register-page">
-      <div className="auth-card">
-
-        {/* Icon */}
-        <div className="auth-card-icon">
-          <span style={{ fontSize: '1.5rem' }}>📞</span>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: 'var(--color-bg)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 'calc(var(--nav-h) + 2rem) 1.25rem 3rem',
+    }}>
+      <div style={{
+        background: 'white',
+        borderRadius: '16px',
+        padding: '2.5rem 2rem',
+        width: '100%',
+        maxWidth: '420px',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.10)',
+        border: '1px solid rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+          <img
+            src={logo}
+            alt="AGRICE Logo"
+            style={{ width: '64px', height: '64px', objectFit: 'contain' }}
+          />
         </div>
 
-        <h2 className="auth-card-title">Request Admin Reset</h2>
-        <p className="auth-card-subtitle">
-          Don't have access to your email? Enter your registered contact number and
-          the administrator will verify and reset your password for you.
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, textAlign: 'center', color: '#1a1a1a', marginBottom: '0.4rem' }}>
+          Forgot Password
+        </h2>
+        <p style={{ fontSize: '0.82rem', color: '#6b7280', textAlign: 'center', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+          Enter your registered contact number and we'll send you a verification code to reset your password.
         </p>
 
-        {error && <div className="error-banner">{error}</div>}
+        {error && (
+          <div style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '8px', padding: '0.6rem 0.85rem', fontSize: '0.8rem', marginBottom: '1rem' }}>
+            {error}
+          </div>
+        )}
 
-        <form onSubmit={handleSubmit}>
-          {/* Contact Number */}
-          <div className="form-group">
-            <label>Contact Number</label>
+        <form onSubmit={handleSendCode}>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.4rem' }}>
+              Contact Number
+            </label>
             <input
-              className={`form-input ${error ? 'error' : ''}`}
               type="text"
               placeholder="09XXXXXXXXX"
               maxLength={11}
               value={contactNumber}
-              onChange={(e) => {
-                // Only allow numbers
-                const val = e.target.value.replace(/\D/g, '');
-                setContactNumber(val);
-                setError('');
-              }}
+              onChange={e => { setContactNumber(e.target.value.replace(/\D/g, '')); setError(''); }}
               required
+              style={{
+                width: '100%', padding: '0.7rem 1rem',
+                border: error ? '1.5px solid #fca5a5' : '1.5px solid #d1d5db',
+                borderRadius: '8px', fontSize: '0.875rem',
+                background: '#fafafa', color: '#1a1a1a',
+                outline: 'none', boxSizing: 'border-box',
+              }}
+              onFocus={e => { e.target.style.borderColor = '#2d6a2d'; e.target.style.background = 'white'; }}
+              onBlur={e => { e.target.style.borderColor = error ? '#fca5a5' : '#d1d5db'; e.target.style.background = '#fafafa'; }}
             />
-            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+            <span style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem', display: 'block' }}>
               Enter the contact number you used when registering
             </span>
           </div>
 
-          {/* Submit */}
-          <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Submitting...' : 'Request Admin Reset'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+            <Link to="/forgot-password" style={{ fontSize: '0.8rem', color: 'var(--color-primary)', fontWeight: 600, textDecoration: 'none' }}>
+              Try Another Way
+            </Link>
+            <button type="submit" disabled={loading} style={{
+              padding: '0.65rem 1.5rem',
+              background: loading ? '#86efac' : 'var(--color-primary)',
+              color: 'white', border: 'none', borderRadius: '8px',
+              fontSize: '0.875rem', fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+            }}>
+              {loading ? 'Sending...' : 'Send Code'}
+            </button>
+          </div>
         </form>
 
-        {/* Back to email reset */}
-        <p style={{ textAlign: 'center', marginTop: '1.25rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
-          Have access to your email?{' '}
-          <Link to="/forgot-password" style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
-            Reset via Email
+        <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
+          Remembered your password?{' '}
+          <Link to="/" style={{ color: 'var(--color-primary)', fontWeight: 700, textDecoration: 'none' }}>
+            Back to Login
           </Link>
         </p>
-
-        <p style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
-          <Link to="/" style={{ color: 'var(--color-muted)' }}>Back to Login</Link>
-        </p>
-
-        <p className="footer-text" style={{ color: 'var(--color-muted)' }}>
-          AGRICE - Municipal Agriculture Office, Lucban
+        <p style={{ textAlign: 'center', marginTop: '1rem', fontSize: '0.68rem', color: '#d1d5db' }}>
+          AGRICE – Municipal Agriculture Office, Lucban
         </p>
       </div>
+
+      {showOTPModal && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 999, padding: '1rem',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            background: 'white', borderRadius: '24px',
+            padding: '2.5rem 2rem', width: '100%', maxWidth: '380px',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+            textAlign: 'center', position: 'relative',
+          }}>
+            <button onClick={() => setShowOTPModal(false)} style={{
+              position: 'absolute', top: '1rem', right: '1rem',
+              background: '#f3f4f6', border: 'none', borderRadius: '50%',
+              width: '32px', height: '32px', cursor: 'pointer',
+              fontSize: '1rem', color: '#6b7280',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>×</button>
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+              <img src={logo} alt="AGRICE Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
+            </div>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 0.375rem' }}>
+              Check Your Phone
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.5rem', lineHeight: 1.6 }}>
+              We sent a 6-digit code to the number you provided.
+            </p>
+            <div style={{
+              display: 'inline-block',
+              backgroundColor: '#fef9c3', color: '#854d0e',
+              fontSize: '0.72rem', fontWeight: 600,
+              padding: '0.2rem 0.6rem', borderRadius: '999px',
+              marginBottom: '1.5rem',
+            }}>
+              SMS feature coming soon
+            </div>
+
+            {otpError && (
+              <div style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '8px', padding: '0.5rem 0.75rem', fontSize: '0.78rem', marginBottom: '1rem' }}>
+                {otpError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.625rem', justifyContent: 'center', marginBottom: '1.5rem' }} onPaste={handleOtpPaste}>
+              {otpValues.map((val, i) => (
+                <input
+                  key={i}
+                  ref={(el) => (inputRefs.current[i] = el)}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={val}
+                  onChange={(e) => handleOtpChange(i, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                  style={{
+                    width: '48px', height: '56px', textAlign: 'center', fontSize: '1.4rem', fontWeight: 700,
+                    border: `2px solid ${val ? '#2d6a2d' : '#e5e7eb'}`,
+                    borderRadius: '12px', outline: 'none', background: val ? '#f0fdf4' : 'white', color: '#1a1a1a', transition: 'all 0.15s', caretColor: '#2d6a2d',
+                  }}
+                  onFocus={(e) => { e.target.style.borderColor = '#2d6a2d'; e.target.style.boxShadow = '0 0 0 3px rgba(45,106,45,0.12)'; }}
+                  onBlur={(e) => { e.target.style.borderColor = val ? '#2d6a2d' : '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+                />
+              ))}
+            </div>
+
+            <button disabled style={{
+              width: '100%', padding: '0.8rem',
+              background: '#d1d5db', color: '#9ca3af',
+              border: 'none', borderRadius: '10px',
+              fontSize: '0.95rem', fontWeight: 700,
+              cursor: 'not-allowed', marginBottom: '1.25rem',
+            }}>
+              Verify Code
+            </button>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+              <span style={{ color: '#9ca3af' }}>
+                {canResend ? (
+                  <button disabled style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.78rem', padding: 0, cursor: 'not-allowed' }}>
+                    Resend OTP
+                  </button>
+                ) : (
+                  <span>Resend in <strong style={{ color: '#6b7280' }}>{countdown}s</strong></span>
+                )}
+              </span>
+              <Link
+                to="/forgot-password"
+                onClick={() => setShowOTPModal(false)}
+                style={{ color: '#2d6a2d', fontWeight: 600, textDecoration: 'none' }}>
+                Try Another Way
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

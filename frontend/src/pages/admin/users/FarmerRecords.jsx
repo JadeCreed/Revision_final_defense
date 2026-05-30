@@ -4,6 +4,7 @@ import {
   getFarmerRequests, approveFarmer,
   getFarmerMasterlist, getFarmerFullProfile,
   updateFarmerProfile, deactivateUser,
+  adminResetPassword,
 } from '../../../api/axios';
 import {
   Pagination, SortDropdown, COL_WIDTHS, NewBadge, getSeenIds,
@@ -422,6 +423,12 @@ const FarmerMasterlistTab = () => {
   const [editSuccess, setEditSuccess]           = useState('');
   const [deactivateModal, setDeactivateModal]   = useState(null);
   const [deactivateLoading, setDeactivateLoading] = useState(false);
+  const [resetModal, setResetModal]             = useState(null);
+  const [resetMode, setResetMode]               = useState('');
+  const [resetLoading, setResetLoading]         = useState(false);
+  const [resetError, setResetError]             = useState('');
+  const [resetSuccess, setResetSuccess]         = useState('');
+  const [newPassword, setNewPassword]           = useState('');
 
   const fetchFarmers = useCallback(async (isInitial = false) => {
     try {
@@ -530,6 +537,27 @@ const FarmerMasterlistTab = () => {
     } finally { setDeactivateLoading(false); }
   };
 
+  const handleReset = async (mode) => {
+    if (!resetModal) return;
+    setResetLoading(true);
+    setResetError('');
+    setResetSuccess('');
+    try {
+      const payload = mode === 'auto'
+        ? { auto_generate: true }
+        : { new_password: newPassword };
+      const res = await adminResetPassword(resetModal.id, payload);
+      setResetSuccess(mode === 'auto'
+        ? `Temporary password generated. Share it with the farmer: ${res.data.new_password || 'See admin console.'}`
+        : 'Password has been reset successfully.');
+      setResetMode('');
+      setNewPassword('');
+    } catch (err) {
+      setResetError(err.response?.data?.error || 'Reset failed. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem' }}>
@@ -550,16 +578,16 @@ const FarmerMasterlistTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Gender', '90px'],['Hectares', '90px'],['Date Joined', COL_WIDTHS.date],['Details', COL_WIDTHS.details],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
+                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Gender', '90px'],['Hectares', '90px'],['Date Joined', COL_WIDTHS.date],['Details', COL_WIDTHS.details],['Reset Request', '140px'],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
                   <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
               ) : farmers.length === 0 ? (
-                <tr><td colSpan={9} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No approved farmers found.</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No approved farmers found.</td></tr>
               ) : farmers.map((f, idx) => (
                 <tr key={f.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', fontFamily: 'monospace', minWidth: COL_WIDTHS.rsbsa }}>{f.rsbsa_number || '—'}</td>
@@ -576,6 +604,18 @@ const FarmerMasterlistTab = () => {
                     <button onClick={() => openDetails(f.id)}
                       style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                       View Details
+                    </button>
+                  </td>
+                  <td style={{ padding: '0.875rem 1rem' }}>
+                    <button onClick={() => {
+                        setResetModal(f);
+                        setResetMode('');
+                        setResetError('');
+                        setResetSuccess('');
+                        setNewPassword('');
+                      }}
+                      style={{ padding: '0.375rem 0.75rem', backgroundColor: '#fef3c7', color: '#92400e', border: '1.5px solid #fcd34d', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      Reset Password
                     </button>
                   </td>
                   <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>
@@ -676,6 +716,75 @@ const FarmerMasterlistTab = () => {
                 {deactivateLoading ? 'Deactivating...' : 'Deactivate'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {resetModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110, padding: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontWeight: '700', margin: 0, fontSize: '1.1rem' }}>Reset Password</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.35rem 0 0' }}>
+                  {resetModal.first_name} {resetModal.last_name}
+                </p>
+              </div>
+              <button onClick={() => { setResetModal(null); setResetMode(''); setResetSuccess(''); setResetError(''); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
+            </div>
+
+            {resetError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{resetError}</div>
+            )}
+
+            {resetSuccess ? (
+              <div>
+                <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.25rem', fontSize: '0.875rem', fontWeight: '600', lineHeight: 1.6 }}>
+                  ✅ {resetSuccess}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setResetModal(null); setResetMode(''); setResetSuccess(''); }} style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}>
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p style={{ fontSize: '0.85rem', color: '#374151', marginBottom: '1rem' }}>
+                  Choose how to reset this farmer's password:
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <button onClick={() => setResetMode('auto')} style={{ padding: '0.85rem 1rem', borderRadius: '0.75rem', cursor: 'pointer', border: `2px solid ${resetMode === 'auto' ? '#2d6a2d' : '#e5e7eb'}`, backgroundColor: resetMode === 'auto' ? '#f0fdf4' : 'white', textAlign: 'left', transition: 'all 0.15s' }}>
+                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}>🎲 Generate Temporary Password</p>
+                    <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: 0 }}>System generates a temporary password the admin can share with the farmer.</p>
+                  </button>
+
+                  <button onClick={() => setResetMode('manual')} style={{ padding: '0.85rem 1rem', borderRadius: '0.75rem', cursor: 'pointer', border: `2px solid ${resetMode === 'manual' ? '#2d6a2d' : '#e5e7eb'}`, backgroundColor: resetMode === 'manual' ? '#f0fdf4' : 'white', textAlign: 'left', transition: 'all 0.15s' }}>
+                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}>✏️ Set Manual Password</p>
+                    <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: 0 }}>Enter a password you've agreed on with the farmer.</p>
+                  </button>
+                </div>
+
+                {resetMode === 'manual' && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: '600', color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                      New Password
+                    </label>
+                    <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Minimum 6 characters" style={{ width: '100%', padding: '0.625rem 0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setResetModal(null); setResetMode(''); setResetError(''); }} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button>
+                  {resetMode && (
+                    <button onClick={() => handleReset(resetMode)} disabled={resetLoading || (resetMode === 'manual' && newPassword.length < 6)} style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: resetLoading || (resetMode === 'manual' && newPassword.length < 6) ? 'not-allowed' : 'pointer', fontWeight: '600', opacity: resetLoading || (resetMode === 'manual' && newPassword.length < 6) ? 0.65 : 1 }}>
+                      {resetLoading ? 'Resetting...' : 'Confirm Reset'}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

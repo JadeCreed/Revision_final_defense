@@ -1,14 +1,14 @@
 // src/components/Navbar.jsx
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import logo from '../assets/logo.png';
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isLoggedIn, role, logout, token } = useAuth();
+  const { isLoggedIn, role, logout, token, authLoading } = useAuth();
   const navigate = useNavigate();
-  const actuallyLoggedIn = isLoggedIn && !!token;
+  const actuallyLoggedIn = !authLoading && isLoggedIn && !!token;
 
   const handleLogout = () => {
     logout();
@@ -18,10 +18,18 @@ const Navbar = () => {
 
   const dashboardPath = { ADMIN: '/admin', FARMER: '/farmer', AT: '/at', BRGY: '/brgy' }[role] || '/';
 
+  const location = useLocation();
+  const isLandingPage = location.pathname === '/';
+
   const scrollTo = (id) => {
     setMenuOpen(false);
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (isLandingPage) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // navigate to landing page with hash so Landing can perform scrolling without a flash
+      navigate(`/#${id}`);
+    }
   };
 
   return (

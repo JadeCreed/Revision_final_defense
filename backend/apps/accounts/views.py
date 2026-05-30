@@ -962,8 +962,9 @@ class AdminResetRequestView(APIView):
         user = User.objects.filter(contact_number=contact_number).first()
 
         if user is None:
+            # Do not reveal whether the contact number exists. Return a neutral error message.
             return Response({
-                "error": "Contact number not found in our records. Please check and try again."
+                "error": "We could not process your request. Please check your contact number and try again."
             }, status=404)
 
         User.objects.filter(pk=user.pk).update(password_reset_requested_at=timezone.now())

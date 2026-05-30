@@ -23,7 +23,6 @@ export const MENU_CONFIG = {
       children: [
         { label: 'Farmer Records', path: '/admin/users/farmers', icon: User, badgeKey: 'pending_farmers' },
         { label: 'Officials',      path: '/admin/users/officials', icon: Landmark },
-        { label: 'Reset Requests', path: '/admin/users/reset-requests', icon: Key, badgeKey: 'reset_requests' },
         { label: 'Archive',        path: '/admin/users/archive', icon: Archive },
       ],
     },

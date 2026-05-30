@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import logo from '../assets/logo.png';
 import { CheckCircle2 } from 'lucide-react';
 import { registerFarmer } from '../api/axios';
 
@@ -122,7 +123,9 @@ const Register = () => {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-          <div style={{ width: '56px', height: '56px', background: 'var(--color-primary)', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: '1.4rem' }}>🌿</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+            <img src={logo} alt="AGRICE Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
+          </div>
           <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#1a1a1a', marginBottom: '0.25rem' }}>Create Farmer Account</h2>
           <p style={{ fontSize: '0.8rem', color: '#6b7280' }}>Join the AGRICE Program</p>
         </div>

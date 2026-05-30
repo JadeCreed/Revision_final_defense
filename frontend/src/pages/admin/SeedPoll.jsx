@@ -16,8 +16,9 @@ import {
 
 const TABS = [
   { key: 'poll',      label: 'Active Poll',      Icon: CheckCircle },
-  { key: 'varieties', label: 'Types & Varieties', Icon: Wheat       },
   { key: 'results',   label: 'Results',           Icon: BarChart2   },
+  { key: 'varieties', label: 'Types & Varieties', Icon: Wheat       },
+  
 ];
 
 const SEASON_OPTIONS = [

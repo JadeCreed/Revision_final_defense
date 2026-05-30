@@ -1,4 +1,4 @@
-=// src/pages/admin/users/OfficialMasterlist.jsx
+// src/pages/admin/users/OfficialMasterlist.jsx
 import { useState, useEffect, useCallback } from 'react';
 import { getOfficials, deactivateUser } from '../../../api/axios';
 
