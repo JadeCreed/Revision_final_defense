@@ -7,7 +7,7 @@
 // Icons: lucide-react only (no emojis in UI elements).
 // ============================================================
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import {
   User, Phone, MapPin, FileText,
@@ -92,6 +92,14 @@ const FarmerProfile = () => {
   const [userStatus, setUserStatus]   = useState('PENDING');
   const [fieldErrors, setFieldErrors] = useState({});
 
+  const idCardInputRef = useRef(null);
+  const isPickingFile = useRef(false);
+  const isDirty = useRef(false);
+  const [idCardFile, setIdCardFile] = useState(null);
+  const [idCardPreview, setIdCardPreview] = useState('');
+  const [idCardDragging, setIdCardDragging] = useState(false);
+  const [idCardError, setIdCardError] = useState('');
+
   // Inline confirmation state — shown before first-time submit
   // Gives user a chance to review before sending to admin
   const [showConfirm, setShowConfirm] = useState(false);
@@ -114,6 +122,7 @@ const FarmerProfile = () => {
     farm_municipality:      '',
     farm_barangay:          '',
     hectares:               '',  // Total farm hectares (NEW - REQUIRED)
+    id_card_url:            '',
     ip:             false,
     senior_citizen: false,
     pwd:            false,
@@ -162,12 +171,14 @@ const FarmerProfile = () => {
         farm_municipality:      profile.farm_municipality      || '',
         farm_barangay:          profile.farm_barangay          || '',
         hectares:               profile.hectares               || '',  // Total hectares
+        id_card_url:            profile.id_card_url            || '',
         ip:             profile.ip             ?? false,
         senior_citizen: profile.senior_citizen ?? false,
         pwd:            profile.pwd            ?? false,
         arbs:           profile.arbs           ?? false,
         four_ps:        profile.four_ps        ?? false,
       });
+      setIdCardPreview(profile.id_card_url || '');
     } catch (err) {
       setError(
         err.response?.status === 403
@@ -181,18 +192,84 @@ const FarmerProfile = () => {
 
   useEffect(() => { loadProfile(); }, [loadProfile]);
 
-  // Reload when user returns to the tab
+  // Reload when user returns to the tab — but don't reload while
+  // the user is actively editing (isDirty) or has the file picker open.
   useEffect(() => {
-    const handleFocus = () => loadProfile();
+    const handleFocus = () => {
+      if (isPickingFile.current) {
+        // picker just closed and focus returned — ignore this once
+        isPickingFile.current = false;
+        return;
+      }
+      // if user has started editing, do not reload (avoids losing typed data)
+      if (isDirty.current) return;
+      loadProfile();
+    };
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, [loadProfile]);
 
   const handleChange = (key, value) => {
+    // mark form dirty so focus reloads won't overwrite user's input
+    isDirty.current = true;
     setForm(prev => ({ ...prev, [key]: value }));
     setFieldErrors(prev => ({ ...prev, [key]: '' }));
     setError('');
     setSuccess('');
+  };
+
+  const validateIdCard = (file) => {
+    const validExtensions = ['jpg', 'jpeg', 'png'];
+    const maxSize = 5 * 1024 * 1024;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!validExtensions.includes(ext)) {
+      return 'Only JPG and PNG files are allowed.';
+    }
+    if (file.size > maxSize) {
+      return 'File size must not exceed 5MB.';
+    }
+    return '';
+  };
+
+  const handleIdCardFile = (file) => {
+    setIdCardError('');
+    if (!file) {
+      setIdCardFile(null);
+      setIdCardPreview('');
+      return;
+    }
+    const validationError = validateIdCard(file);
+    if (validationError) {
+      setIdCardFile(null);
+      setIdCardPreview('');
+      setIdCardError(validationError);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setIdCardPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+    setIdCardFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIdCardDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIdCardDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIdCardDragging(false);
+    // drop is a deliberate user action — ensure picker flag is cleared
+    isPickingFile.current = false;
+    const file = e.dataTransfer.files?.[0];
+    handleIdCardFile(file);
   };
 
   // ── VALIDATE ──
@@ -276,6 +353,15 @@ const FarmerProfile = () => {
         },
       });
 
+      if (idCardFile) {
+        const fileForm = new FormData();
+        fileForm.append('id_card', idCardFile);
+        await API.put('/accounts/farmer-profile/', fileForm, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setIdCardFile(null);
+      }
+
       // Re-fetch to get the latest status from server
       const refreshed = await API.get('/accounts/farmer-profile/');
       const newStatus = refreshed.data.user.status;
@@ -293,6 +379,8 @@ const FarmerProfile = () => {
         setSuccess('Profile saved.');
       }
 
+      // user changes are now persisted; allow focus reloads again
+      isDirty.current = false;
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch (err) {
@@ -708,6 +796,80 @@ const FarmerProfile = () => {
               />
             </Field>
 
+          </div>
+        </Section>
+
+        {/* SECTION 4b: ID Verification */}
+        <Section icon={FileText} title="ID Verification">
+          <div style={{ display: 'grid', gap: '1rem' }}>
+            <div
+              onClick={() => {
+                isPickingFile.current = true;
+                idCardInputRef.current?.click();
+              }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              style={{
+                border: `2px dashed ${idCardDragging ? '#2d6a2d' : '#d1d5db'}`,
+                backgroundColor: idCardDragging ? '#ecfdf5' : '#fafafa',
+                borderRadius: '0.75rem',
+                padding: '1.5rem',
+                textAlign: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="file"
+                ref={idCardInputRef}
+                accept="image/png,image/jpeg"
+                style={{ display: 'none' }}
+                onChange={e => handleIdCardFile(e.target.files?.[0])}
+              />
+              <p style={{ margin: 0, color: '#374151', fontWeight: 600 }}>Upload your valid government ID</p>
+              <p style={{ margin: '0.5rem 0 0', color: '#6b7280', fontSize: '0.85rem' }}>
+                Drag & drop or click to choose a JPG/PNG file. Max size 5MB.
+              </p>
+            </div>
+
+            {idCardError && (
+              <div style={{ color: '#dc2626', fontSize: '0.85rem' }}>{idCardError}</div>
+            )}
+
+            {(idCardPreview || form.id_card_url) ? (
+              <div style={{ display: 'grid', gap: '0.5rem' }}>
+                <label style={labelStyle}>Preview</label>
+                <img
+                  src={idCardPreview || form.id_card_url}
+                  alt="ID card preview"
+                  style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '0.75rem', border: '1px solid #d1d5db' }}
+                />
+              </div>
+            ) : (
+              <div style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '0.75rem', color: '#6b7280' }}>
+                No ID card selected yet.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  isPickingFile.current = true;
+                  idCardInputRef.current?.click();
+                }}
+                style={{
+                  padding: '0.75rem 1rem',
+                  backgroundColor: 'white',
+                  color: '#374151',
+                  border: '1.5px solid #d1d5db',
+                  borderRadius: '0.5rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Choose file
+              </button>
+            </div>
           </div>
         </Section>
 

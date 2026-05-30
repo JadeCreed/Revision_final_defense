@@ -488,9 +488,9 @@ const BrgyBeneficiaries = () => {
   const openEncode = (farmer) => {
     setCurrentFarmer(farmer);
     setEncodeForm({
-      farm_area_ha: '',
+      farm_area_ha: (eventIsHybrid && farmer && farmer.remaining_hectares) ? String(parseFloat(farmer.remaining_hectares)) : '',
       qty_bags: '',
-      area_planted: '',
+      area_planted: (eventIsInbred && farmer && farmer.remaining_hectares) ? String(parseFloat(farmer.remaining_hectares)) : '',
       crop_establishment: '',
       expected_sowing_date: '',
       date_received: '',
@@ -550,6 +550,19 @@ const BrgyBeneficiaries = () => {
     
     if (view === 'encode' && (!sigRef.current || sigRef.current.isEmpty()))
       errs.signature = 'Signature is required';
+
+    // Prevent encoding more than remaining hectares
+    const remaining = currentFarmer ? Number(currentFarmer.remaining_hectares || 0) : null;
+    if (remaining != null && !isNaN(remaining)) {
+      if (eventIsHybrid && encodeForm.farm_area_ha) {
+        const val = Number(encodeForm.farm_area_ha);
+        if (!isNaN(val) && val > remaining) errs.farm_area_ha = `Cannot encode more than remaining (${remaining} ha)`;
+      }
+      if (eventIsInbred && encodeForm.area_planted) {
+        const val = Number(encodeForm.area_planted);
+        if (!isNaN(val) && val > remaining) errs.area_planted = `Cannot encode more than remaining (${remaining} ha)`;
+      }
+    }
     return errs;
   };
 
@@ -1187,18 +1200,24 @@ const BrgyBeneficiaries = () => {
               {farmerResults.length > 0 && (
                 <div style={{ marginTop: '0.625rem', border: '1px solid #e5e7eb', borderRadius: '0.875rem', overflow: 'hidden' }}>
                   {farmerResults.map((farmer, idx) => {
+                    const remaining = Number(farmer.remaining_hectares || 0);
+                    const total = Number(farmer.hectares || 0) || 0;
+                    let badgeColor = '#a3e635';
+                    if (remaining <= 0) badgeColor = '#fee2e2';
+                    else if (total > 0 && remaining <= total * 0.5) badgeColor = '#fef3c7';
+                    const disabled = remaining <= 0;
                     return (
                       <div key={farmer.id} className="row-hover"
-                        onClick={() => openEncode(farmer)}
+                        onClick={() => { if (!disabled) openEncode(farmer); else showToast('error', 'No remaining hectares to encode.'); }}
                         style={{ 
                           padding: '0.875rem 1rem', 
                           borderBottom: idx < farmerResults.length - 1 ? '1px solid #f3f4f6' : 'none', 
-                          cursor: 'pointer',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
                           display: 'flex', 
                           justifyContent: 'space-between', 
                           alignItems: 'center', 
                           backgroundColor: 'white',
-                          opacity: 1,
+                          opacity: disabled ? 0.55 : 1,
                           transition: 'background 0.15s' 
                         }}>
                         <div style={{ flex: 1 }}>
@@ -1209,7 +1228,12 @@ const BrgyBeneficiaries = () => {
                             {farmer.rsbsa_number || 'No RSBSA'} · {farmer.barangay}
                           </p>
                         </div>
-                        <ChevronRight size={14} color="#9ca3af" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <div style={{ backgroundColor: badgeColor, color: '#444', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
+                            {remaining > 0 ? `${Number(remaining).toFixed(2)} ha` : 'Exhausted'}
+                          </div>
+                          <ChevronRight size={14} color="#9ca3af" />
+                        </div>
                       </div>
                     );
                   })}
@@ -1405,8 +1429,22 @@ const BrgyBeneficiaries = () => {
                   </label>
                   <input type="number" step="0.01" min="0.01" value={encodeForm.farm_area_ha}
                     onChange={e => { setEncodeForm(p => ({ ...p, farm_area_ha: e.target.value })); setEncodeErrors(p => ({ ...p, farm_area_ha: '' })); }}
-                    placeholder="e.g. 0.50" 
+                    placeholder={currentFarmer && currentFarmer.remaining_hectares ? `Suggested: ${Number(currentFarmer.remaining_hectares).toFixed(2)} ha` : 'e.g. 0.50'}
                     style={{ ...inp(!!encodeErrors.farm_area_ha) }} />
+                  {/* Remaining hint */}
+                  {currentFarmer && (
+                    (() => {
+                      const rem = Number(currentFarmer.remaining_hectares || 0);
+                      const tot = Number(currentFarmer.hectares || 0) || 0;
+                      const dotColor = rem <= 0 ? '#ef4444' : (tot > 0 && rem <= tot * 0.5 ? '#f59e0b' : '#16a34a');
+                      return (
+                        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.375rem 0 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 6, backgroundColor: dotColor, display: 'inline-block' }} />
+                          {rem > 0 ? `Remaining: ${Number(rem).toFixed(2)} ha of ${Number(tot).toFixed(2)} ha` : 'No remaining hectares available.'}
+                        </p>
+                      );
+                    })()
+                  )}
                   {encodeErrors.farm_area_ha && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{encodeErrors.farm_area_ha}</p>}
                 </div>
               );
@@ -1421,8 +1459,21 @@ const BrgyBeneficiaries = () => {
                   </label>
                   <input type="number" step="0.01" min="0.01" value={encodeForm.area_planted}
                     onChange={e => { setEncodeForm(p => ({ ...p, area_planted: e.target.value })); setEncodeErrors(p => ({ ...p, area_planted: '' })); }}
-                    placeholder="e.g. 0.50" 
+                    placeholder={currentFarmer && currentFarmer.remaining_hectares ? `Suggested: ${Number(currentFarmer.remaining_hectares).toFixed(2)} ha` : 'e.g. 0.50'}
                     style={{ ...inp(!!encodeErrors.area_planted) }} />
+                  {currentFarmer && (
+                    (() => {
+                      const rem = Number(currentFarmer.remaining_hectares || 0);
+                      const tot = Number(currentFarmer.hectares || 0) || 0;
+                      const dotColor = rem <= 0 ? '#ef4444' : (tot > 0 && rem <= tot * 0.5 ? '#f59e0b' : '#16a34a');
+                      return (
+                        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.375rem 0 0', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ width: 10, height: 10, borderRadius: 6, backgroundColor: dotColor, display: 'inline-block' }} />
+                          {rem > 0 ? `Remaining: ${Number(rem).toFixed(2)} ha of ${Number(tot).toFixed(2)} ha` : 'No remaining hectares available.'}
+                        </p>
+                      );
+                    })()
+                  )}
                   {encodeErrors.area_planted && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{encodeErrors.area_planted}</p>}
                 </div>
               );

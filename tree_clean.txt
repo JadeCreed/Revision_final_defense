@@ -2,20 +2,6 @@ Agrice-Updated/
 ├── backend/
 │   ├── apps/
 │   │   ├── accounts/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── authentication.cpython-313.pyc
-│   │   │   │   ├── choices.cpython-313.pyc
-│   │   │   │   ├── managers.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── permissions.cpython-313.pyc
-│   │   │   │   ├── rate_limit.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   ├── utils.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -32,14 +18,6 @@ Agrice-Updated/
 │   │   │   ├── utils.py
 │   │   │   └── views.py
 │   │   ├── announcements/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -49,15 +27,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── crop_monitoring/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── signals.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -68,11 +37,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── crop_phase/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   └── models.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -81,14 +45,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── distribution/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -98,13 +54,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── gis_map/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -114,14 +63,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── production/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -131,14 +72,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── reports/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── templates_excel/
 │   │   │   │   └── hybrid_masterlist.xlsx
 │   │   │   ├── __init__.py
@@ -150,14 +83,6 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── seed_inventory/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── admin.cpython-313.pyc
-│   │   │   │   ├── apps.cpython-313.pyc
-│   │   │   │   ├── models.cpython-313.pyc
-│   │   │   │   ├── serializers.cpython-313.pyc
-│   │   │   │   ├── urls.cpython-313.pyc
-│   │   │   │   └── views.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
@@ -167,17 +92,7 @@ Agrice-Updated/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   └── seed_poll/
-│   │       ├── __pycache__/
-│   │       │   ├── __init__.cpython-313.pyc
-│   │       │   ├── admin.cpython-313.pyc
-│   │       │   ├── apps.cpython-313.pyc
-│   │       │   ├── models.cpython-313.pyc
-│   │       │   ├── serializers.cpython-313.pyc
-│   │       │   ├── urls.cpython-313.pyc
-│   │       │   └── views.cpython-313.pyc
 │   │       ├── management/
-│   │       │   ├── __pycache__/
-│   │       │   │   └── __init__.cpython-313.pyc
 │   │       │   ├── commands/
 │   │       │   │   ├── __init__.py
 │   │       │   │   └── seed_seed_types.py
@@ -191,16 +106,7 @@ Agrice-Updated/
 │   │       ├── urls.py
 │   │       └── views.py
 │   ├── config/
-│   │   ├── __pycache__/
-│   │   │   ├── __init__.cpython-313.pyc
-│   │   │   ├── settings.cpython-313.pyc
-│   │   │   ├── urls.cpython-313.pyc
-│   │   │   └── wsgi.cpython-313.pyc
 │   │   ├── settings/
-│   │   │   ├── __pycache__/
-│   │   │   │   ├── __init__.cpython-313.pyc
-│   │   │   │   ├── base.cpython-313.pyc
-│   │   │   │   └── dev.cpython-313.pyc
 │   │   │   ├── __init__.py
 │   │   │   ├── base.py
 │   │   │   ├── dev.py

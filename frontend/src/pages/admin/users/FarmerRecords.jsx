@@ -86,6 +86,11 @@ const FarmerAccountsTab = () => {
   const newTimeouts                         = useRef({});
   const [actionLoading, setActionLoading]   = useState({});
   const [confirmModal, setConfirmModal]     = useState(null);
+  const [accountsDetailsModal, setAccountsDetailsModal] = useState(null);
+  const [accountsEditForm, setAccountsEditForm] = useState({});
+  const [accountsEditLoading, setAccountsEditLoading] = useState(false);
+  const [accountsEditError, setAccountsEditError] = useState('');
+  const [accountsEditSuccess, setAccountsEditSuccess] = useState('');
 
   const scheduleNewBadgeHide = (id) => {
     if (newTimeouts.current[id]) clearTimeout(newTimeouts.current[id]);
@@ -156,6 +161,70 @@ const FarmerAccountsTab = () => {
     }
   };
 
+  const openAccountsDetails = async (userId) => {
+    try {
+      const res = await getFarmerFullProfile(userId);
+      const farmer = res.data;
+      setAccountsDetailsModal(farmer);
+      setAccountsEditForm({
+        first_name: farmer.first_name || '',
+        last_name: farmer.last_name || '',
+        middle_name: farmer.profile?.middle_name || '',
+        ext_name: farmer.profile?.ext_name || '',
+        date_of_birth: farmer.profile?.date_of_birth || '',
+        email: farmer.email || '',
+        contact_number: farmer.contact_number || '',
+        barangay: farmer.barangay || '',
+        rsbsa_number: farmer.rsbsa_number || '',
+        residency_municipality: farmer.profile?.residency_municipality || '',
+        residency_barangay: farmer.profile?.residency_barangay || '',
+        farm_municipality: farmer.profile?.farm_municipality || '',
+        farm_barangay: farmer.profile?.farm_barangay || '',
+        gender: farmer.profile?.gender || '',
+        hectares: farmer.profile?.hectares ?? '',
+        id_card_url: farmer.profile?.id_card_url || '',
+      });
+      setAccountsEditError('');
+      setAccountsEditSuccess('');
+    } catch (err) {
+      setError('Failed to load farmer details.');
+    }
+  };
+
+  const handleAccountsSave = async () => {
+    if (!accountsDetailsModal) return;
+    setAccountsEditLoading(true);
+    setAccountsEditError('');
+    setAccountsEditSuccess('');
+    try {
+      await updateFarmerProfile(accountsDetailsModal.id, {
+        first_name: accountsEditForm.first_name,
+        last_name: accountsEditForm.last_name,
+        email: accountsEditForm.email,
+        contact_number: accountsEditForm.contact_number,
+        barangay: accountsEditForm.barangay,
+        rsbsa_number: accountsEditForm.rsbsa_number,
+        profile: {
+          middle_name: accountsEditForm.middle_name,
+          ext_name: accountsEditForm.ext_name,
+          date_of_birth: accountsEditForm.date_of_birth,
+          gender: accountsEditForm.gender,
+          residency_municipality: accountsEditForm.residency_municipality,
+          residency_barangay: accountsEditForm.residency_barangay,
+          farm_municipality: accountsEditForm.farm_municipality,
+          farm_barangay: accountsEditForm.farm_barangay,
+          hectares: accountsEditForm.hectares,
+        },
+      });
+      setAccountsEditSuccess('Profile updated successfully.');
+      await fetchFarmers(false);
+    } catch (err) {
+      setAccountsEditError(err.response?.data?.error || 'Update failed.');
+    } finally {
+      setAccountsEditLoading(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
@@ -183,16 +252,16 @@ const FarmerAccountsTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
+                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Details', '110px'],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
                   <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
               ) : farmers.length === 0 ? (
-                <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No records found.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No records found.</td></tr>
               ) : farmers.map((farmer, idx) => {
                 const s = STATUS_COLORS[farmer.status] || STATUS_COLORS.PENDING;
                 return (
@@ -206,6 +275,12 @@ const FarmerAccountsTab = () => {
                     <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.barangay }}>{farmer.barangay || '—'}</td>
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.status }}>
                       <span style={{ backgroundColor: s.bg, color: s.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{s.label}</span>
+                    </td>
+                    <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
+                      <button onClick={() => openAccountsDetails(farmer.id)}
+                        style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        View Details
+                      </button>
                     </td>
                     <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(farmer.date_joined)}</td>
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>
@@ -241,6 +316,82 @@ const FarmerAccountsTab = () => {
               <button onClick={() => handleAction(confirmModal.userId, confirmModal.action)} disabled={actionLoading[confirmModal.userId]}
                 style={{ padding: '0.5rem 1.25rem', backgroundColor: confirmModal.action === 'APPROVED' ? '#2d6a2d' : '#dc2626', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: actionLoading[confirmModal.userId] ? 0.7 : 1 }}>
                 {actionLoading[confirmModal.userId] ? 'Processing...' : 'Confirm'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {accountsDetailsModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 110, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '720px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem', gap: '1rem' }}>
+              <div>
+                <h2 style={{ fontWeight: '700', margin: 0 }}>Farmer Details</h2>
+                <p style={{ color: '#6b7280', marginTop: '0.5rem', fontSize: '0.85rem' }}>View and edit farmer profile details.</p>
+              </div>
+              <button onClick={() => setAccountsDetailsModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+            {accountsEditError && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{accountsEditError}</div>}
+            {accountsEditSuccess && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{accountsEditSuccess}</div>}
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Basic Info</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[['First Name','first_name'],['Last Name','last_name'],['Middle Name','middle_name'],['Suffix','ext_name']].map(([l,k]) => (
+                <div key={k}><label style={labelStyle}>{l}</label>
+                  <input value={accountsEditForm[k]} onChange={e => setAccountsEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
+              ))}
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Contact</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[['Contact','contact_number'],['Email','email'],['RSBSA','rsbsa_number'],['Date of Birth','date_of_birth']].map(([l,k]) => (
+                <div key={k}><label style={labelStyle}>{l}</label>
+                  <input type={k==='date_of_birth'?'date':'text'} value={accountsEditForm[k]} onChange={e => setAccountsEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
+              ))}
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Address & Farm</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay'],['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
+                <div key={k}><label style={labelStyle}>{l}</label>
+                  <input value={accountsEditForm[k]} onChange={e => setAccountsEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
+              ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div>
+                <label style={labelStyle}>Gender</label>
+                <select value={accountsEditForm.gender} onChange={e => setAccountsEditForm(p => ({...p,gender:e.target.value}))} style={inputStyle}>
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Total Farm Hectares (ha)</label>
+                <input type="number" step="0.01" min="0" value={accountsEditForm.hectares}
+                  onChange={e => setAccountsEditForm(p => ({ ...p, hectares: e.target.value }))}
+                  style={inputStyle} placeholder="e.g. 1.50" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={labelStyle}>ID Card</label>
+              {accountsEditForm.id_card_url ? (
+                <img src={accountsEditForm.id_card_url} alt="Farmer ID card" style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '0.75rem', border: '1px solid #d1d5db' }} />
+              ) : (
+                <div style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '0.75rem', color: '#6b7280' }}>
+                  No ID card uploaded yet.
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1.25rem' }}>
+              <button onClick={() => setAccountsDetailsModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
+              <button onClick={handleAccountsSave} disabled={accountsEditLoading}
+                style={{ padding: '0.5rem 1.5rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: accountsEditLoading ? 0.7 : 1 }}>
+                {accountsEditLoading ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
@@ -329,6 +480,7 @@ const FarmerMasterlistTab = () => {
         farm_municipality: res.data.profile?.farm_municipality || '',
         farm_barangay: res.data.profile?.farm_barangay || '',
         hectares: res.data.profile?.hectares ?? '',
+        id_card_url: res.data.profile?.id_card_url || '',
         ip: res.data.profile?.ip || false,
         senior_citizen: res.data.profile?.senior_citizen || false,
         pwd: res.data.profile?.pwd || false,
@@ -466,14 +618,6 @@ const FarmerMasterlistTab = () => {
                   <input type={k==='date_of_birth'?'date':'text'} value={editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
               ))}
             </div>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={labelStyle}>Gender</label>
-              <select value={editForm.gender} onChange={e => setEditForm(p => ({...p,gender:e.target.value}))} style={inputStyle}>
-                <option value="">Select</option>
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
-            </div>
             <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Address & Farm</p>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
               {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay'],['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
@@ -481,11 +625,32 @@ const FarmerMasterlistTab = () => {
                   <input value={editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
               ))}
             </div>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={labelStyle}>Total Farm Hectares (ha)</label>
-              <input type="number" step="0.01" min="0" value={editForm.hectares}
-                onChange={e => setEditForm(p => ({ ...p, hectares: e.target.value }))}
-                style={inputStyle} placeholder="e.g. 1.50" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div>
+                <label style={labelStyle}>Gender</label>
+                <select value={editForm.gender} onChange={e => setEditForm(p => ({ ...p, gender: e.target.value }))} style={inputStyle}>
+                  <option value="">Select</option>
+                  <option value="Male">Male</option>
+                  <option value="Female">Female</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Total Farm Hectares (ha)</label>
+                <input type="number" step="0.01" min="0" value={editForm.hectares}
+                  onChange={e => setEditForm(p => ({ ...p, hectares: e.target.value }))}
+                  style={inputStyle} placeholder="e.g. 1.50" />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={labelStyle}>ID Card</label>
+              {editForm.id_card_url ? (
+                <img src={editForm.id_card_url} alt="Farmer ID card" style={{ width: '100%', maxHeight: '320px', objectFit: 'contain', borderRadius: '0.75rem', border: '1px solid #d1d5db' }} />
+              ) : (
+                <div style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '0.75rem', color: '#6b7280' }}>
+                  No ID card uploaded yet.
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1.25rem' }}>
               <button onClick={() => setDetailsModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
