@@ -1149,7 +1149,7 @@ class AdminFarmerFullProfileView(APIView):
         except User.DoesNotExist:
             return Response({"error": "Farmer not found"}, status=404)
 
-        serializer = FarmerFullDetailSerializer(user)
+        serializer = FarmerFullDetailSerializer(user, context={'request': request})
         return Response(serializer.data)
 
     def put(self, request, user_id):
