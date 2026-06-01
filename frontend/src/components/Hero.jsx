@@ -122,7 +122,7 @@ const Hero = () => {
         </div>
 
         {/* RIGHT — auth panel */}
-        <div className="lp-hero-right">
+        <div id="login" className="lp-hero-right">
           <AuthBox />
         </div>
       </section>

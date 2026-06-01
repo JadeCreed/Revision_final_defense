@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getInventorySummary, getSeedDeliveries, createSeedDelivery,
@@ -9,7 +8,7 @@ import {
   Plus, Package, ChevronRight, ChevronLeft, CheckCircle,
   AlertCircle, Search, Wheat, Truck, Users, Clock,
   ClipboardList, Edit2, Trash2, Eye, History, X,
-  MapPin, Calendar, Hash,
+  MapPin, Calendar, Hash, CalendarClock, Leaf,
 } from 'lucide-react';
 
 const GREEN = {
@@ -26,6 +25,8 @@ const StatusBadge = ({ status }) => {
   const cfg = {
     PENDING:   { bg: '#fef9c3', color: '#854d0e', label: 'Pending Pickup' },
     CONFIRMED: { bg: '#dcfce7', color: '#166534', label: 'Confirmed'       },
+    SCHEDULED: { bg: '#eff6ff', color: '#1e40af', label: 'Scheduled'       },
+    DELIVERED: { bg: '#dcfce7', color: '#166534', label: 'Delivered'       },
   }[status] || { bg: '#f9fafb', color: '#6b7280', label: status };
   return (
     <span style={{ backgroundColor: cfg.bg, color: cfg.color, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
@@ -103,31 +104,40 @@ const BARANGAYS = [
   'Mahabang Parang','Malupak','Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil','Tiawe','Tinamnan',
 ];
 
+// ── LOCAL STORAGE KEY for scheduled deliveries ──
+const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
+
+const loadSchedules = () => {
+  try {
+    const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+};
+
+const saveSchedulesToStorage = (schedules) => {
+  try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
+};
+
 export default function SeedInventory() {
-  // VIEW: 'landing' | 'detail' | 'audit'
   const [view, setView]               = useState('landing');
   const [deliveries, setDeliveries]   = useState([]);
   const [summary, setSummary]         = useState(null);
   const [finalSeeds, setFinalSeeds]   = useState([]);
   const [loading, setLoading]         = useState(true);
 
-  // Selected delivery
   const [selected, setSelected]       = useState(null);
   const [auditLogs, setAuditLogs]     = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
-  // Filters
   const [search, setSearch]           = useState('');
   const [filterSeason, setFilterSeason] = useState('');
 
-  // Modals
   const [deliveryModal, setDeliveryModal] = useState(false);
   const [editDelivery, setEditDelivery]   = useState(null);
   const [allocModal, setAllocModal]       = useState(null);
   const [confirmSnack, setConfirmSnack]   = useState(null);
   const [toast, setToast]                 = useState(null);
 
-  // Forms
   const [dForm, setDForm]             = useState({ final_seed_id: '', season: '', year: '', total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
   const [dErrors, setDErrors]         = useState({});
   const [dSaving, setDSaving]         = useState(false);
@@ -135,6 +145,15 @@ export default function SeedInventory() {
   const [aForm, setAForm]             = useState({ barangay: '', allocated_bags: '', notes: '' });
   const [aErrors, setAErrors]         = useState({});
   const [aSaving, setASaving]         = useState(false);
+
+  // ── SCHEDULE DELIVERY STATE ──
+  const [scheduleModal, setScheduleModal]     = useState(false);
+  const [editSchedule, setEditSchedule]       = useState(null);
+  const [activeScheduleTab, setActiveScheduleTab] = useState(null);
+  const [scheduleForms, setScheduleForms]     = useState({});
+  const [scheduleErrors, setScheduleErrors]   = useState({});
+  const [scheduleSaving, setScheduleSaving]   = useState(false);
+  const [schedules, setSchedules]             = useState(loadSchedules);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
@@ -151,13 +170,7 @@ export default function SeedInventory() {
       setDeliveries(delRes.data || []);
       setSummary(sumRes.data);
     } catch (err) {
-      showToast(
-        'error',
-        err.response?.data?.error
-          || err.response?.data?.detail
-          || err.message
-          || 'Failed to load inventory data.'
-      );
+      showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to load inventory data.');
       setDeliveries([]);
       setSummary(null);
     } finally {
@@ -180,10 +193,7 @@ export default function SeedInventory() {
     loadFinalSeeds();
   }, [loadInventory, loadFinalSeeds]);
 
-  const openDetail = (delivery) => {
-    setSelected(delivery);
-    setView('detail');
-  };
+  const openDetail = (delivery) => { setSelected(delivery); setView('detail'); };
 
   const openAudit = async (delivery) => {
     setSelected(delivery);
@@ -196,44 +206,28 @@ export default function SeedInventory() {
     finally { setAuditLoading(false); }
   };
 
-  // ── DELIVERY FORM ──
+  // ── EXISTING DELIVERY FORM (unchanged) ──
   const openCreateDelivery = async () => {
     setEditDelivery(null);
-    if (!finalSeeds.length) {
-      await loadFinalSeeds();
-    }
+    if (!finalSeeds.length) await loadFinalSeeds();
     const fs = finalSeeds[0];
-    setDForm({
-      final_seed_id: '',
-      season: fs?.season || '',
-      year: fs?.year || new Date().getFullYear(),
-      total_bags: '', delivery_date: '',
-      lot_number: '', remarks: '',
-    });
+    setDForm({ final_seed_id: '', season: fs?.season || '', year: fs?.year || new Date().getFullYear(), total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
     setDErrors({});
     setDeliveryModal(true);
   };
 
   const openEditDelivery = (delivery) => {
     setEditDelivery(delivery);
-    setDForm({
-      final_seed_id: delivery.seed_type,
-      season: delivery.season,
-      year: delivery.year,
-      total_bags: delivery.total_bags,
-      delivery_date: delivery.delivery_date,
-      lot_number: delivery.lot_number || '',
-      remarks: delivery.remarks || '',
-    });
+    setDForm({ final_seed_id: delivery.seed_type, season: delivery.season, year: delivery.year, total_bags: delivery.total_bags, delivery_date: delivery.delivery_date, lot_number: delivery.lot_number || '', remarks: delivery.remarks || '' });
     setDErrors({});
     setDeliveryModal(true);
   };
 
   const handleSaveDelivery = async () => {
     const errs = {};
-    if (!dForm.season)        errs.season      = 'Required';
-    if (!dForm.year)          errs.year        = 'Required';
-    if (!dForm.total_bags)    errs.total_bags  = 'Required';
+    if (!dForm.season)        errs.season        = 'Required';
+    if (!dForm.year)          errs.year          = 'Required';
+    if (!dForm.total_bags)    errs.total_bags    = 'Required';
     if (!dForm.delivery_date) errs.delivery_date = 'Required';
     if (!editDelivery && !dForm.final_seed_id) errs.final_seed_id = 'Select seed type';
     if (Object.keys(errs).length > 0) { setDErrors(errs); return; }
@@ -291,7 +285,7 @@ export default function SeedInventory() {
     });
   };
 
-  // ── ALLOCATION FORM ──
+  // ── ALLOCATION FORM (unchanged) ──
   const openAllocModal = (delivery) => {
     setAllocModal(delivery);
     setAForm({ barangay: '', allocated_bags: '', notes: '' });
@@ -300,17 +294,12 @@ export default function SeedInventory() {
 
   const handleSaveAlloc = async () => {
     const errs = {};
-    if (!aForm.barangay.trim())  errs.barangay      = 'Required';
+    if (!aForm.barangay.trim())  errs.barangay       = 'Required';
     if (!aForm.allocated_bags)   errs.allocated_bags = 'Required';
     if (Object.keys(errs).length > 0) { setAErrors(errs); return; }
-
     setASaving(true);
     try {
-      await createAllocation(allocModal.id, {
-        barangay:       aForm.barangay.trim(),
-        allocated_bags: Number(aForm.allocated_bags),
-        notes:          aForm.notes,
-      });
+      await createAllocation(allocModal.id, { barangay: aForm.barangay.trim(), allocated_bags: Number(aForm.allocated_bags), notes: aForm.notes });
       showToast('success', `Allocated ${aForm.allocated_bags} bags to Brgy. ${aForm.barangay}.`);
       setAllocModal(null);
       const res = await getSeedDeliveries();
@@ -324,12 +313,173 @@ export default function SeedInventory() {
     }
   };
 
+  // ── SCHEDULE DELIVERY HANDLERS ──
+  const openScheduleModal = async () => {
+    setEditSchedule(null);
+    if (!finalSeeds.length) await loadFinalSeeds();
+    setScheduleForms({});
+    setScheduleErrors({});
+    setActiveScheduleTab(null);
+    setScheduleModal(true);
+  };
+
+  const openEditSchedule = (schedule) => {
+    setEditSchedule(schedule);
+    // Pre-fill forms from saved schedule entries
+    const forms = {};
+    schedule.entries.forEach(entry => {
+      forms[entry.seedTypeId] = {
+        total_bags:    entry.total_bags,
+        delivery_date: entry.delivery_date,
+        lot_number:    entry.lot_number || '',
+        remarks:       entry.remarks || '',
+        season:        entry.season,
+        year:          entry.year,
+      };
+    });
+    setScheduleForms(forms);
+    setScheduleErrors({});
+    // Set first entry's seedTypeId as active tab
+    setActiveScheduleTab(schedule.entries[0]?.seedTypeId || null);
+    setScheduleModal(true);
+  };
+
+  const handleScheduleTabToggle = (fs) => {
+    const key = fs.id?.toString();
+    if (activeScheduleTab === key) {
+      // deselect — remove its form data
+      setActiveScheduleTab(null);
+    } else {
+      setActiveScheduleTab(key);
+      // Initialize form for this seed type if not yet filled
+      if (!scheduleForms[key]) {
+        setScheduleForms(prev => ({
+          ...prev,
+          [key]: { total_bags: '', delivery_date: '', lot_number: '', remarks: '', season: fs.season || '', year: fs.year || new Date().getFullYear() },
+        }));
+      }
+    }
+    setScheduleErrors(prev => ({ ...prev, [key]: {} }));
+  };
+
+  const updateScheduleForm = (fsId, field, value) => {
+    const key = fsId?.toString();
+    setScheduleForms(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: value } }));
+    setScheduleErrors(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: '' } }));
+  };
+
+  const handleSaveSchedule = () => {
+    // Validate all tabs that have been opened (have form data)
+    const openedKeys = Object.keys(scheduleForms);
+    if (openedKeys.length === 0) {
+      showToast('error', 'Please select at least one seed type to schedule.');
+      return;
+    }
+
+    let hasError = false;
+    const newErrors = {};
+
+    openedKeys.forEach(key => {
+      const f = scheduleForms[key] || {};
+      const errs = {};
+      if (!f.total_bags)    errs.total_bags    = 'Required';
+      if (!f.delivery_date) errs.delivery_date = 'Required';
+      if (!f.season)        errs.season        = 'Required';
+      if (!f.year)          errs.year          = 'Required';
+      if (Object.keys(errs).length > 0) {
+        newErrors[key] = errs;
+        hasError = true;
+      }
+    });
+
+    if (hasError) {
+      setScheduleErrors(newErrors);
+      // Switch to first tab with error
+      const firstErrKey = Object.keys(newErrors)[0];
+      setActiveScheduleTab(firstErrKey);
+      showToast('error', 'Please fill all required fields.');
+      return;
+    }
+
+    setScheduleSaving(true);
+
+    // Build entries from opened forms
+    const entries = openedKeys.map(key => {
+      const fs = finalSeeds.find(s => s.id?.toString() === key);
+      const f  = scheduleForms[key];
+      return {
+        seedTypeId:    key,
+        seedTypeName:  fs?.seed_type?.name || 'Unknown',
+        varietyName:   fs?.varieties?.map(v => v.name).join(', ') || '—',
+        source:        isHybrid(fs?.seed_type?.name || '') ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)',
+        season:        f.season,
+        year:          f.year,
+        total_bags:    Number(f.total_bags),
+        delivery_date: f.delivery_date,
+        lot_number:    f.lot_number,
+        remarks:       f.remarks,
+        status:        'SCHEDULED',
+      };
+    });
+
+    let updated;
+    if (editSchedule) {
+      updated = schedules.map(s => s.id === editSchedule.id ? { ...s, entries, updatedAt: new Date().toISOString() } : s);
+      showToast('success', 'Delivery schedule updated.');
+    } else {
+      const newSchedule = {
+        id:        Date.now(),
+        entries,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      updated = [...schedules, newSchedule];
+      showToast('success', `Delivery program saved with ${entries.length} seed type${entries.length > 1 ? 's' : ''}.`);
+    }
+
+    setSchedules(updated);
+    saveSchedulesToStorage(updated);
+    setScheduleModal(false);
+    setScheduleSaving(false);
+  };
+
+  const handleMarkDelivered = (scheduleId, entryIdx) => {
+    setConfirmSnack({
+      title: 'Mark as Delivered?',
+      message: 'This confirms that the scheduled delivery has arrived.',
+      confirmLabel: 'Mark Delivered',
+      danger: false,
+      _action: () => {
+        const updated = schedules.map(s => {
+          if (s.id !== scheduleId) return s;
+          const entries = s.entries.map((e, i) => i === entryIdx ? { ...e, status: 'DELIVERED' } : e);
+          return { ...s, entries, updatedAt: new Date().toISOString() };
+        });
+        setSchedules(updated);
+        saveSchedulesToStorage(updated);
+        showToast('success', 'Delivery marked as delivered.');
+      },
+    });
+  };
+
+  const handleDeleteSchedule = (scheduleId) => {
+    setConfirmSnack({
+      title: 'Delete this schedule?',
+      message: 'This delivery program will be permanently removed.',
+      confirmLabel: 'Delete',
+      danger: true,
+      _action: () => {
+        const updated = schedules.filter(s => s.id !== scheduleId);
+        setSchedules(updated);
+        saveSchedulesToStorage(updated);
+        showToast('success', 'Schedule deleted.');
+      },
+    });
+  };
+
   const filteredDeliveries = deliveries.filter(d => {
     const q = search.toLowerCase();
-    const matchSearch = !q ||
-      d.seed_type_name?.toLowerCase().includes(q) ||
-      d.variety_name?.toLowerCase().includes(q) ||
-      d.lot_number?.toLowerCase().includes(q);
+    const matchSearch = !q || d.seed_type_name?.toLowerCase().includes(q) || d.variety_name?.toLowerCase().includes(q) || d.lot_number?.toLowerCase().includes(q);
     const matchSeason = !filterSeason || d.season === filterSeason;
     return matchSearch && matchSeason;
   });
@@ -354,9 +504,12 @@ export default function SeedInventory() {
         @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity:0; } to { transform: translateX(-50%) translateY(0); opacity:1; } }
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
         @keyframes slideUp { from { transform:translateY(12px);opacity:0; } to { transform:translateY(0);opacity:1; } }
+        @keyframes modalSlideUp { from { transform:translateY(40px);opacity:0; } to { transform:translateY(0);opacity:1; } }
         .card-hover:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12) !important; transform: translateY(-2px); transition: all 0.2s; }
         .row-hover:hover { background-color: ${GREEN.light} !important; }
         .btn-icon:hover { opacity: 0.75; }
+        .schedule-tab-btn { transition: all 0.2s ease; }
+        .schedule-tab-btn:hover { transform: translateY(-1px); }
       `}</style>
 
       <Toast toast={toast} />
@@ -389,10 +542,19 @@ export default function SeedInventory() {
               <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Seed Inventory</h1>
               <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>Track seed deliveries and barangay allocations.</p>
             </div>
-            <button onClick={openCreateDelivery}
-              style={{ padding: '0.625rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-              <Plus size={16} /> Record Delivery
-            </button>
+            {/* ── TWO BUTTONS IN HEADER ── */}
+            <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
+              <button onClick={openScheduleModal}
+                style={{ padding: '0.625rem 1.125rem', backgroundColor: 'white', color: GREEN.primary, border: `2px solid ${GREEN.primary}`, borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = GREEN.light; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'white'; }}>
+                <CalendarClock size={16} /> Schedule Delivery
+              </button>
+              <button onClick={openCreateDelivery}
+                style={{ padding: '0.625rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                <Plus size={16} /> Record Delivery
+              </button>
+            </div>
           </div>
 
           {/* Summary stats */}
@@ -453,7 +615,6 @@ export default function SeedInventory() {
                 const tagColor  = evH ? '#1e40af' : GREEN.primary;
                 const tagBg     = evH ? '#eff6ff' : GREEN.light;
                 const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-                const allocPct  = delivery.total_bags > 0 ? (delivery.allocated_bags / delivery.total_bags) * 100 : 0;
                 return (
                   <div key={delivery.id} className="card-hover"
                     onClick={() => openDetail(delivery)}
@@ -461,17 +622,9 @@ export default function SeedInventory() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div>
                         <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
-                          <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
-                            {delivery.seed_type_name}
-                          </span>
-                          {delivery.variety_name && (
-                            <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
-                              {delivery.variety_name}
-                            </span>
-                          )}
-                          <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
-                            {delivery.season_display} {delivery.year}
-                          </span>
+                          <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>{delivery.seed_type_name}</span>
+                          {delivery.variety_name && <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>{delivery.variety_name}</span>}
+                          <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>{delivery.season_display} {delivery.year}</span>
                         </div>
                         <h3 style={{ fontWeight: 800, fontSize: '0.95rem', margin: 0, color: '#111827' }}>
                           {delivery.source === 'REGION' ? 'From Region (NRP/RFO)' : 'From PhilRice (RCEF)'}
@@ -496,13 +649,139 @@ export default function SeedInventory() {
               })}
             </div>
           )}
+
+          {/* ══ DELIVERY PROGRAM SECTION ══ */}
+          {schedules.length > 0 && (
+            <div style={{ marginTop: '2rem', animation: 'fadeIn 0.3s ease' }}>
+              {/* Section header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <div style={{ width: 4, height: 28, backgroundColor: GREEN.primary, borderRadius: '999px' }} />
+                  <div>
+                    <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Delivery Program</h2>
+                    <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>Scheduled seed variety deliveries</p>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.72rem', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '0.25rem 0.75rem', borderRadius: '999px', fontWeight: 600 }}>
+                  {schedules.length} program{schedules.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {schedules.map((schedule, sIdx) => (
+                  <div key={schedule.id} style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 2px 10px rgba(0,0,0,0.07)', border: '1px solid #e5e7eb', overflow: 'hidden', animation: `slideUp ${0.3 + sIdx * 0.06}s ease` }}>
+                    {/* Schedule header */}
+                    <div style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                        <CalendarClock size={16} color={GREEN.primary} />
+                        <div>
+                          <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>
+                            Program #{sIdx + 1}
+                          </p>
+                          <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>
+                            Created {new Date(schedule.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            {schedule.updatedAt !== schedule.createdAt && ` · Updated ${new Date(schedule.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '0.2rem 0.625rem', borderRadius: '999px', fontWeight: 600 }}>
+                          {schedule.entries.length} seed type{schedule.entries.length !== 1 ? 's' : ''}
+                        </span>
+                        <button onClick={() => openEditSchedule(schedule)}
+                          style={{ padding: '0.375rem 0.75rem', backgroundColor: GREEN.light, color: GREEN.primary, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Edit2 size={12} /> Edit
+                        </button>
+                        <button onClick={() => handleDeleteSchedule(schedule.id)}
+                          style={{ padding: '0.375rem 0.625rem', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Entry cards */}
+                    <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {schedule.entries.map((entry, eIdx) => {
+                        const evH = isHybrid(entry.seedTypeName || '');
+                        const tagColor  = evH ? '#1e40af' : GREEN.primary;
+                        const tagBg     = evH ? '#eff6ff' : GREEN.light;
+                        const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                        const isDelivered = entry.status === 'DELIVERED';
+                        return (
+                          <div key={eIdx} style={{ borderRadius: '0.875rem', border: `1.5px solid ${isDelivered ? GREEN.border : tagBorder}`, backgroundColor: isDelivered ? GREEN.light : 'white', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', transition: 'all 0.2s' }}>
+                            {/* Left info */}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                                <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                                  {entry.seedTypeName}
+                                </span>
+                                <span style={{ fontSize: '0.68rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
+                                  {entry.source}
+                                </span>
+                                <StatusBadge status={entry.status} />
+                              </div>
+                              <p style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', margin: '0 0 0.375rem' }}>
+                                {entry.varietyName}
+                              </p>
+                              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.72rem', color: '#6b7280' }}>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Calendar size={11} />
+                                  {new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+                                </span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Package size={11} />
+                                  {entry.total_bags} bags
+                                </span>
+                                {entry.lot_number && (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                    <Hash size={11} /> {entry.lot_number}
+                                  </span>
+                                )}
+                                <span style={{ backgroundColor: '#f3f4f6', padding: '0.1rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
+                                  {entry.season === 'WET' ? '💧' : '☀️'} {entry.season === 'WET' ? 'Wet' : 'Dry'} {entry.year}
+                                </span>
+                              </div>
+                              {entry.remarks && (
+                                <p style={{ fontSize: '0.7rem', color: '#9ca3af', margin: '0.375rem 0 0', fontStyle: 'italic' }}>
+                                  {entry.remarks}
+                                </p>
+                              )}
+                            </div>
+                            {/* Right actions */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{entry.total_bags}</p>
+                                <p style={{ fontSize: '0.62rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>total bags</p>
+                              </div>
+                              {!isDelivered ? (
+                                <button
+                                  onClick={() => handleMarkDelivered(schedule.id, eIdx)}
+                                  style={{ padding: '0.4rem 0.875rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.15s' }}
+                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = GREEN.accent}
+                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = GREEN.primary}>
+                                  <CheckCircle size={12} /> Delivered
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.7rem', color: GREEN.accent, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <CheckCircle size={13} /> Delivered
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ══ DETAIL ══ */}
+      {/* ══ DETAIL VIEW (unchanged) ══ */}
       {view === 'detail' && selected && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
-          {/* Delivery header card */}
           <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.25rem', color: 'white' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div>
@@ -527,14 +806,12 @@ export default function SeedInventory() {
                 </button>
               </div>
             </div>
-
-            {/* Bag stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
               {[
-                { label: 'Total Received', value: selected.total_bags,    bold: true },
-                { label: 'Allocated',      value: selected.allocated_bags, bold: false },
-                { label: 'Remaining',      value: selected.remaining_bags, bold: false },
-              ].map(({ label, value, bold }) => (
+                { label: 'Total Received', value: selected.total_bags },
+                { label: 'Allocated',      value: selected.allocated_bags },
+                { label: 'Remaining',      value: selected.remaining_bags },
+              ].map(({ label, value }) => (
                 <div key={label} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '0.75rem', padding: '0.75rem', textAlign: 'center' }}>
                   <p style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, lineHeight: 1 }}>{value}</p>
                   <p style={{ fontSize: '0.65rem', opacity: 0.8, margin: '0.25rem 0 0', fontWeight: 700, textTransform: 'uppercase' }}>{label}</p>
@@ -542,15 +819,11 @@ export default function SeedInventory() {
               ))}
             </div>
           </div>
-
-          {/* Delivery info */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', fontSize: '0.8rem' }}>
               <div>
                 <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Delivery Date</p>
-                <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>
-                  {new Date(selected.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-                </p>
+                <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>{new Date(selected.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
               </div>
               <div>
                 <p style={{ color: '#9ca3af', fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Lot Number</p>
@@ -566,8 +839,6 @@ export default function SeedInventory() {
               </div>
             </div>
           </div>
-
-          {/* Allocations section */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
             <h2 style={{ fontWeight: 800, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>Barangay Allocations</h2>
             {selected.remaining_bags > 0 && (
@@ -577,7 +848,6 @@ export default function SeedInventory() {
               </button>
             )}
           </div>
-
           {selected.allocations?.length === 0 ? (
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #f3f4f6', color: '#9ca3af' }}>
               <Users size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
@@ -598,9 +868,7 @@ export default function SeedInventory() {
                       Allocated: {new Date(alloc.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
                       {alloc.date_confirmed && ` · Confirmed: ${new Date(alloc.date_confirmed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
                     </p>
-                    {alloc.confirmed_by_name && (
-                      <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>Confirmed by: {alloc.confirmed_by_name}</p>
-                    )}
+                    {alloc.confirmed_by_name && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>Confirmed by: {alloc.confirmed_by_name}</p>}
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <p style={{ fontSize: '1.5rem', fontWeight: 800, color: alloc.status === 'CONFIRMED' ? GREEN.primary : '#854d0e', margin: 0, lineHeight: 1 }}>{alloc.allocated_bags}</p>
@@ -613,14 +881,12 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ AUDIT ══ */}
+      {/* ══ AUDIT VIEW (unchanged) ══ */}
       {view === 'audit' && selected && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
             <h2 style={{ fontWeight: 800, fontSize: '1rem', margin: '0 0 0.25rem' }}>Audit Trail</h2>
-            <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0 }}>
-              {selected.seed_type_name} — {selected.season_display} {selected.year}
-            </p>
+            <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0 }}>{selected.seed_type_name} — {selected.season_display} {selected.year}</p>
           </div>
           {auditLoading ? (
             <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
@@ -644,20 +910,14 @@ export default function SeedInventory() {
                 }[log.action] || { color: '#6b7280', bg: '#f9fafb', icon: <ClipboardList size={16} /> };
                 return (
                   <div key={log.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < auditLogs.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', animation: `slideUp ${0.3 + idx * 0.04}s ease` }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>
-                      {actionCfg.icon}
-                    </div>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>{actionCfg.icon}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.25rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.85rem', color: actionCfg.color }}>{log.action_display}</span>
-                        <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
-                          {new Date(log.timestamp).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                        <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>{new Date(log.timestamp).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                       <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0.25rem 0 0.125rem' }}>{log.details}</p>
-                      {log.performed_by_name && (
-                        <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>By: {log.performed_by_name}</p>
-                      )}
+                      {log.performed_by_name && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>By: {log.performed_by_name}</p>}
                     </div>
                   </div>
                 );
@@ -667,23 +927,17 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ DELIVERY MODAL ══ */}
+      {/* ══ RECORD DELIVERY MODAL (unchanged) ══ */}
       {deliveryModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0', padding: '2rem', width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))', animation: 'slideUp 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>
-                {editDelivery ? 'Edit Delivery' : 'Record Seed Delivery'}
-              </h2>
+              <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>{editDelivery ? 'Edit Delivery' : 'Record Seed Delivery'}</h2>
               <button onClick={() => setDeliveryModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '1.5rem' }}>×</button>
             </div>
-
-            {/* Seed type selector — only on create */}
             {!editDelivery && (
               <div style={{ marginBottom: '1rem' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>
-                  Seed Type <span style={{ color: '#dc2626' }}>*</span>
-                </label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>Seed Type <span style={{ color: '#dc2626' }}>*</span></label>
                 {finalSeeds.length === 0 ? (
                   <p style={{ fontSize: '0.8rem', color: '#dc2626' }}>No finalized seeds. Admin must finalize in Seed Poll first.</p>
                 ) : (
@@ -699,9 +953,7 @@ export default function SeedInventory() {
                           onClick={() => setDForm(p => ({ ...p, final_seed_id: fs.id, season: fs.season || p.season, year: fs.year || p.year }))}
                           style={{ padding: '0.875rem', textAlign: 'left', border: `2px solid ${sel ? tagColor : '#e5e7eb'}`, borderRadius: '0.875rem', backgroundColor: sel ? tagBg : 'white', cursor: 'pointer', transition: 'all 0.15s' }}>
                           <p style={{ fontWeight: 800, fontSize: '0.9rem', color: sel ? tagColor : '#374151', margin: 0 }}>{fs.seed_type?.name}</p>
-                          <p style={{ fontSize: '0.68rem', color: sel ? tagColor : '#9ca3af', margin: '0.125rem 0 0.25rem', opacity: 0.9 }}>
-                            {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
-                          </p>
+                          <p style={{ fontSize: '0.68rem', color: sel ? tagColor : '#9ca3af', margin: '0.125rem 0 0.25rem', opacity: 0.9 }}>{evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}</p>
                           <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                             {fs.varieties?.map(v => (
                               <span key={v.id} style={{ backgroundColor: sel ? `${tagColor}15` : '#f3f4f6', color: sel ? tagColor : '#6b7280', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.63rem', fontWeight: 600 }}>{v.name}</span>
@@ -715,13 +967,9 @@ export default function SeedInventory() {
                 {dErrors.final_seed_id && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.final_seed_id}</p>}
               </div>
             )}
-
-            {/* Season + Year */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
               <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-                  Season <span style={{ color: '#dc2626' }}>*</span>
-                </label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Season <span style={{ color: '#dc2626' }}>*</span></label>
                 <select value={dForm.season} onChange={e => { setDForm(p => ({ ...p, season: e.target.value })); setDErrors(p => ({ ...p, season: '' })); }} style={inp(!!dErrors.season)}>
                   <option value="">Select</option>
                   <option value="WET">Wet Season</option>
@@ -730,32 +978,23 @@ export default function SeedInventory() {
                 {dErrors.season && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.season}</p>}
               </div>
               <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-                  Year <span style={{ color: '#dc2626' }}>*</span>
-                </label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Year <span style={{ color: '#dc2626' }}>*</span></label>
                 <input type="number" value={dForm.year} onChange={e => { setDForm(p => ({ ...p, year: e.target.value })); setDErrors(p => ({ ...p, year: '' })); }} placeholder="2025" style={inp(!!dErrors.year)} />
                 {dErrors.year && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.year}</p>}
               </div>
             </div>
-
-            {/* Total bags + date */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
               <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-                  Total Bags <span style={{ color: '#dc2626' }}>*</span>
-                </label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Total Bags <span style={{ color: '#dc2626' }}>*</span></label>
                 <input type="number" min="1" value={dForm.total_bags} onChange={e => { setDForm(p => ({ ...p, total_bags: e.target.value })); setDErrors(p => ({ ...p, total_bags: '' })); }} placeholder="e.g. 500" style={inp(!!dErrors.total_bags)} />
                 {dErrors.total_bags && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.total_bags}</p>}
               </div>
               <div>
-                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-                  Delivery Date <span style={{ color: '#dc2626' }}>*</span>
-                </label>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Delivery Date <span style={{ color: '#dc2626' }}>*</span></label>
                 <input type="date" value={dForm.delivery_date} onChange={e => { setDForm(p => ({ ...p, delivery_date: e.target.value })); setDErrors(p => ({ ...p, delivery_date: '' })); }} style={inp(!!dErrors.delivery_date)} />
                 {dErrors.delivery_date && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.delivery_date}</p>}
               </div>
             </div>
-
             <div style={{ marginBottom: '0.875rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Lot Number</label>
               <input type="text" value={dForm.lot_number} onChange={e => setDForm(p => ({ ...p, lot_number: e.target.value }))} placeholder="e.g. LOT-2025-001" style={inp()} />
@@ -764,7 +1003,6 @@ export default function SeedInventory() {
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Remarks</label>
               <textarea value={dForm.remarks} onChange={e => setDForm(p => ({ ...p, remarks: e.target.value }))} rows={2} placeholder="Optional notes..." style={{ ...inp(), resize: 'vertical' }} />
             </div>
-
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button onClick={() => setDeliveryModal(false)} style={{ flex: 1, padding: '0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSaveDelivery} disabled={dSaving}
@@ -776,43 +1014,260 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ ALLOCATION MODAL ══ */}
+      {/* ══ SCHEDULE DELIVERY MODAL (NEW) ══ */}
+      {scheduleModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', animation: 'modalSlideUp 0.3s cubic-bezier(0.34,1.1,0.64,1)' }}>
+            
+            {/* Modal Header */}
+            <div style={{ padding: '1.5rem 1.75rem 1rem', borderBottom: '1px solid #f3f4f6', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 10, borderRadius: '1.25rem 1.25rem 0 0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: GREEN.light, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <CalendarClock size={16} color={GREEN.primary} />
+                    </div>
+                    <h2 style={{ fontWeight: 800, fontSize: '1.15rem', margin: 0, color: '#1a1a1a' }}>
+                      {editSchedule ? 'Edit Delivery Schedule' : 'Schedule Seed Delivery'}
+                    </h2>
+                  </div>
+                  <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0, paddingLeft: '2.5rem' }}>
+                    Select seed types to schedule. Data is saved per tab.
+                  </p>
+                </div>
+                <button onClick={() => setScheduleModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0.25rem', borderRadius: '0.5rem', display: 'flex', transition: 'color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#374151'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}>
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            <div style={{ padding: '1.25rem 1.75rem 1.75rem' }}>
+              {/* No final seeds warning */}
+              {finalSeeds.length === 0 ? (
+                <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: '0.875rem', padding: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                  <AlertCircle size={18} color="#854d0e" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
+                  <div>
+                    <p style={{ fontWeight: 700, color: '#854d0e', margin: '0 0 0.25rem', fontSize: '0.875rem' }}>No Finalized Seeds Found</p>
+                    <p style={{ color: '#92400e', fontSize: '0.78rem', margin: 0 }}>Finalize seed varieties in Seed Poll first before scheduling a delivery.</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Step 1 label */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                    <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: GREEN.primary, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>1</span>
+                    <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>Choose seed type(s) to schedule</p>
+                  </div>
+
+                  {/* Seed type toggle tabs */}
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${finalSeeds.length}, 1fr)`, gap: '0.625rem', marginBottom: '1.25rem' }}>
+                    {finalSeeds.map(fs => {
+                      const key    = fs.id?.toString();
+                      const evH    = isHybrid(fs.seed_type?.name || '');
+                      const tagColor  = evH ? '#1e40af' : GREEN.primary;
+                      const tagBg     = evH ? '#eff6ff' : GREEN.light;
+                      const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                      const isActive  = activeScheduleTab === key;
+                      const hasData   = !!scheduleForms[key];
+                      const hasErr    = !!(scheduleErrors[key] && Object.values(scheduleErrors[key]).some(Boolean));
+                      return (
+                        <button key={key} type="button" className="schedule-tab-btn"
+                          onClick={() => handleScheduleTabToggle(fs)}
+                          style={{
+                            padding: '1rem',
+                            textAlign: 'left',
+                            border: `2px solid ${hasErr ? '#dc2626' : isActive ? tagColor : hasData ? tagBorder : '#e5e7eb'}`,
+                            borderRadius: '0.875rem',
+                            backgroundColor: isActive ? tagBg : hasData ? `${tagBg}80` : 'white',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            boxShadow: isActive ? `0 4px 12px ${tagColor}25` : 'none',
+                          }}>
+                          {/* Active indicator dot */}
+                          {isActive && (
+                            <div style={{ position: 'absolute', top: '0.625rem', right: '0.625rem', width: 8, height: 8, borderRadius: '50%', backgroundColor: tagColor }} />
+                          )}
+                          {/* Has data checkmark */}
+                          {hasData && !isActive && (
+                            <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', width: 16, height: 16, borderRadius: '50%', backgroundColor: tagBg, border: `1.5px solid ${tagColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <CheckCircle size={10} color={tagColor} />
+                            </div>
+                          )}
+                          <p style={{ fontWeight: 800, fontSize: '0.9rem', color: isActive ? tagColor : '#374151', margin: '0 0 0.125rem' }}>
+                            {fs.seed_type?.name}
+                          </p>
+                          <p style={{ fontSize: '0.68rem', color: isActive ? tagColor : '#9ca3af', margin: '0 0 0.375rem', opacity: 0.9 }}>
+                            {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
+                          </p>
+                          <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
+                            {fs.varieties?.map(v => (
+                              <span key={v.id} style={{ backgroundColor: isActive ? `${tagColor}20` : '#f3f4f6', color: isActive ? tagColor : '#6b7280', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.63rem', fontWeight: 600 }}>{v.name}</span>
+                            ))}
+                          </div>
+                          {hasErr && <p style={{ fontSize: '0.65rem', color: '#dc2626', margin: '0.375rem 0 0', fontWeight: 600 }}>⚠ Fill required fields</p>}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Step 2 — form for active tab */}
+                  {activeScheduleTab && (() => {
+                    const fs  = finalSeeds.find(s => s.id?.toString() === activeScheduleTab);
+                    const key = activeScheduleTab;
+                    const f   = scheduleForms[key] || {};
+                    const errs = scheduleErrors[key] || {};
+                    const evH  = isHybrid(fs?.seed_type?.name || '');
+                    const tagColor = evH ? '#1e40af' : GREEN.primary;
+                    const tagBg    = evH ? '#eff6ff' : GREEN.light;
+                    const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+
+                    return (
+                      <div style={{ animation: 'fadeIn 0.2s ease' }}>
+                        {/* Step 2 label */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: tagColor, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>2</span>
+                          <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>
+                            Enter delivery details for <span style={{ color: tagColor }}>{fs?.seed_type?.name}</span>
+                          </p>
+                        </div>
+
+                        {/* Seed info banner */}
+                        <div style={{ backgroundColor: tagBg, border: `1px solid ${tagBorder}`, borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <Leaf size={15} color={tagColor} />
+                          <div>
+                            <p style={{ fontWeight: 700, fontSize: '0.8rem', color: tagColor, margin: 0 }}>
+                              {fs?.seed_type?.name} · {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
+                            </p>
+                            <p style={{ fontSize: '0.68rem', color: tagColor, opacity: 0.8, margin: 0 }}>
+                              Varieties: {fs?.varieties?.map(v => v.name).join(', ') || '—'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Season + Year */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Season <span style={{ color: '#dc2626' }}>*</span></label>
+                            <select value={f.season || ''} onChange={e => updateScheduleForm(key, 'season', e.target.value)} style={inp(!!errs.season)}>
+                              <option value="">Select</option>
+                              <option value="WET">Wet Season</option>
+                              <option value="DRY">Dry Season</option>
+                            </select>
+                            {errs.season && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.season}</p>}
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Year <span style={{ color: '#dc2626' }}>*</span></label>
+                            <input type="number" value={f.year || ''} onChange={e => updateScheduleForm(key, 'year', e.target.value)} placeholder={new Date().getFullYear()} style={inp(!!errs.year)} />
+                            {errs.year && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.year}</p>}
+                          </div>
+                        </div>
+
+                        {/* Bags + Date */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                          <div>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Expected Bags <span style={{ color: '#dc2626' }}>*</span></label>
+                            <input type="number" min="1" value={f.total_bags || ''} onChange={e => updateScheduleForm(key, 'total_bags', e.target.value)} placeholder="e.g. 500" style={inp(!!errs.total_bags)} />
+                            {errs.total_bags && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.total_bags}</p>}
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Scheduled Date <span style={{ color: '#dc2626' }}>*</span></label>
+                            <input type="date" value={f.delivery_date || ''} onChange={e => updateScheduleForm(key, 'delivery_date', e.target.value)} style={inp(!!errs.delivery_date)} />
+                            {errs.delivery_date && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.delivery_date}</p>}
+                          </div>
+                        </div>
+
+                        {/* Lot + Remarks */}
+                        <div style={{ marginBottom: '0.875rem' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Lot Number</label>
+                          <input type="text" value={f.lot_number || ''} onChange={e => updateScheduleForm(key, 'lot_number', e.target.value)} placeholder="e.g. LOT-2026-001" style={inp()} />
+                        </div>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Remarks</label>
+                          <textarea value={f.remarks || ''} onChange={e => updateScheduleForm(key, 'remarks', e.target.value)} rows={2} placeholder="Optional notes..." style={{ ...inp(), resize: 'vertical' }} />
+                        </div>
+
+                        {/* Multi-tab hint */}
+                        {finalSeeds.length > 1 && (
+                          <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.72rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                            <AlertCircle size={12} color="#9ca3af" />
+                            Click the other seed type above to fill its schedule too. Both will be saved together.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* No tab selected hint */}
+                  {!activeScheduleTab && Object.keys(scheduleForms).length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', backgroundColor: '#f9fafb', borderRadius: '0.875rem', border: '1.5px dashed #e5e7eb' }}>
+                      <CalendarClock size={28} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.625rem' }} />
+                      <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 0.25rem', fontSize: '0.875rem' }}>Select a seed type above</p>
+                      <p style={{ fontSize: '0.78rem', margin: 0 }}>Click a seed type card to start entering schedule details.</p>
+                    </div>
+                  )}
+
+                  {/* Summary of filled tabs */}
+                  {Object.keys(scheduleForms).length > 0 && !activeScheduleTab && (
+                    <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '0.5rem' }}>
+                      <p style={{ fontWeight: 700, fontSize: '0.8rem', color: GREEN.accent, margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+                        <CheckCircle size={14} /> Ready to save:
+                      </p>
+                      {Object.keys(scheduleForms).map(key => {
+                        const fs = finalSeeds.find(s => s.id?.toString() === key);
+                        const f  = scheduleForms[key];
+                        return (
+                          <div key={key} style={{ fontSize: '0.75rem', color: GREEN.accent, display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                            <span style={{ fontWeight: 700 }}>{fs?.seed_type?.name}</span>
+                            <span style={{ color: '#6b7280' }}>·</span>
+                            <span>{f.total_bags || '—'} bags</span>
+                            <span style={{ color: '#6b7280' }}>·</span>
+                            <span>{f.delivery_date ? new Date(f.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal footer */}
+            <div style={{ padding: '1rem 1.75rem 1.5rem', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '0.75rem', position: 'sticky', bottom: 0, backgroundColor: 'white', borderRadius: '0 0 1.25rem 1.25rem' }}>
+              <button onClick={() => setScheduleModal(false)} style={{ flex: 1, padding: '0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#374151' }}>Cancel</button>
+              <button onClick={handleSaveSchedule} disabled={scheduleSaving || finalSeeds.length === 0}
+                style={{ flex: 2, padding: '0.875rem', backgroundColor: (scheduleSaving || finalSeeds.length === 0) ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, fontSize: '0.875rem', cursor: (scheduleSaving || finalSeeds.length === 0) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'background 0.15s' }}>
+                <CalendarClock size={16} />
+                {scheduleSaving ? 'Saving...' : editSchedule ? 'Update Schedule' : 'Save Schedule'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ ALLOCATION MODAL (unchanged) ══ */}
       {allocModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.25s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ fontWeight: 800, margin: 0 }}>Allocate Bags</h3>
-                <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
-                  {allocModal.remaining_bags} bags remaining
-                </p>
+                <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{allocModal.remaining_bags} bags remaining</p>
               </div>
               <button onClick={() => setAllocModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#6b7280' }}>×</button>
             </div>
-
             <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: GREEN.accent }}>
               <strong>{allocModal.seed_type_name}</strong> · {allocModal.season_display} {allocModal.year} · {allocModal.remaining_bags} bags available
             </div>
-
             <div style={{ marginBottom: '0.875rem' }}>
-              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
-                Barangay <span style={{ color: '#dc2626' }}>*</span>
-              </label>
-              <select
-                value={aForm.barangay}
-                onChange={e => { setAForm(p => ({ ...p, barangay: e.target.value })); setAErrors(p => ({ ...p, barangay: '' })); }}
-                style={{ ...inp(!!aErrors.barangay), cursor: 'pointer' }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = GREEN.primary; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = aErrors.barangay ? '#dc2626' : '#d1d5db'; }}
-              >
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Barangay <span style={{ color: '#dc2626' }}>*</span></label>
+              <select value={aForm.barangay} onChange={e => { setAForm(p => ({ ...p, barangay: e.target.value })); setAErrors(p => ({ ...p, barangay: '' })); }} style={{ ...inp(!!aErrors.barangay), cursor: 'pointer' }}>
                 <option value="">Select barangay</option>
-                {BARANGAYS.map(b => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
+                {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
               {aErrors.barangay && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{aErrors.barangay}</p>}
             </div>
-
             <div style={{ marginBottom: '0.875rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
                 Bags to Allocate <span style={{ color: '#dc2626' }}>*</span>
@@ -821,12 +1276,10 @@ export default function SeedInventory() {
               <input type="number" min="1" max={allocModal.remaining_bags} value={aForm.allocated_bags} onChange={e => { setAForm(p => ({ ...p, allocated_bags: e.target.value })); setAErrors(p => ({ ...p, allocated_bags: '' })); }} placeholder="e.g. 45" style={inp(!!aErrors.allocated_bags)} />
               {aErrors.allocated_bags && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{aErrors.allocated_bags}</p>}
             </div>
-
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Notes</label>
               <input type="text" value={aForm.notes} onChange={e => setAForm(p => ({ ...p, notes: e.target.value }))} placeholder="Optional" style={inp()} />
             </div>
-
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button onClick={() => setAllocModal(null)} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSaveAlloc} disabled={aSaving}

@@ -32,6 +32,17 @@ const Navbar = () => {
     }
   };
 
+  const handleNavClick = (e, id) => {
+    e.preventDefault();
+    setMenuOpen(false);
+    if (isLandingPage) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate(`/#${id}`);
+    }
+  };
+
   return (
     <nav className="navbar">
       <div className="navbar-container">
@@ -46,11 +57,11 @@ const Navbar = () => {
 
         {/* CENTER: NAV LINKS — hidden on mobile */}
         <ul className={`navbar-links${menuOpen ? ' open' : ''}`}>
-          <li><a href="#home" onClick={(e) => { e.preventDefault(); scrollTo('home'); }}>Home</a></li>
-          <li><a href="#about" onClick={(e) => { e.preventDefault(); scrollTo('about'); }}>About MAO</a></li>
-          <li><a href="#programs" onClick={(e) => { e.preventDefault(); scrollTo('programs'); }}>Programs</a></li>
-          <li><a href="#announcements" onClick={(e) => { e.preventDefault(); scrollTo('announcements'); }}>Announcements</a></li>
-          <li><a href="#documentation" onClick={(e) => { e.preventDefault(); scrollTo('documentation'); }}>Documentation</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#home" onClick={(e) => { e.preventDefault(); scrollTo('home'); }}>Home</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#about" onClick={(e) => { e.preventDefault(); scrollTo('about'); }}>About MAO</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#programs" onClick={(e) => { e.preventDefault(); scrollTo('programs'); }}>Programs</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#announcements" onClick={(e) => { e.preventDefault(); scrollTo('announcements'); }}>Announcements</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#documentation" onClick={(e) => { e.preventDefault(); scrollTo('documentation'); }}>Documentation</a></li>
 
           {/* Mobile-only auth links inside drawer */}
           {actuallyLoggedIn ? (
@@ -65,22 +76,22 @@ const Navbar = () => {
           ) : (
             <>
               <li className="mobile-only">
-                <button className="nav-drawer-btn nav-drawer-btn--outline">
-                  <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 21h20"/>
-                  </svg>
-                  Download App
-                </button>
-              </li>
-              <li className="mobile-only">
-                <Link to="/login" onClick={() => setMenuOpen(false)}>
-                  <button className="nav-drawer-btn nav-drawer-btn--solid">
+                <div style={{ display: 'flex', gap: '0.625rem', padding: '0 1rem' }}>
+                  <button className="nav-drawer-btn nav-drawer-btn--outline" style={{ flex: 1, justifyContent: 'center' }}>
                     <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                      <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 21h20"/>
                     </svg>
-                    Sign In
+                    Download
                   </button>
-                </Link>
+                  <a href="#login" onClick={(e) => handleNavClick(e, 'login')} style={{ flex: 1 }}>
+                    <button className="nav-drawer-btn nav-drawer-btn--solid" style={{ width: '100%', justifyContent: 'center' }}>
+                      <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
+                      </svg>
+                      Sign In
+                    </button>
+                  </a>
+                </div>
               </li>
             </>
           )}
@@ -103,14 +114,14 @@ const Navbar = () => {
                 </svg>
                 Download App
               </button>
-              <Link to="/login" onClick={() => setMenuOpen(false)}>
+              <a href="#login" onClick={(e) => handleNavClick(e, 'login')}>
                 <button className="navbar-sign-in-btn">
                   <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"/>
                   </svg>
                   Sign In
                 </button>
-              </Link>
+              </a>
             </>
           )}
         </div>
