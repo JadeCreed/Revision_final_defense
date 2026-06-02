@@ -117,6 +117,7 @@ const ProgramCard = ({
   schedule, sIdx, deliveries,
   onDeleteSchedule, onEditSchedule,
   onOpenVarietyDetail, onRecordDelivery,
+  onEditEntry, onMarkDelivered,
   showToast,
 }) => {
   const [drillSeedTypeKey, setDrillSeedTypeKey] = useState(null);
@@ -354,9 +355,6 @@ const ProgramCard = ({
                               <Hash size={10} /> {entry.lot_number}
                             </span>
                           )}
-                          <span style={{ backgroundColor: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
-                            {entry.season === 'WET' ? '💧' : '☀️'} {entry.season === 'WET' ? 'Wet' : 'Dry'} {entry.year}
-                          </span>
                         </div>
                         {entry.remarks && (
                           <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.3rem 0 0', fontStyle: 'italic', wordBreak: 'break-word' }}>
@@ -373,6 +371,25 @@ const ProgramCard = ({
                             View details <ChevronRight size={10} />
                           </span>
                         )}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.25rem', justifyContent: 'flex-end' }}>
+                          <button
+                            onClick={e => { e.stopPropagation(); onEditEntry(entry); }}
+                            style={{ padding: '0.35rem 0.65rem', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '0.55rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                            <Edit2 size={12} /> Edit
+                          </button>
+                          {entry.status !== 'DELIVERED' && (
+                            <button
+                              onClick={e => { e.stopPropagation(); onMarkDelivered(entry, matchedDelivery); }}
+                              style={{ padding: '0.35rem 0.65rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.55rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <CheckCircle size={12} /> Delivered
+                            </button>
+                          )}
+                          {entry.status === 'DELIVERED' && (
+                            <span style={{ padding: '0.35rem 0.65rem', backgroundColor: GREEN.soft, color: GREEN.accent, borderRadius: '0.55rem', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                              <CheckCircle size={12} /> Done
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -421,6 +438,9 @@ export default function SeedInventory() {
   const [scheduleErrors, setScheduleErrors]       = useState({});
   const [scheduleSaving, setScheduleSaving]       = useState(false);
   const [schedules, setSchedules]                 = useState(loadSchedules);
+  const [deliveredModal, setDeliveredModal]       = useState(null);
+  const [deliveredForm, setDeliveredForm]         = useState({ confirmed: null, actual_bags: '' });
+  const [deliveredSaving, setDeliveredSaving]     = useState(false);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
@@ -494,14 +514,6 @@ export default function SeedInventory() {
     catch { setAuditLogs([]); } finally { setAuditLoading(false); }
   };
 
-  const openCreateDelivery = async () => {
-    setEditDelivery(null);
-    if (!finalSeeds.length) await loadFinalSeeds();
-    const fs = finalSeeds[0];
-    setDForm({ final_seed_id: '', variety_id: '', season: fs?.season || '', year: fs?.year || new Date().getFullYear(), total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
-    setDErrors({}); setDeliveryModal(true);
-  };
-
   const openEditDelivery = (delivery) => {
     setEditDelivery(delivery);
     setDForm({ final_seed_id: delivery.seed_type, variety_id: delivery.variety || '', season: delivery.season, year: delivery.year, total_bags: delivery.total_bags, delivery_date: delivery.delivery_date, lot_number: delivery.lot_number || '', remarks: delivery.remarks || '' });
@@ -510,8 +522,17 @@ export default function SeedInventory() {
 
   const openRecordDeliveryFromEntry = async (entry) => {
     setEditDelivery(null);
-    if (!finalSeeds.length) await loadFinalSeeds();
-    const matchedFs = finalSeeds.find(fs =>
+    let availableFinalSeeds = finalSeeds;
+    if (!availableFinalSeeds.length) {
+      await loadFinalSeeds();
+      try {
+        const res = await getFinalSeeds();
+        availableFinalSeeds = res.data || [];
+      } catch {
+        availableFinalSeeds = [];
+      }
+    }
+    const matchedFs = availableFinalSeeds.find(fs =>
       entry.seedTypeDbId
         ? String(fs.seed_type?.id) === String(entry.seedTypeDbId)
         : fs.seed_type?.name?.toLowerCase().trim() === entry.seedTypeName?.toLowerCase().trim()
@@ -533,6 +554,119 @@ export default function SeedInventory() {
     setDeliveryModal(true);
   };
 
+  const openEditEntryFromCard = async (entry) => {
+    setEditDelivery({ _fromEntry: true, _entry: entry });
+    let availableFinalSeeds = finalSeeds;
+    if (!availableFinalSeeds.length) {
+      await loadFinalSeeds();
+      try {
+        const res = await getFinalSeeds();
+        availableFinalSeeds = res.data || [];
+      } catch {
+        availableFinalSeeds = [];
+      }
+    }
+    const matchedFs = availableFinalSeeds.find(fs =>
+      entry.seedTypeDbId
+        ? String(fs.seed_type?.id) === String(entry.seedTypeDbId)
+        : fs.seed_type?.name?.toLowerCase().trim() === entry.seedTypeName?.toLowerCase().trim()
+    );
+    const matchedVariety = matchedFs?.varieties?.find(v =>
+      String(v.id) === String(entry.varietyId) ||
+      v.name?.toLowerCase().trim() === entry.varietyName?.toLowerCase().trim()
+    );
+    setDForm({
+      final_seed_id: matchedFs?.id || '',
+      variety_id: matchedVariety?.id || '',
+      _lockedSeedTypeId: matchedFs?.id || '',
+      _lockedVarietyId: matchedVariety?.id || '',
+      _seedTypeName: entry.seedTypeName,
+      _varietyName: entry.varietyName,
+      season: entry.season || '',
+      year: entry.year || new Date().getFullYear(),
+      total_bags: entry.total_bags || '',
+      delivery_date: entry.delivery_date || '',
+      lot_number: entry.lot_number || '',
+      remarks: entry.remarks || '',
+    });
+    setDErrors({});
+    setDeliveryModal(true);
+  };
+
+  const openDeliveredModal = (entry, matchedDelivery) => {
+    setDeliveredModal({ entry, matchedDelivery });
+    setDeliveredForm({ confirmed: null, actual_bags: '' });
+  };
+
+  const handleConfirmDelivered = async () => {
+    if (!deliveredModal) return;
+    const { entry, matchedDelivery } = deliveredModal;
+    const actualBags = deliveredForm.confirmed === true ? Number(entry.total_bags) : Number(deliveredForm.actual_bags);
+    if (deliveredForm.confirmed === null) {
+      showToast('error', 'Please choose whether the delivered bags are correct.');
+      return;
+    }
+    if (deliveredForm.confirmed === false && (!deliveredForm.actual_bags || Number(deliveredForm.actual_bags) <= 0)) {
+      showToast('error', 'Please enter the actual number of bags delivered.');
+      return;
+    }
+    setDeliveredSaving(true);
+    try {
+      if (matchedDelivery) {
+        await updateSeedDelivery(matchedDelivery.id, {
+          seed_type: matchedDelivery.seed_type,
+          variety: matchedDelivery.variety,
+          season: matchedDelivery.season,
+          year: matchedDelivery.year,
+          total_bags: actualBags,
+          delivery_date: matchedDelivery.delivery_date,
+          lot_number: matchedDelivery.lot_number,
+          remarks: matchedDelivery.remarks,
+          status: 'DELIVERED',
+        });
+      } else {
+        if (!finalSeeds.length) await loadFinalSeeds();
+        const matchedFs = finalSeeds.find(fs =>
+          entry.seedTypeDbId
+            ? String(fs.seed_type?.id) === String(entry.seedTypeDbId)
+            : fs.seed_type?.name?.toLowerCase().trim() === entry.seedTypeName?.toLowerCase().trim()
+        );
+        const matchedVariety = matchedFs?.varieties?.find(v =>
+          String(v.id) === String(entry.varietyId) || v.name?.toLowerCase().trim() === entry.varietyName?.toLowerCase().trim()
+        );
+        await createSeedDelivery({
+          seed_type: matchedFs?.seed_type?.id,
+          variety: matchedVariety?.id,
+          season: entry.season,
+          year: Number(entry.year),
+          total_bags: actualBags,
+          delivery_date: entry.delivery_date,
+          lot_number: entry.lot_number,
+          remarks: entry.remarks,
+          status: 'DELIVERED',
+        });
+      }
+
+      const updatedSchedules = schedules.map(s => ({
+        ...s,
+        entries: s.entries.map(e =>
+          e.seedTypeId === entry.seedTypeId
+            ? { ...e, status: 'DELIVERED', total_bags: actualBags }
+            : e
+        ),
+      }));
+      setSchedules(updatedSchedules);
+      saveSchedulesToStorage(updatedSchedules);
+      showToast('success', `Delivery confirmed — ${actualBags} bags for ${entry.varietyName}.`);
+      setDeliveredModal(null);
+      await loadInventory();
+    } catch (err) {
+      showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to confirm delivery.');
+    } finally {
+      setDeliveredSaving(false);
+    }
+  };
+
   const handleSaveDelivery = async () => {
     const errs = {};
     if (!dForm.season)        errs.season        = 'Required';
@@ -545,7 +679,51 @@ export default function SeedInventory() {
     if (Object.keys(errs).length > 0) { setDErrors(errs); return; }
     setDSaving(true);
     try {
+      const selectedFS = finalSeeds.find(fs => fs.id?.toString() === dForm.final_seed_id?.toString());
       const matchedVariety = selectedFS?.varieties?.find(v => String(v.id) === String(dForm.variety_id)) || selectedFS?.varieties?.[0];
+
+      if (editDelivery?._fromEntry) {
+        const entry = editDelivery._entry;
+        const updatedSchedules = schedules.map(s => ({
+          ...s,
+          entries: s.entries.map(e =>
+            e.seedTypeId === entry.seedTypeId
+              ? {
+                  ...e,
+                  season: dForm.season,
+                  year: Number(dForm.year),
+                  total_bags: Number(dForm.total_bags),
+                  delivery_date: dForm.delivery_date,
+                  lot_number: dForm.lot_number,
+                  remarks: dForm.remarks,
+                }
+              : e
+          ),
+        }));
+        setSchedules(updatedSchedules);
+        saveSchedulesToStorage(updatedSchedules);
+        showToast('success', 'Schedule entry updated.');
+        setDeliveryModal(false);
+
+        if (selected && selected._scheduleEntry?.seedTypeId === entry.seedTypeId) {
+          const updatedEntry = updatedSchedules.flatMap(s => s.entries).find(e => e.seedTypeId === entry.seedTypeId);
+          if (updatedEntry) {
+            setSelected(prev => ({
+              ...prev,
+              scheduled_bags: updatedEntry.total_bags,
+              delivery_date: updatedEntry.delivery_date,
+              lot_number: updatedEntry.lot_number,
+              remarks: updatedEntry.remarks,
+              season: updatedEntry.season,
+              year: updatedEntry.year,
+              _scheduleEntry: updatedEntry,
+            }));
+          }
+        }
+
+        return;
+      }
+
       const payload = { seed_type: selectedFS?.seed_type?.id || editDelivery?.seed_type, variety: matchedVariety?.id || editDelivery?.variety, season: dForm.season, year: Number(dForm.year), total_bags: Number(dForm.total_bags), delivery_date: dForm.delivery_date, lot_number: dForm.lot_number, remarks: dForm.remarks };
       if (editDelivery) { await updateSeedDelivery(editDelivery.id, payload); showToast('success', 'Delivery record updated.'); }
       else { await createSeedDelivery(payload); showToast('success', 'Seed delivery recorded successfully.'); }
@@ -799,27 +977,39 @@ export default function SeedInventory() {
             </button>
           </div>
 
-          {/* Summary stats */}
-          {summary && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
-              {[
-                { label: 'Total Deliveries',  value: summary.total_deliveries,      Icon: Truck,        color: '#1e40af', bg: '#eff6ff' },
-                { label: 'Bags Received',     value: summary.total_bags_received,   Icon: Package,      color: GREEN.primary, bg: GREEN.light },
-                { label: 'Bags Allocated',    value: summary.total_bags_allocated,  Icon: Users,        color: '#854d0e', bg: '#fef9c3' },
-                { label: 'Bags Remaining',    value: summary.total_bags_remaining,  Icon: Wheat,        color: GREEN.accent, bg: GREEN.soft },
-                { label: 'Pending Pickups',   value: summary.pending_confirmations, Icon: Clock,        color: '#854d0e', bg: '#fff7ed' },
-                { label: 'Confirmed Pickups', value: summary.confirmed_pickups,     Icon: CheckCircle,  color: GREEN.accent, bg: GREEN.light },
-              ].map(({ label, value, Icon, color, bg }, i) => (
-                <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', animation: `slideUp ${0.3 + i * 0.04}s ease` }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}>
-                    <Icon size={16} color={color} />
+          {(() => {
+            const allEntries = schedules.flatMap(s => s.entries || []);
+            const totalScheduled = allEntries.length;
+            const confirmedEntries = allEntries.filter(e => e.status === 'DELIVERED');
+            const pendingEntries = allEntries.filter(e => e.status !== 'DELIVERED');
+            const totalDeliveriesLabel = totalScheduled > 0 ? `${confirmedEntries.length}/${totalScheduled}` : '0';
+            const bagsReceived = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
+            const bagsAllocated = summary?.total_bags_allocated ?? 0;
+            const pendingCount = pendingEntries.length;
+            const confirmedCount = confirmedEntries.length;
+
+            const tiles = [
+              { label: 'Total Deliveries',  value: totalDeliveriesLabel, Icon: Truck,       color: '#1e40af', bg: '#eff6ff' },
+              { label: 'Bags Received',     value: bagsReceived,   Icon: Package,     color: GREEN.primary, bg: GREEN.light },
+              { label: 'Bags Allocated',    value: bagsAllocated,  Icon: Users,       color: '#854d0e', bg: '#fef9c3' },
+              { label: 'Pending Pickups',   value: pendingCount,   Icon: Clock,       color: '#854d0e', bg: '#fff7ed' },
+              { label: 'Confirmed Pickups', value: confirmedCount, Icon: CheckCircle, color: GREEN.accent, bg: GREEN.light },
+            ];
+
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
+                {tiles.map(({ label, value, Icon, color, bg }, i) => (
+                  <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', animation: `slideUp ${0.3 + i * 0.04}s ease` }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.5rem' }}>
+                      <Icon size={16} color={color} />
+                    </div>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
+                    <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase' }}>{label}</p>
                   </div>
-                  <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
-                  <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase' }}>{label}</p>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Search + filter */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
@@ -870,6 +1060,8 @@ export default function SeedInventory() {
                     onEditSchedule={openEditSchedule}
                     onOpenVarietyDetail={openDetail}
                     onRecordDelivery={openRecordDeliveryFromEntry}
+                    onEditEntry={openEditEntryFromCard}
+                    onMarkDelivered={openDeliveredModal}
                     showToast={showToast}
                   />
                 ))}
@@ -930,7 +1122,7 @@ export default function SeedInventory() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
               {[
                 { label: 'Expected Bags', value: selected.scheduled_bags ?? selected.total_bags ?? 0 },
-                { label: 'Bags Delivered', value: selected._fromSchedule ? 0 : selected.total_bags ?? 0 },
+                { label: 'Bags Delivered', value: selected._fromSchedule ? 0 : (selected.status === 'DELIVERED' ? selected.total_bags ?? 0 : 0) },
                 { label: 'Allocated', value: selected.allocated_bags ?? 0 },
               ].map(({ label, value }) => (
                 <div key={label} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '0.75rem', padding: '0.75rem', textAlign: 'center' }}>
@@ -1053,10 +1245,12 @@ export default function SeedInventory() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0', padding: '2rem', width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))', animation: 'slideUp 0.3s ease' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>{editDelivery ? 'Edit Delivery' : 'Record Seed Delivery'}</h2>
+              <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>
+                {editDelivery?._fromEntry ? 'Edit Schedule Entry' : editDelivery ? 'Edit Delivery' : 'Record Seed Delivery'}
+              </h2>
               <button onClick={() => setDeliveryModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '1.5rem' }}>×</button>
             </div>
-            {!editDelivery && (
+            {(!editDelivery || !editDelivery?._fromEntry) && !dForm._lockedSeedTypeId && (
               <div style={{ marginBottom: '1rem' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>Seed Type <span style={{ color: '#dc2626' }}>*</span></label>
                 {finalSeeds.length === 0 ? (
@@ -1109,6 +1303,12 @@ export default function SeedInventory() {
                 })()}
               </div>
             )}
+            {editDelivery?._fromEntry && (
+              <div style={{ marginBottom: '1rem', padding: '1rem', borderRadius: '0.9rem', backgroundColor: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#374151' }}><strong>Seed type:</strong> {dForm._seedTypeName || 'Locked'}</p>
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.85rem', color: '#374151' }}><strong>Variety:</strong> {dForm._varietyName || 'Locked'}</p>
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
               <div>
                 <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Season <span style={{ color: '#dc2626' }}>*</span></label>
@@ -1149,7 +1349,7 @@ export default function SeedInventory() {
               <button onClick={() => setDeliveryModal(false)} style={{ flex: 1, padding: '0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSaveDelivery} disabled={dSaving}
                 style={{ flex: 2, padding: '0.875rem', backgroundColor: dSaving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, cursor: dSaving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-                <CheckCircle size={16} /> {dSaving ? 'Saving...' : editDelivery ? 'Save Changes' : 'Record Delivery'}
+                <CheckCircle size={16} /> {dSaving ? 'Saving...' : editDelivery?._fromEntry ? 'Update Delivery' : editDelivery ? 'Save Changes' : 'Record Delivery'}
               </button>
             </div>
           </div>
@@ -1255,10 +1455,23 @@ export default function SeedInventory() {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                           {fs.varieties?.map(v => {
                             const vKey = `${seedTypeKey}::${v.id}::${v.name}`;
-                            const isScheduled = !!scheduleForms[vKey];
+                            const season = fs.season || '';
+                            const year = fs.year || new Date().getFullYear();
+                            const isScheduled = !!scheduleForms[vKey] || schedules.some(schedule =>
+                              schedule.entries.some(entry =>
+                                String(entry.seedTypeDbId) === String(fs.seed_type?.id) &&
+                                String(entry.varietyId) === String(v.id) &&
+                                entry.season === season &&
+                                Number(entry.year) === Number(year)
+                              )
+                            );
                             return (
                               <button key={v.id} type="button"
                                 onClick={() => {
+                                  if (isScheduled) {
+                                    showToast('error', `${v.name} is already encoded. Use the Edit button on the variety card to update it.`);
+                                    return;
+                                  }
                                   setActiveScheduleTab(vKey);
                                   if (!scheduleForms[vKey]) {
                                     setScheduleForms(prev => ({
@@ -1268,17 +1481,17 @@ export default function SeedInventory() {
                                         delivery_date: '',
                                         lot_number: '',
                                         remarks: '',
-                                        season: fs.season || '',
-                                        year: fs.year || new Date().getFullYear(),
+                                        season,
+                                        year,
                                       },
                                     }));
                                   }
                                   setScheduleErrors(prev => ({ ...prev, [vKey]: {} }));
                                 }}
-                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isScheduled ? tagColor : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isScheduled ? tagColor : tagBg, color: isScheduled ? 'white' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s' }}>
-                                {isScheduled && <CheckCircle size={13} />}
+                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isScheduled ? '#d1d5db' : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isScheduled ? '#f3f4f6' : tagBg, color: isScheduled ? '#9ca3af' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: isScheduled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s', opacity: isScheduled ? 0.75 : 1 }}>
+                                {isScheduled && <CheckCircle size={13} color="#9ca3af" />}
                                 {v.name}
-                                {isScheduled && <span style={{ fontSize: '0.65rem', opacity: 0.85 }}>· encoded</span>}
+                                {isScheduled && <span style={{ fontSize: '0.65rem' }}>· already encoded</span>}
                               </button>
                             );
                           })}
@@ -1417,6 +1630,63 @@ export default function SeedInventory() {
       )}
 
       {/* ══ ALLOCATION MODAL ══ */}
+      {deliveredModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 350, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.25s ease' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontWeight: 800, margin: 0, fontSize: '1.1rem' }}>Confirm Delivery</h3>
+                <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
+                  {deliveredModal.entry.seedTypeName} · {deliveredModal.entry.varietyName}
+                </p>
+              </div>
+              <button onClick={() => setDeliveredModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.5rem', color: '#6b7280' }}>×</button>
+            </div>
+            <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.875rem', padding: '1rem', marginBottom: '1.25rem', textAlign: 'center' }}>
+              <p style={{ fontSize: '0.72rem', color: GREEN.accent, fontWeight: 700, textTransform: 'uppercase', margin: '0 0 0.25rem' }}>Expected Bags</p>
+              <p style={{ fontSize: '2.5rem', fontWeight: 800, color: GREEN.primary, margin: 0, lineHeight: 1 }}>{deliveredModal.entry.total_bags}</p>
+            </div>
+            <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: '0 0 0.75rem' }}>
+              Did all <strong>{deliveredModal.entry.total_bags} bags</strong> arrive as expected?
+            </p>
+            <div style={{ display: 'flex', gap: '0.625rem', marginBottom: '1rem' }}>
+              <button
+                onClick={() => setDeliveredForm({ confirmed: true, actual_bags: '' })}
+                style={{ flex: 1, padding: '0.75rem', border: `2px solid ${deliveredForm.confirmed === true ? GREEN.primary : '#e5e7eb'}`, borderRadius: '0.75rem', backgroundColor: deliveredForm.confirmed === true ? GREEN.light : 'white', color: deliveredForm.confirmed === true ? GREEN.primary : '#374151', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s' }}>
+                ✓ Yes, all arrived
+              </button>
+              <button
+                onClick={() => setDeliveredForm({ confirmed: false, actual_bags: '' })}
+                style={{ flex: 1, padding: '0.75rem', border: `2px solid ${deliveredForm.confirmed === false ? '#dc2626' : '#e5e7eb'}`, borderRadius: '0.75rem', backgroundColor: deliveredForm.confirmed === false ? '#fee2e2' : 'white', color: deliveredForm.confirmed === false ? '#dc2626' : '#374151', fontWeight: 700, fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.15s' }}>
+                ✗ No, different count
+              </button>
+            </div>
+            {deliveredForm.confirmed === false && (
+              <div style={{ marginBottom: '1rem', animation: 'fadeIn 0.2s ease' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>
+                  Actual Bags Received <span style={{ color: '#dc2626' }}>*</span>
+                </label>
+                <input
+                  type="number" min="1"
+                  value={deliveredForm.actual_bags}
+                  onChange={e => setDeliveredForm(p => ({ ...p, actual_bags: e.target.value }))}
+                  placeholder="Enter actual count"
+                  style={inp()} autoFocus
+                />
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setDeliveredModal(null)} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600 }}>Cancel</button>
+              <button
+                onClick={handleConfirmDelivered}
+                disabled={deliveredSaving || deliveredForm.confirmed === null}
+                style={{ flex: 2, padding: '0.75rem', backgroundColor: (deliveredSaving || deliveredForm.confirmed === null) ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, cursor: (deliveredSaving || deliveredForm.confirmed === null) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <CheckCircle size={16} /> {deliveredSaving ? 'Saving...' : 'Confirm Delivery'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {allocModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.25s ease' }}>
