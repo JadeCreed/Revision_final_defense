@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     get_barangay_gis_data,
     FarmerSearchView,
+    FarmerDistributionDetailView,
     DistributionEventListCreateView,
     DistributionEventDetailView,
     DistributionBatchListCreateView,
@@ -35,6 +36,9 @@ urlpatterns = [
     path('farmers/search/',
          FarmerSearchView.as_view(),
          name='farmer-search'),
+    path('farmers/<int:farmer_id>/distribution-detail/',
+         FarmerDistributionDetailView.as_view(),
+         name='farmer-distribution-detail'),
 
     # ── EVENTS ──
     path('events/',

@@ -8,7 +8,7 @@ import {
   Plus, Package, ChevronRight, ChevronLeft, CheckCircle,
   AlertCircle, Search, Wheat, Truck, Users, Clock,
   ClipboardList, Edit2, Trash2, Eye, History, X,
-  MapPin, Calendar, Hash, CalendarClock, Leaf,
+  MapPin, Calendar, Hash, CalendarClock, Leaf, ArrowLeft,
 } from 'lucide-react';
 
 const GREEN = {
@@ -29,7 +29,7 @@ const StatusBadge = ({ status }) => {
     DELIVERED: { bg: '#dcfce7', color: '#166534', label: 'Delivered'       },
   }[status] || { bg: '#f9fafb', color: '#6b7280', label: status };
   return (
-    <span style={{ backgroundColor: cfg.bg, color: cfg.color, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>
+    <span style={{ backgroundColor: cfg.bg, color: cfg.color, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
       {cfg.label}
     </span>
   );
@@ -104,18 +104,286 @@ const BARANGAYS = [
   'Mahabang Parang','Malupak','Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil','Tiawe','Tinamnan',
 ];
 
-// ── LOCAL STORAGE KEY for scheduled deliveries ──
 const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
-
 const loadSchedules = () => {
-  try {
-    const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  try { const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
 };
-
 const saveSchedulesToStorage = (schedules) => {
   try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
+};
+
+// ── PROGRAM CARD with drill-down ──
+const ProgramCard = ({
+  schedule, sIdx, deliveries,
+  onDeleteSchedule, onEditSchedule,
+  onOpenVarietyDetail, onRecordDelivery,
+  showToast,
+}) => {
+  const [drillSeedTypeKey, setDrillSeedTypeKey] = useState(null);
+
+  // Group entries by actual seed type so each seed type has 1 card on top level
+  const seedTypeGroups = {};
+  schedule.entries.forEach(entry => {
+    const k = entry.seedTypeDbId ? String(entry.seedTypeDbId) : entry.seedTypeName;
+    if (!seedTypeGroups[k]) {
+      seedTypeGroups[k] = {
+        seedTypeId: k,
+        seedTypeName: entry.seedTypeName,
+        source: entry.source,
+        entries: [],
+      };
+    }
+    seedTypeGroups[k].entries.push(entry);
+  });
+  const seedTypeList = Object.values(seedTypeGroups);
+
+  // Season/year label for program title — take from first entry
+  const firstEntry = schedule.entries[0];
+  const seasonLabel = firstEntry
+    ? `${firstEntry.season === 'WET' ? 'Wet' : 'Dry'} Season ${firstEntry.year}`
+    : '';
+
+  const drillGroup = drillSeedTypeKey ? seedTypeGroups[drillSeedTypeKey] : null;
+
+  // Fixed content height so program card doesn't resize
+  const CONTENT_HEIGHT = '280px';
+
+  return (
+    <div style={{
+      backgroundColor: 'white', borderRadius: '1rem',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
+      border: '1px solid #e5e7eb', overflow: 'hidden',
+      animation: `slideUp ${0.3 + sIdx * 0.06}s ease`,
+    }}>
+      {/* ── Program Header ── */}
+      <div style={{
+        backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb',
+        padding: '0.875rem 1rem',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        flexWrap: 'wrap', gap: '0.5rem',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', minWidth: 0 }}>
+          <CalendarClock size={16} color={GREEN.primary} style={{ flexShrink: 0 }} />
+          <div style={{ minWidth: 0 }}>
+            <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0, whiteSpace: 'nowrap' }}>
+              Schedule #{sIdx + 1}
+              {seasonLabel ? (
+                <span style={{ fontWeight: 500, color: '#6b7280', fontSize: '0.78rem', marginLeft: '0.375rem' }}>· {seasonLabel}</span>
+              ) : null}
+            </p>
+            <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>
+              Created {new Date(schedule.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {schedule.updatedAt !== schedule.createdAt && ` · Updated ${new Date(schedule.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
+            </p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '0.2rem 0.625rem', borderRadius: '999px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {seedTypeList.length} seed type{seedTypeList.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={() => onDeleteSchedule(schedule.id)}
+            style={{ padding: '0.375rem 0.5rem', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center' }}>
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Content Area (fixed height, scrollable) ── */}
+      <div style={{ height: CONTENT_HEIGHT, overflowY: 'auto', padding: '0.875rem 1rem', position: 'relative' }}>
+
+        {/* ── SEED TYPE LIST VIEW ── */}
+        {!drillGroup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', animation: 'fadeIn 0.2s ease' }}>
+            {seedTypeList.map(group => {
+              const evH = isHybrid(group.seedTypeName || '');
+              const tagColor  = evH ? '#1e40af' : GREEN.primary;
+              const tagBg     = evH ? '#eff6ff' : GREEN.light;
+              const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+              const totalBags = group.entries.reduce((s, e) => s + (Number(e.total_bags) || 0), 0);
+              return (
+                <div
+                  key={group.seedTypeId}
+                  onClick={() => setDrillSeedTypeKey(group.seedTypeId)}
+                  className="card-hover"
+                  style={{
+                    border: `1.5px solid ${tagBorder}`,
+                    borderRadius: '0.75rem',
+                    backgroundColor: tagBg,
+                    padding: '0.875rem 1rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '0.75rem',
+                    transition: 'all 0.18s',
+                  }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.375rem', alignItems: 'center' }}>
+                      <span style={{ backgroundColor: 'white', color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                        {group.seedTypeName}
+                      </span>
+                      <span style={{ fontSize: '0.68rem', color: '#6b7280', backgroundColor: 'white', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
+                        {group.source}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: '0.78rem', color: tagColor, fontWeight: 600, margin: 0, opacity: 0.85 }}>
+                      {group.entries.map(e => e.varietyName).join(', ')}
+                    </p>
+                    <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.2rem 0 0', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      {group.entries.length} variet{group.entries.length !== 1 ? 'ies' : 'y'} scheduled
+                      <ChevronRight size={11} />
+                    </p>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{totalBags}</p>
+                    <p style={{ fontSize: '0.62rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>total bags</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── VARIETY DRILL-DOWN VIEW ── */}
+        {drillGroup && (() => {
+          const evH = isHybrid(drillGroup.seedTypeName || '');
+          const tagColor  = evH ? '#1e40af' : GREEN.primary;
+          const tagBg     = evH ? '#eff6ff' : GREEN.light;
+          const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+          return (
+            <div style={{ animation: 'fadeIn 0.2s ease' }}>
+              {/* Back button */}
+              <button
+                onClick={() => setDrillSeedTypeKey(null)}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: tagColor, fontWeight: 700, fontSize: '0.78rem',
+                  display: 'flex', alignItems: 'center', gap: '0.25rem',
+                  padding: '0 0 0.625rem 0', marginBottom: '0.625rem',
+                  borderBottom: `1px solid ${tagBorder}`,
+                  width: '100%',
+                }}>
+                <ArrowLeft size={14} />
+                Back to seed types
+              </button>
+
+              {/* Seed type label */}
+              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.625rem', alignItems: 'center' }}>
+                <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                  {drillGroup.seedTypeName}
+                </span>
+                <span style={{ fontSize: '0.68rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
+                  {drillGroup.source}
+                </span>
+              </div>
+
+              {/* Variety cards */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {drillGroup.entries.map((entry, eIdx) => {
+                  const isDelivered = entry.status === 'DELIVERED';
+                  // Try to find matching backend delivery for detail view
+                  const matchedDelivery = deliveries.find(d => {
+                    const normalize = text => text?.toString().toLowerCase().trim();
+                    const nameA = normalize(d.seed_type_name);
+                    const nameB = normalize(entry.seedTypeName);
+                    const varA = normalize(d.variety_name);
+                    const varB = normalize(entry.varietyName);
+                    const seasonMatch = d.season === entry.season;
+                    const yearMatch = Number(d.year) === Number(entry.year);
+
+                    const dbIdMatch = entry.seedTypeDbId
+                      ? String(d.seed_type) === String(entry.seedTypeDbId)
+                      : false;
+
+                    const nameMatch = nameA && nameB && (
+                      nameA === nameB ||
+                      nameA.includes(nameB) ||
+                      nameB.includes(nameA)
+                    );
+
+                    const entryVarieties = varB
+                      ? varB.split(',').map(v => v.trim()).filter(Boolean)
+                      : [];
+                    const varietyMatch = varA && entryVarieties.length > 0 &&
+                      entryVarieties.some(ev => ev === varA || varA.includes(ev) || ev.includes(varA));
+
+                    if (dbIdMatch && seasonMatch && yearMatch) return true;
+                    if (nameMatch && seasonMatch && yearMatch) return true;
+                    if (varietyMatch && seasonMatch && yearMatch) return true;
+                    return false;
+                  });
+                  return (
+                    <div
+                      key={eIdx}
+                      onClick={() => {
+                        onOpenVarietyDetail(matchedDelivery || null, entry);
+                      }}
+                      className="card-hover"
+                      style={{
+                        border: `1.5px solid ${isDelivered ? GREEN.border : tagBorder}`,
+                        borderRadius: '0.75rem',
+                        backgroundColor: isDelivered ? GREEN.light : 'white',
+                        padding: '0.875rem 1rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: '0.75rem',
+                        transition: 'all 0.18s',
+                      }}>
+                      {/* Left */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.375rem', alignItems: 'center' }}>
+                          <StatusBadge status={entry.status} />
+                        </div>
+                        <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: '0 0 0.3rem', wordBreak: 'break-word' }}>
+                          {entry.varietyName}
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap', fontSize: '0.7rem', color: '#6b7280', alignItems: 'center' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Calendar size={10} />
+                            {new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                            <Package size={10} />
+                            {entry.total_bags} bags
+                          </span>
+                          {entry.lot_number && (
+                            <span style={{ display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                              <Hash size={10} /> {entry.lot_number}
+                            </span>
+                          )}
+                          <span style={{ backgroundColor: '#f3f4f6', padding: '0.1rem 0.4rem', borderRadius: '999px', fontWeight: 600 }}>
+                            {entry.season === 'WET' ? '💧' : '☀️'} {entry.season === 'WET' ? 'Wet' : 'Dry'} {entry.year}
+                          </span>
+                        </div>
+                        {entry.remarks && (
+                          <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.3rem 0 0', fontStyle: 'italic', wordBreak: 'break-word' }}>
+                            {entry.remarks}
+                          </p>
+                        )}
+                      </div>
+                      {/* Right */}
+                      <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.375rem' }}>
+                        <p style={{ fontSize: '1.375rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{entry.total_bags}</p>
+                        <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: 0 }}>total bags</p>
+                        {matchedDelivery && (
+                          <span style={{ fontSize: '0.65rem', color: tagColor, display: 'flex', alignItems: 'center', gap: '0.2rem', fontWeight: 600 }}>
+                            View details <ChevronRight size={10} />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
 };
 
 export default function SeedInventory() {
@@ -138,7 +406,7 @@ export default function SeedInventory() {
   const [confirmSnack, setConfirmSnack]   = useState(null);
   const [toast, setToast]                 = useState(null);
 
-  const [dForm, setDForm]             = useState({ final_seed_id: '', season: '', year: '', total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
+  const [dForm, setDForm]             = useState({ final_seed_id: '', variety_id: '', season: '', year: '', total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
   const [dErrors, setDErrors]         = useState({});
   const [dSaving, setDSaving]         = useState(false);
 
@@ -146,14 +414,13 @@ export default function SeedInventory() {
   const [aErrors, setAErrors]         = useState({});
   const [aSaving, setASaving]         = useState(false);
 
-  // ── SCHEDULE DELIVERY STATE ──
-  const [scheduleModal, setScheduleModal]     = useState(false);
-  const [editSchedule, setEditSchedule]       = useState(null);
+  const [scheduleModal, setScheduleModal]         = useState(false);
+  const [editSchedule, setEditSchedule]           = useState(null);
   const [activeScheduleTab, setActiveScheduleTab] = useState(null);
-  const [scheduleForms, setScheduleForms]     = useState({});
-  const [scheduleErrors, setScheduleErrors]   = useState({});
-  const [scheduleSaving, setScheduleSaving]   = useState(false);
-  const [schedules, setSchedules]             = useState(loadSchedules);
+  const [scheduleForms, setScheduleForms]         = useState({});
+  const [scheduleErrors, setScheduleErrors]       = useState({});
+  const [scheduleSaving, setScheduleSaving]       = useState(false);
+  const [schedules, setSchedules]                 = useState(loadSchedules);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
@@ -163,19 +430,13 @@ export default function SeedInventory() {
   const loadInventory = useCallback(async () => {
     try {
       setLoading(true);
-      const [delRes, sumRes] = await Promise.all([
-        getSeedDeliveries(),
-        getInventorySummary(),
-      ]);
+      const [delRes, sumRes] = await Promise.all([getSeedDeliveries(), getInventorySummary()]);
       setDeliveries(delRes.data || []);
       setSummary(sumRes.data);
     } catch (err) {
       showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to load inventory data.');
-      setDeliveries([]);
-      setSummary(null);
-    } finally {
-      setLoading(false);
-    }
+      setDeliveries([]); setSummary(null);
+    } finally { setLoading(false); }
   }, [showToast]);
 
   const loadFinalSeeds = useCallback(async () => {
@@ -188,37 +449,86 @@ export default function SeedInventory() {
     }
   }, [showToast]);
 
-  useEffect(() => {
-    loadInventory();
-    loadFinalSeeds();
-  }, [loadInventory, loadFinalSeeds]);
+  useEffect(() => { loadInventory(); loadFinalSeeds(); }, [loadInventory, loadFinalSeeds]);
 
-  const openDetail = (delivery) => { setSelected(delivery); setView('detail'); };
-
+  const openDetail = (delivery, scheduleEntry) => {
+    if (delivery && scheduleEntry) {
+      setSelected({
+        ...delivery,
+        variety_name: scheduleEntry.varietyName || delivery.variety_name,
+        seed_type_name: scheduleEntry.seedTypeName || delivery.seed_type_name,
+        scheduled_bags: scheduleEntry.total_bags,
+        _scheduleEntry: scheduleEntry,
+        _fromSchedule: false,
+      });
+    } else if (scheduleEntry) {
+      setSelected({
+        _fromSchedule: true,
+        _scheduleEntry: scheduleEntry,
+        id: null,
+        seed_type: scheduleEntry.seedTypeDbId,
+        seed_type_name: scheduleEntry.seedTypeName,
+        variety_name: scheduleEntry.varietyName,
+        season: scheduleEntry.season,
+        season_display: scheduleEntry.season === 'WET' ? 'Wet Season' : 'Dry Season',
+        year: scheduleEntry.year,
+        source: scheduleEntry.source,
+        total_bags: 0,
+        allocated_bags: 0,
+        remaining_bags: 0,
+        scheduled_bags: scheduleEntry.total_bags,
+        delivery_date: scheduleEntry.delivery_date,
+        lot_number: scheduleEntry.lot_number || null,
+        remarks: scheduleEntry.remarks || null,
+        encoded_by_name: null,
+        allocations: [],
+      });
+    } else if (delivery) {
+      setSelected(delivery);
+    }
+    setView('detail');
+  };
   const openAudit = async (delivery) => {
-    setSelected(delivery);
-    setView('audit');
-    setAuditLoading(true);
-    try {
-      const res = await getDeliveryAudit(delivery.id);
-      setAuditLogs(res.data || []);
-    } catch { setAuditLogs([]); }
-    finally { setAuditLoading(false); }
+    setSelected(delivery); setView('audit'); setAuditLoading(true);
+    try { const res = await getDeliveryAudit(delivery.id); setAuditLogs(res.data || []); }
+    catch { setAuditLogs([]); } finally { setAuditLoading(false); }
   };
 
-  // ── EXISTING DELIVERY FORM (unchanged) ──
   const openCreateDelivery = async () => {
     setEditDelivery(null);
     if (!finalSeeds.length) await loadFinalSeeds();
     const fs = finalSeeds[0];
-    setDForm({ final_seed_id: '', season: fs?.season || '', year: fs?.year || new Date().getFullYear(), total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
-    setDErrors({});
-    setDeliveryModal(true);
+    setDForm({ final_seed_id: '', variety_id: '', season: fs?.season || '', year: fs?.year || new Date().getFullYear(), total_bags: '', delivery_date: '', lot_number: '', remarks: '' });
+    setDErrors({}); setDeliveryModal(true);
   };
 
   const openEditDelivery = (delivery) => {
     setEditDelivery(delivery);
-    setDForm({ final_seed_id: delivery.seed_type, season: delivery.season, year: delivery.year, total_bags: delivery.total_bags, delivery_date: delivery.delivery_date, lot_number: delivery.lot_number || '', remarks: delivery.remarks || '' });
+    setDForm({ final_seed_id: delivery.seed_type, variety_id: delivery.variety || '', season: delivery.season, year: delivery.year, total_bags: delivery.total_bags, delivery_date: delivery.delivery_date, lot_number: delivery.lot_number || '', remarks: delivery.remarks || '' });
+    setDErrors({}); setDeliveryModal(true);
+  };
+
+  const openRecordDeliveryFromEntry = async (entry) => {
+    setEditDelivery(null);
+    if (!finalSeeds.length) await loadFinalSeeds();
+    const matchedFs = finalSeeds.find(fs =>
+      entry.seedTypeDbId
+        ? String(fs.seed_type?.id) === String(entry.seedTypeDbId)
+        : fs.seed_type?.name?.toLowerCase().trim() === entry.seedTypeName?.toLowerCase().trim()
+    );
+    const matchedVariety = matchedFs?.varieties?.find(v =>
+      String(v.id) === String(entry.varietyId) || v.name?.toLowerCase().trim() === entry.varietyName?.toLowerCase().trim()
+    );
+    setDForm({
+      final_seed_id: matchedFs?.id || '',
+      variety_id: matchedVariety?.id || '',
+      season: entry.season || '',
+      year: entry.year || new Date().getFullYear(),
+      total_bags: entry.total_bags || '',
+      delivery_date: entry.delivery_date || '',
+      lot_number: entry.lot_number || '',
+      remarks: entry.remarks || '',
+    });
     setDErrors({});
     setDeliveryModal(true);
   };
@@ -230,67 +540,28 @@ export default function SeedInventory() {
     if (!dForm.total_bags)    errs.total_bags    = 'Required';
     if (!dForm.delivery_date) errs.delivery_date = 'Required';
     if (!editDelivery && !dForm.final_seed_id) errs.final_seed_id = 'Select seed type';
+    const selectedFS = finalSeeds.find(fs => fs.id?.toString() === dForm.final_seed_id?.toString());
+    if (!editDelivery && selectedFS?.varieties?.length > 1 && !dForm.variety_id) errs.variety_id = 'Select a variety';
     if (Object.keys(errs).length > 0) { setDErrors(errs); return; }
-
     setDSaving(true);
     try {
-      const selectedFS = finalSeeds.find(fs => fs.id?.toString() === dForm.final_seed_id?.toString());
-      const payload = {
-        seed_type:     selectedFS?.seed_type?.id || editDelivery?.seed_type,
-        variety:       selectedFS?.varieties?.[0]?.id || editDelivery?.variety,
-        season:        dForm.season,
-        year:          Number(dForm.year),
-        total_bags:    Number(dForm.total_bags),
-        delivery_date: dForm.delivery_date,
-        lot_number:    dForm.lot_number,
-        remarks:       dForm.remarks,
-      };
-      if (editDelivery) {
-        await updateSeedDelivery(editDelivery.id, payload);
-        showToast('success', 'Delivery record updated.');
-      } else {
-        await createSeedDelivery(payload);
-        showToast('success', 'Seed delivery recorded successfully.');
-      }
-      setDeliveryModal(false);
-      await loadInventory();
-      if (selected) {
-        const res = await getSeedDeliveries();
-        const updated = (res.data || []).find(d => d.id === selected.id);
-        if (updated) setSelected(updated);
-      }
-    } catch (err) {
-      showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to save delivery.');
-    } finally {
-      setDSaving(false);
-    }
+      const matchedVariety = selectedFS?.varieties?.find(v => String(v.id) === String(dForm.variety_id)) || selectedFS?.varieties?.[0];
+      const payload = { seed_type: selectedFS?.seed_type?.id || editDelivery?.seed_type, variety: matchedVariety?.id || editDelivery?.variety, season: dForm.season, year: Number(dForm.year), total_bags: Number(dForm.total_bags), delivery_date: dForm.delivery_date, lot_number: dForm.lot_number, remarks: dForm.remarks };
+      if (editDelivery) { await updateSeedDelivery(editDelivery.id, payload); showToast('success', 'Delivery record updated.'); }
+      else { await createSeedDelivery(payload); showToast('success', 'Seed delivery recorded successfully.'); }
+      setDeliveryModal(false); await loadInventory();
+      if (selected) { const res = await getSeedDeliveries(); const updated = (res.data || []).find(d => d.id === selected.id); if (updated) setSelected(updated); }
+    } catch (err) { showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to save delivery.'); }
+    finally { setDSaving(false); }
   };
 
   const handleDeleteDelivery = (delivery) => {
-    setConfirmSnack({
-      title: `Delete this delivery record?`,
-      message: `${delivery.seed_type_name} — ${delivery.season_display} ${delivery.year}. This cannot be undone.`,
-      confirmLabel: 'Delete',
-      danger: true,
-      _action: async () => {
-        try {
-          await deleteSeedDelivery(delivery.id);
-          showToast('success', 'Delivery deleted.');
-          setView('landing');
-          await loadInventory();
-        } catch (err) {
-          showToast('error', err.response?.data?.error || 'Failed to delete.');
-        }
-      },
+    setConfirmSnack({ title: `Delete this delivery record?`, message: `${delivery.seed_type_name} — ${delivery.season_display} ${delivery.year}. This cannot be undone.`, confirmLabel: 'Delete', danger: true,
+      _action: async () => { try { await deleteSeedDelivery(delivery.id); showToast('success', 'Delivery deleted.'); setView('landing'); await loadInventory(); } catch (err) { showToast('error', err.response?.data?.error || 'Failed to delete.'); } },
     });
   };
 
-  // ── ALLOCATION FORM (unchanged) ──
-  const openAllocModal = (delivery) => {
-    setAllocModal(delivery);
-    setAForm({ barangay: '', allocated_bags: '', notes: '' });
-    setAErrors({});
-  };
+  const openAllocModal = (delivery) => { setAllocModal(delivery); setAForm({ barangay: '', allocated_bags: '', notes: '' }); setAErrors({}); };
 
   const handleSaveAlloc = async () => {
     const errs = {};
@@ -302,64 +573,78 @@ export default function SeedInventory() {
       await createAllocation(allocModal.id, { barangay: aForm.barangay.trim(), allocated_bags: Number(aForm.allocated_bags), notes: aForm.notes });
       showToast('success', `Allocated ${aForm.allocated_bags} bags to Brgy. ${aForm.barangay}.`);
       setAllocModal(null);
-      const res = await getSeedDeliveries();
-      setDeliveries(res.data || []);
-      const updated = (res.data || []).find(d => d.id === allocModal.id);
-      if (updated) setSelected(updated);
-    } catch (err) {
-      showToast('error', err.response?.data?.error || 'Failed to allocate.');
-    } finally {
-      setASaving(false);
-    }
+      const res = await getSeedDeliveries(); setDeliveries(res.data || []);
+      const updated = (res.data || []).find(d => d.id === allocModal.id); if (updated) setSelected(updated);
+    } catch (err) { showToast('error', err.response?.data?.error || 'Failed to allocate.'); }
+    finally { setASaving(false); }
   };
 
-  // ── SCHEDULE DELIVERY HANDLERS ──
   const openScheduleModal = async () => {
     setEditSchedule(null);
     if (!finalSeeds.length) await loadFinalSeeds();
+    setScheduleErrors({}); setActiveScheduleTab(null);
     setScheduleForms({});
-    setScheduleErrors({});
-    setActiveScheduleTab(null);
     setScheduleModal(true);
   };
 
   const openEditSchedule = (schedule) => {
     setEditSchedule(schedule);
-    // Pre-fill forms from saved schedule entries
     const forms = {};
     schedule.entries.forEach(entry => {
-      forms[entry.seedTypeId] = {
-        total_bags:    entry.total_bags,
+      const seedTypeKey = entry.seedTypeId;
+      const fs = finalSeeds.find(s => s.id?.toString() === seedTypeKey);
+      const scheduleKey = seedTypeKey?.includes('::')
+        ? seedTypeKey
+        : fs?.varieties?.length === 1
+          ? `${seedTypeKey}::${fs.varieties[0].id}::${fs.varieties[0].name}`
+          : seedTypeKey;
+      forms[scheduleKey] = {
+        total_bags: entry.total_bags,
         delivery_date: entry.delivery_date,
-        lot_number:    entry.lot_number || '',
-        remarks:       entry.remarks || '',
-        season:        entry.season,
-        year:          entry.year,
+        lot_number: entry.lot_number || '',
+        remarks: entry.remarks || '',
+        season: entry.season,
+        year: entry.year,
       };
     });
-    setScheduleForms(forms);
-    setScheduleErrors({});
-    // Set first entry's seedTypeId as active tab
-    setActiveScheduleTab(schedule.entries[0]?.seedTypeId || null);
-    setScheduleModal(true);
+    const firstEntryKey = schedule.entries[0]?.seedTypeId;
+    const firstFs = finalSeeds.find(s => s.id?.toString() === firstEntryKey);
+    const activeKey = firstEntryKey?.includes('::')
+      ? firstEntryKey
+      : firstFs?.varieties?.length === 1
+        ? `${firstEntryKey}::${firstFs.varieties[0].id}::${firstFs.varieties[0].name}`
+        : firstEntryKey;
+    setScheduleForms(forms); setScheduleErrors({});
+    setActiveScheduleTab(activeKey || null); setScheduleModal(true);
   };
 
   const handleScheduleTabToggle = (fs) => {
-    const key = fs.id?.toString();
-    if (activeScheduleTab === key) {
-      // deselect — remove its form data
+    const seedTypeKey = fs.id?.toString();
+    if (activeScheduleTab === seedTypeKey) {
       setActiveScheduleTab(null);
     } else {
-      setActiveScheduleTab(key);
-      // Initialize form for this seed type if not yet filled
-      if (!scheduleForms[key]) {
-        setScheduleForms(prev => ({
-          ...prev,
-          [key]: { total_bags: '', delivery_date: '', lot_number: '', remarks: '', season: fs.season || '', year: fs.year || new Date().getFullYear() },
-        }));
+      if (fs.varieties?.length === 1) {
+        const variety = fs.varieties[0];
+        const key = `${seedTypeKey}::${variety.id}::${variety.name}`;
+        setActiveScheduleTab(key);
+        if (!scheduleForms[key]) {
+          setScheduleForms(prev => ({
+            ...prev,
+            [key]: {
+              total_bags: '',
+              delivery_date: '',
+              lot_number: '',
+              remarks: '',
+              season: fs.season || '',
+              year: fs.year || new Date().getFullYear(),
+            },
+          }));
+        }
+      } else {
+        setActiveScheduleTab(seedTypeKey);
       }
     }
-    setScheduleErrors(prev => ({ ...prev, [key]: {} }));
+    setScheduleErrors(prev => ({ ...prev, [seedTypeKey]: {} }));
   };
 
   const updateScheduleForm = (fsId, field, value) => {
@@ -369,48 +654,30 @@ export default function SeedInventory() {
   };
 
   const handleSaveSchedule = () => {
-    // Validate all tabs that have been opened (have form data)
     const openedKeys = Object.keys(scheduleForms);
-    if (openedKeys.length === 0) {
-      showToast('error', 'Please select at least one seed type to schedule.');
-      return;
-    }
-
-    let hasError = false;
-    const newErrors = {};
-
+    if (openedKeys.length === 0) { showToast('error', 'Please select at least one seed variety to schedule.'); return; }
+    let hasError = false; const newErrors = {};
     openedKeys.forEach(key => {
-      const f = scheduleForms[key] || {};
-      const errs = {};
+      const f = scheduleForms[key] || {}; const errs = {};
       if (!f.total_bags)    errs.total_bags    = 'Required';
       if (!f.delivery_date) errs.delivery_date = 'Required';
       if (!f.season)        errs.season        = 'Required';
       if (!f.year)          errs.year          = 'Required';
-      if (Object.keys(errs).length > 0) {
-        newErrors[key] = errs;
-        hasError = true;
-      }
+      if (Object.keys(errs).length > 0) { newErrors[key] = errs; hasError = true; }
     });
-
-    if (hasError) {
-      setScheduleErrors(newErrors);
-      // Switch to first tab with error
-      const firstErrKey = Object.keys(newErrors)[0];
-      setActiveScheduleTab(firstErrKey);
-      showToast('error', 'Please fill all required fields.');
-      return;
-    }
-
+    if (hasError) { setScheduleErrors(newErrors); setActiveScheduleTab(Object.keys(newErrors)[0]); showToast('error', 'Please fill all required fields.'); return; }
     setScheduleSaving(true);
 
-    // Build entries from opened forms
     const entries = openedKeys.map(key => {
-      const fs = finalSeeds.find(s => s.id?.toString() === key);
-      const f  = scheduleForms[key];
+      const [fsId, varietyId, varietyName] = key.split('::');
+      const fs = finalSeeds.find(s => s.id?.toString() === fsId);
+      const f = scheduleForms[key];
       return {
         seedTypeId:    key,
+        seedTypeDbId:  fs?.seed_type?.id ?? null,
         seedTypeName:  fs?.seed_type?.name || 'Unknown',
-        varietyName:   fs?.varieties?.map(v => v.name).join(', ') || '—',
+        varietyId:     varietyId || null,
+        varietyName:   varietyName || '—',
         source:        isHybrid(fs?.seed_type?.name || '') ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)',
         season:        f.season,
         year:          f.year,
@@ -423,57 +690,39 @@ export default function SeedInventory() {
     });
 
     let updated;
-    if (editSchedule) {
-      updated = schedules.map(s => s.id === editSchedule.id ? { ...s, entries, updatedAt: new Date().toISOString() } : s);
-      showToast('success', 'Delivery schedule updated.');
+    const firstEntry = entries[0];
+    const existingSchedule = schedules.find(s =>
+      s.entries.some(
+        e => e.season === firstEntry.season && String(e.year) === String(firstEntry.year)
+      )
+    );
+
+    if (existingSchedule) {
+      const existingEntries = existingSchedule.entries.filter(
+        existing => !entries.find(e =>
+          e.seedTypeId === existing.seedTypeId ||
+          (e.seedTypeDbId && existing.seedTypeDbId && String(e.seedTypeDbId) === String(existing.seedTypeDbId))
+        )
+      );
+      const mergedEntries = [...existingEntries, ...entries];
+      updated = schedules.map(s =>
+        s.id === existingSchedule.id
+          ? { ...s, entries: mergedEntries, updatedAt: new Date().toISOString() }
+          : s
+      );
+      showToast('success', `Added to existing Schedule — ${firstEntry.season === 'WET' ? 'Wet' : 'Dry'} Season ${firstEntry.year}.`);
     } else {
-      const newSchedule = {
-        id:        Date.now(),
-        entries,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
+      const newSchedule = { id: Date.now(), entries, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
       updated = [...schedules, newSchedule];
-      showToast('success', `Delivery program saved with ${entries.length} seed type${entries.length > 1 ? 's' : ''}.`);
+      showToast('success', `Delivery program saved with ${entries.length} variet${entries.length !== 1 ? 'ies' : 'y'}.`);
     }
 
-    setSchedules(updated);
-    saveSchedulesToStorage(updated);
-    setScheduleModal(false);
-    setScheduleSaving(false);
-  };
-
-  const handleMarkDelivered = (scheduleId, entryIdx) => {
-    setConfirmSnack({
-      title: 'Mark as Delivered?',
-      message: 'This confirms that the scheduled delivery has arrived.',
-      confirmLabel: 'Mark Delivered',
-      danger: false,
-      _action: () => {
-        const updated = schedules.map(s => {
-          if (s.id !== scheduleId) return s;
-          const entries = s.entries.map((e, i) => i === entryIdx ? { ...e, status: 'DELIVERED' } : e);
-          return { ...s, entries, updatedAt: new Date().toISOString() };
-        });
-        setSchedules(updated);
-        saveSchedulesToStorage(updated);
-        showToast('success', 'Delivery marked as delivered.');
-      },
-    });
+    setSchedules(updated); saveSchedulesToStorage(updated); setScheduleModal(false); setScheduleSaving(false);
   };
 
   const handleDeleteSchedule = (scheduleId) => {
-    setConfirmSnack({
-      title: 'Delete this schedule?',
-      message: 'This delivery program will be permanently removed.',
-      confirmLabel: 'Delete',
-      danger: true,
-      _action: () => {
-        const updated = schedules.filter(s => s.id !== scheduleId);
-        setSchedules(updated);
-        saveSchedulesToStorage(updated);
-        showToast('success', 'Schedule deleted.');
-      },
+    setConfirmSnack({ title: 'Delete this schedule?', message: 'This delivery program will be permanently removed.', confirmLabel: 'Delete', danger: true,
+      _action: () => { const updated = schedules.filter(s => s.id !== scheduleId); setSchedules(updated); saveSchedulesToStorage(updated); showToast('success', 'Schedule deleted.'); },
     });
   };
 
@@ -505,7 +754,7 @@ export default function SeedInventory() {
         @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
         @keyframes slideUp { from { transform:translateY(12px);opacity:0; } to { transform:translateY(0);opacity:1; } }
         @keyframes modalSlideUp { from { transform:translateY(40px);opacity:0; } to { transform:translateY(0);opacity:1; } }
-        .card-hover:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.12) !important; transform: translateY(-2px); transition: all 0.2s; }
+        .card-hover:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important; transform: translateY(-1px); transition: all 0.18s; }
         .row-hover:hover { background-color: ${GREEN.light} !important; }
         .btn-icon:hover { opacity: 0.75; }
         .schedule-tab-btn { transition: all 0.2s ease; }
@@ -536,30 +785,23 @@ export default function SeedInventory() {
       {/* ══ LANDING ══ */}
       {view === 'landing' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
-          {/* Header */}
+          {/* Header — Schedule Delivery button ONLY */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
             <div>
               <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Seed Inventory</h1>
               <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>Track seed deliveries and barangay allocations.</p>
             </div>
-            {/* ── TWO BUTTONS IN HEADER ── */}
-            <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
-              <button onClick={openScheduleModal}
-                style={{ padding: '0.625rem 1.125rem', backgroundColor: 'white', color: GREEN.primary, border: `2px solid ${GREEN.primary}`, borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = GREEN.light; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'white'; }}>
-                <CalendarClock size={16} /> Schedule Delivery
-              </button>
-              <button onClick={openCreateDelivery}
-                style={{ padding: '0.625rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                <Plus size={16} /> Record Delivery
-              </button>
-            </div>
+            <button onClick={openScheduleModal}
+              style={{ padding: '0.625rem 1.125rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = GREEN.accent}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = GREEN.primary}>
+              <CalendarClock size={16} /> Schedule Delivery
+            </button>
           </div>
 
           {/* Summary stats */}
           {summary && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.875rem', marginBottom: '1.5rem' }}>
               {[
                 { label: 'Total Deliveries',  value: summary.total_deliveries,      Icon: Truck,        color: '#1e40af', bg: '#eff6ff' },
                 { label: 'Bags Received',     value: summary.total_bags_received,   Icon: Package,      color: GREEN.primary, bg: GREEN.light },
@@ -601,62 +843,12 @@ export default function SeedInventory() {
             </div>
           </div>
 
-          {/* Delivery cards */}
-          {filteredDeliveries.length === 0 ? (
-            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-              <Package size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
-              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>{deliveries.length === 0 ? 'No deliveries recorded yet' : 'No results found'}</p>
-              <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Record a seed delivery using the button above.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-              {filteredDeliveries.map((delivery, idx) => {
-                const evH = isHybrid(delivery.seed_type_name || '');
-                const tagColor  = evH ? '#1e40af' : GREEN.primary;
-                const tagBg     = evH ? '#eff6ff' : GREEN.light;
-                const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-                return (
-                  <div key={delivery.id} className="card-hover"
-                    onClick={() => openDetail(delivery)}
-                    style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `1px solid ${tagBorder}`, cursor: 'pointer', animation: `slideUp ${0.3 + idx * 0.06}s ease` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.875rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div>
-                        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
-                          <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>{delivery.seed_type_name}</span>
-                          {delivery.variety_name && <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>{delivery.variety_name}</span>}
-                          <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>{delivery.season_display} {delivery.year}</span>
-                        </div>
-                        <h3 style={{ fontWeight: 800, fontSize: '0.95rem', margin: 0, color: '#111827' }}>
-                          {delivery.source === 'REGION' ? 'From Region (NRP/RFO)' : 'From PhilRice (RCEF)'}
-                        </h3>
-                        <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                          <Calendar size={11} /> {new Date(delivery.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-                          {delivery.lot_number && <><Hash size={11} style={{ marginLeft: '0.375rem' }} />{delivery.lot_number}</>}
-                        </p>
-                      </div>
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ fontSize: '1.75rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{delivery.total_bags}</p>
-                        <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>total bags</p>
-                      </div>
-                    </div>
-                    <ProgressBar value={delivery.allocated_bags} max={delivery.total_bags} color={tagColor} />
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.5rem', fontSize: '0.7rem', color: '#9ca3af', flexWrap: 'wrap', gap: '0.25rem' }}>
-                      <span>{delivery.allocated_bags} allocated · {delivery.remaining_bags} remaining</span>
-                      <span style={{ color: tagColor, fontWeight: 600 }}>{delivery.allocations?.length || 0} brgy{delivery.allocations?.length !== 1 ? 's' : ''} allocated <ChevronRight size={11} style={{ display: 'inline' }} /></span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {/* ══ DELIVERY PROGRAM SECTION ══ */}
           {schedules.length > 0 && (
-            <div style={{ marginTop: '2rem', animation: 'fadeIn 0.3s ease' }}>
-              {/* Section header */}
+            <div style={{ marginTop: '0.5rem', animation: 'fadeIn 0.3s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                  <div style={{ width: 4, height: 28, backgroundColor: GREEN.primary, borderRadius: '999px' }} />
+                  <div style={{ width: 4, height: 28, backgroundColor: GREEN.primary, borderRadius: '999px', flexShrink: 0 }} />
                   <div>
                     <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Delivery Program</h2>
                     <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>Scheduled seed variety deliveries</p>
@@ -669,117 +861,37 @@ export default function SeedInventory() {
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {schedules.map((schedule, sIdx) => (
-                  <div key={schedule.id} style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 2px 10px rgba(0,0,0,0.07)', border: '1px solid #e5e7eb', overflow: 'hidden', animation: `slideUp ${0.3 + sIdx * 0.06}s ease` }}>
-                    {/* Schedule header */}
-                    <div style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', padding: '0.875rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                        <CalendarClock size={16} color={GREEN.primary} />
-                        <div>
-                          <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>
-                            Program #{sIdx + 1}
-                          </p>
-                          <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>
-                            Created {new Date(schedule.createdAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            {schedule.updatedAt !== schedule.createdAt && ` · Updated ${new Date(schedule.updatedAt).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                          </p>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '0.2rem 0.625rem', borderRadius: '999px', fontWeight: 600 }}>
-                          {schedule.entries.length} seed type{schedule.entries.length !== 1 ? 's' : ''}
-                        </span>
-                        <button onClick={() => openEditSchedule(schedule)}
-                          style={{ padding: '0.375rem 0.75rem', backgroundColor: GREEN.light, color: GREEN.primary, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Edit2 size={12} /> Edit
-                        </button>
-                        <button onClick={() => handleDeleteSchedule(schedule.id)}
-                          style={{ padding: '0.375rem 0.625rem', backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Entry cards */}
-                    <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                      {schedule.entries.map((entry, eIdx) => {
-                        const evH = isHybrid(entry.seedTypeName || '');
-                        const tagColor  = evH ? '#1e40af' : GREEN.primary;
-                        const tagBg     = evH ? '#eff6ff' : GREEN.light;
-                        const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-                        const isDelivered = entry.status === 'DELIVERED';
-                        return (
-                          <div key={eIdx} style={{ borderRadius: '0.875rem', border: `1.5px solid ${isDelivered ? GREEN.border : tagBorder}`, backgroundColor: isDelivered ? GREEN.light : 'white', padding: '1rem 1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', transition: 'all 0.2s' }}>
-                            {/* Left info */}
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                                <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.15rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
-                                  {entry.seedTypeName}
-                                </span>
-                                <span style={{ fontSize: '0.68rem', color: '#6b7280', backgroundColor: '#f9fafb', padding: '0.15rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb' }}>
-                                  {entry.source}
-                                </span>
-                                <StatusBadge status={entry.status} />
-                              </div>
-                              <p style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', margin: '0 0 0.375rem' }}>
-                                {entry.varietyName}
-                              </p>
-                              <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', fontSize: '0.72rem', color: '#6b7280' }}>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <Calendar size={11} />
-                                  {new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
-                                </span>
-                                <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <Package size={11} />
-                                  {entry.total_bags} bags
-                                </span>
-                                {entry.lot_number && (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                    <Hash size={11} /> {entry.lot_number}
-                                  </span>
-                                )}
-                                <span style={{ backgroundColor: '#f3f4f6', padding: '0.1rem 0.5rem', borderRadius: '999px', fontWeight: 600 }}>
-                                  {entry.season === 'WET' ? '💧' : '☀️'} {entry.season === 'WET' ? 'Wet' : 'Dry'} {entry.year}
-                                </span>
-                              </div>
-                              {entry.remarks && (
-                                <p style={{ fontSize: '0.7rem', color: '#9ca3af', margin: '0.375rem 0 0', fontStyle: 'italic' }}>
-                                  {entry.remarks}
-                                </p>
-                              )}
-                            </div>
-                            {/* Right actions */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end', flexShrink: 0 }}>
-                              <div style={{ textAlign: 'right' }}>
-                                <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0, lineHeight: 1 }}>{entry.total_bags}</p>
-                                <p style={{ fontSize: '0.62rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>total bags</p>
-                              </div>
-                              {!isDelivered ? (
-                                <button
-                                  onClick={() => handleMarkDelivered(schedule.id, eIdx)}
-                                  style={{ padding: '0.4rem 0.875rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.15s' }}
-                                  onMouseEnter={e => e.currentTarget.style.backgroundColor = GREEN.accent}
-                                  onMouseLeave={e => e.currentTarget.style.backgroundColor = GREEN.primary}>
-                                  <CheckCircle size={12} /> Delivered
-                                </button>
-                              ) : (
-                                <span style={{ fontSize: '0.7rem', color: GREEN.accent, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                  <CheckCircle size={13} /> Delivered
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <ProgramCard
+                    key={schedule.id}
+                    schedule={schedule}
+                    sIdx={sIdx}
+                    deliveries={deliveries}
+                    onDeleteSchedule={handleDeleteSchedule}
+                    onEditSchedule={openEditSchedule}
+                    onOpenVarietyDetail={openDetail}
+                    onRecordDelivery={openRecordDeliveryFromEntry}
+                    showToast={showToast}
+                  />
                 ))}
               </div>
+            </div>
+          )}
+
+          {schedules.length === 0 && (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginTop: '0.5rem' }}>
+              <CalendarClock size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No delivery programs yet</p>
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: '0 0 1.25rem' }}>Schedule a seed delivery using the button above.</p>
+              <button onClick={openScheduleModal}
+                style={{ padding: '0.625rem 1.25rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                <CalendarClock size={15} /> Schedule Delivery
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {/* ══ DETAIL VIEW (unchanged) ══ */}
+      {/* ══ DETAIL VIEW ══ */}
       {view === 'detail' && selected && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.25rem', color: 'white' }}>
@@ -791,26 +903,35 @@ export default function SeedInventory() {
                 <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>{selected.seed_type_name}</h2>
                 {selected.variety_name && <p style={{ opacity: 0.8, fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{selected.variety_name}</p>}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={e => { e.stopPropagation(); openEditDelivery(selected); }}
-                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Edit2 size={13} /> Edit
-                </button>
-                <button onClick={e => { e.stopPropagation(); openAudit(selected); }}
-                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <History size={13} /> Audit
-                </button>
-                <button onClick={e => { e.stopPropagation(); handleDeleteDelivery(selected); }}
-                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(220,38,38,0.5)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Trash2 size={13} /> Delete
-                </button>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {selected._fromSchedule ? (
+                  <button onClick={e => { e.stopPropagation(); openRecordDeliveryFromEntry(selected._scheduleEntry); }}
+                    style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <Plus size={13} /> Record Delivery
+                  </button>
+                ) : (
+                  <>
+                    <button onClick={e => { e.stopPropagation(); openEditDelivery(selected); }}
+                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <Edit2 size={13} /> Edit
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); openAudit(selected); }}
+                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <History size={13} /> Audit
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); handleDeleteDelivery(selected); }}
+                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(220,38,38,0.5)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
               {[
-                { label: 'Total Received', value: selected.total_bags },
-                { label: 'Allocated',      value: selected.allocated_bags },
-                { label: 'Remaining',      value: selected.remaining_bags },
+                { label: 'Expected Bags', value: selected.scheduled_bags ?? selected.total_bags ?? 0 },
+                { label: 'Bags Delivered', value: selected._fromSchedule ? 0 : selected.total_bags ?? 0 },
+                { label: 'Allocated', value: selected.allocated_bags ?? 0 },
               ].map(({ label, value }) => (
                 <div key={label} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '0.75rem', padding: '0.75rem', textAlign: 'center' }}>
                   <p style={{ fontSize: '1.5rem', fontWeight: 800, margin: 0, lineHeight: 1 }}>{value}</p>
@@ -881,7 +1002,7 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ AUDIT VIEW (unchanged) ══ */}
+      {/* ══ AUDIT VIEW ══ */}
       {view === 'audit' && selected && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
@@ -902,15 +1023,15 @@ export default function SeedInventory() {
             <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
               {auditLogs.map((log, idx) => {
                 const actionCfg = {
-                  CREATED:   { color: GREEN.accent,  bg: GREEN.soft,   icon: <Package size={16} /> },
-                  UPDATED:   { color: '#1e40af',     bg: '#eff6ff',    icon: <Edit2 size={16} /> },
-                  ALLOCATED: { color: '#854d0e',     bg: '#fef9c3',    icon: <Truck size={16} /> },
-                  CONFIRMED: { color: GREEN.primary, bg: GREEN.light,  icon: <CheckCircle size={16} /> },
-                  DELETED:   { color: '#991b1b',     bg: '#fee2e2',    icon: <Trash2 size={16} /> },
+                  CREATED:   { color: GREEN.accent,  bg: GREEN.soft,  icon: <Package size={16} /> },
+                  UPDATED:   { color: '#1e40af',     bg: '#eff6ff',   icon: <Edit2 size={16} /> },
+                  ALLOCATED: { color: '#854d0e',     bg: '#fef9c3',   icon: <Truck size={16} /> },
+                  CONFIRMED: { color: GREEN.primary, bg: GREEN.light, icon: <CheckCircle size={16} /> },
+                  DELETED:   { color: '#991b1b',     bg: '#fee2e2',   icon: <Trash2 size={16} /> },
                 }[log.action] || { color: '#6b7280', bg: '#f9fafb', icon: <ClipboardList size={16} /> };
                 return (
                   <div key={log.id} style={{ padding: '1rem 1.25rem', borderBottom: idx < auditLogs.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', gap: '0.875rem', alignItems: 'flex-start', animation: `slideUp ${0.3 + idx * 0.04}s ease` }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', flexShrink: 0 }}>{actionCfg.icon}</div>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: actionCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{actionCfg.icon}</div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.25rem' }}>
                         <span style={{ fontWeight: 700, fontSize: '0.85rem', color: actionCfg.color }}>{log.action_display}</span>
@@ -927,7 +1048,7 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ RECORD DELIVERY MODAL (unchanged) ══ */}
+      {/* ══ RECORD DELIVERY MODAL ══ */}
       {deliveryModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0', padding: '2rem', width: '100%', maxWidth: '520px', maxHeight: '90vh', overflowY: 'auto', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))', animation: 'slideUp 0.3s ease' }}>
@@ -965,6 +1086,27 @@ export default function SeedInventory() {
                   </div>
                 )}
                 {dErrors.final_seed_id && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{dErrors.final_seed_id}</p>}
+                {dForm.final_seed_id && (() => {
+                  const selFs = finalSeeds.find(fs => fs.id?.toString() === dForm.final_seed_id?.toString());
+                  if (!selFs || !selFs.varieties || selFs.varieties.length <= 1) return null;
+                  return (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.5rem' }}>Variety <span style={{ color: '#dc2626' }}>*</span></label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {selFs.varieties.map(v => {
+                          const selVar = String(dForm.variety_id) === String(v.id);
+                          return (
+                            <button key={v.id} type="button" onClick={() => { setDForm(p => ({ ...p, variety_id: v.id })); setDErrors(p => ({ ...p, variety_id: '' })); }}
+                              style={{ padding: '0.55rem 0.9rem', border: `2px solid ${selVar ? '#1e40af' : '#e5e7eb'}`, borderRadius: '0.75rem', backgroundColor: selVar ? '#eff6ff' : 'white', color: selVar ? '#1e40af' : '#374151', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem' }}>
+                              {v.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {dErrors.variety_id && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.35rem 0 0' }}>{dErrors.variety_id}</p>}
+                    </div>
+                  );
+                })()}
               </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
@@ -1014,12 +1156,10 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ SCHEDULE DELIVERY MODAL (NEW) ══ */}
+      {/* ══ SCHEDULE DELIVERY MODAL ══ */}
       {scheduleModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', width: '100%', maxWidth: '580px', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', animation: 'modalSlideUp 0.3s cubic-bezier(0.34,1.1,0.64,1)' }}>
-            
-            {/* Modal Header */}
             <div style={{ padding: '1.5rem 1.75rem 1rem', borderBottom: '1px solid #f3f4f6', position: 'sticky', top: 0, backgroundColor: 'white', zIndex: 10, borderRadius: '1.25rem 1.25rem 0 0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
@@ -1035,7 +1175,7 @@ export default function SeedInventory() {
                     Select seed types to schedule. Data is saved per tab.
                   </p>
                 </div>
-                <button onClick={() => setScheduleModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0.25rem', borderRadius: '0.5rem', display: 'flex', transition: 'color 0.15s' }}
+                <button onClick={() => setScheduleModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', padding: '0.25rem', borderRadius: '0.5rem', display: 'flex' }}
                   onMouseEnter={e => e.currentTarget.style.color = '#374151'}
                   onMouseLeave={e => e.currentTarget.style.color = '#9ca3af'}>
                   <X size={20} />
@@ -1044,7 +1184,6 @@ export default function SeedInventory() {
             </div>
 
             <div style={{ padding: '1.25rem 1.75rem 1.75rem' }}>
-              {/* No final seeds warning */}
               {finalSeeds.length === 0 ? (
                 <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: '0.875rem', padding: '1.25rem', display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
                   <AlertCircle size={18} color="#854d0e" style={{ flexShrink: 0, marginTop: '0.1rem' }} />
@@ -1055,66 +1194,103 @@ export default function SeedInventory() {
                 </div>
               ) : (
                 <>
-                  {/* Step 1 label */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
                     <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: GREEN.primary, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>1</span>
                     <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>Choose seed type(s) to schedule</p>
                   </div>
 
-                  {/* Seed type toggle tabs */}
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${finalSeeds.length}, 1fr)`, gap: '0.625rem', marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(finalSeeds.length, 2)}, 1fr)`, gap: '0.625rem', marginBottom: '1.25rem' }}>
                     {finalSeeds.map(fs => {
-                      const key    = fs.id?.toString();
-                      const evH    = isHybrid(fs.seed_type?.name || '');
+                      const key = fs.id?.toString();
+                      const evH = isHybrid(fs.seed_type?.name || '');
                       const tagColor  = evH ? '#1e40af' : GREEN.primary;
                       const tagBg     = evH ? '#eff6ff' : GREEN.light;
                       const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-                      const isActive  = activeScheduleTab === key;
-                      const hasData   = !!scheduleForms[key];
-                      const hasErr    = !!(scheduleErrors[key] && Object.values(scheduleErrors[key]).some(Boolean));
+                      const isActive  = activeScheduleTab === key || activeScheduleTab?.startsWith(`${key}::`);
+                      const scheduledVarietyKeys = Object.keys(scheduleForms).filter(k => k.startsWith(`${key}::`));
+                      const hasData   = scheduledVarietyKeys.length > 0;
+                      const hasErr    = Object.keys(scheduleErrors).some(k => k.startsWith(`${key}::`) && Object.values(scheduleErrors[k] || {}).some(Boolean));
                       return (
                         <button key={key} type="button" className="schedule-tab-btn"
                           onClick={() => handleScheduleTabToggle(fs)}
-                          style={{
-                            padding: '1rem',
-                            textAlign: 'left',
-                            border: `2px solid ${hasErr ? '#dc2626' : isActive ? tagColor : hasData ? tagBorder : '#e5e7eb'}`,
-                            borderRadius: '0.875rem',
-                            backgroundColor: isActive ? tagBg : hasData ? `${tagBg}80` : 'white',
-                            cursor: 'pointer',
-                            position: 'relative',
-                            boxShadow: isActive ? `0 4px 12px ${tagColor}25` : 'none',
-                          }}>
-                          {/* Active indicator dot */}
-                          {isActive && (
-                            <div style={{ position: 'absolute', top: '0.625rem', right: '0.625rem', width: 8, height: 8, borderRadius: '50%', backgroundColor: tagColor }} />
-                          )}
-                          {/* Has data checkmark */}
+                          style={{ padding: '1rem', textAlign: 'left', border: `2px solid ${hasErr ? '#dc2626' : isActive ? tagColor : hasData ? tagBorder : '#e5e7eb'}`, borderRadius: '0.875rem', backgroundColor: isActive ? tagBg : hasData ? `${tagBg}80` : 'white', cursor: 'pointer', position: 'relative', boxShadow: isActive ? `0 4px 12px ${tagColor}25` : 'none' }}>
+                          {isActive && <div style={{ position: 'absolute', top: '0.625rem', right: '0.625rem', width: 8, height: 8, borderRadius: '50%', backgroundColor: tagColor }} />}
                           {hasData && !isActive && (
                             <div style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', width: 16, height: 16, borderRadius: '50%', backgroundColor: tagBg, border: `1.5px solid ${tagColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <CheckCircle size={10} color={tagColor} />
                             </div>
                           )}
-                          <p style={{ fontWeight: 800, fontSize: '0.9rem', color: isActive ? tagColor : '#374151', margin: '0 0 0.125rem' }}>
-                            {fs.seed_type?.name}
-                          </p>
-                          <p style={{ fontSize: '0.68rem', color: isActive ? tagColor : '#9ca3af', margin: '0 0 0.375rem', opacity: 0.9 }}>
-                            {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
-                          </p>
+                          <p style={{ fontWeight: 800, fontSize: '0.9rem', color: isActive ? tagColor : '#374151', margin: '0 0 0.125rem' }}>{fs.seed_type?.name}</p>
+                          <p style={{ fontSize: '0.68rem', color: isActive ? tagColor : '#9ca3af', margin: '0 0 0.375rem', opacity: 0.9 }}>{evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}</p>
                           <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                             {fs.varieties?.map(v => (
                               <span key={v.id} style={{ backgroundColor: isActive ? `${tagColor}20` : '#f3f4f6', color: isActive ? tagColor : '#6b7280', padding: '0.1rem 0.375rem', borderRadius: '999px', fontSize: '0.63rem', fontWeight: 600 }}>{v.name}</span>
                             ))}
                           </div>
+                          {hasData && !isActive && (
+                            <p style={{ fontSize: '0.65rem', color: tagColor, margin: '0.375rem 0 0', fontWeight: 600 }}>{scheduledVarietyKeys.length} variet{scheduledVarietyKeys.length !== 1 ? 'ies' : 'y'} scheduled</p>
+                          )}
                           {hasErr && <p style={{ fontSize: '0.65rem', color: '#dc2626', margin: '0.375rem 0 0', fontWeight: 600 }}>⚠ Fill required fields</p>}
                         </button>
                       );
                     })}
                   </div>
 
-                  {/* Step 2 — form for active tab */}
-                  {activeScheduleTab && (() => {
-                    const fs  = finalSeeds.find(s => s.id?.toString() === activeScheduleTab);
+                  {activeScheduleTab && !activeScheduleTab.includes('::') && (() => {
+                    const fs = finalSeeds.find(s => s.id?.toString() === activeScheduleTab);
+                    if (!fs) return null;
+                    const seedTypeKey = activeScheduleTab;
+                    const evH = isHybrid(fs.seed_type?.name || '');
+                    const tagColor  = evH ? '#1e40af' : GREEN.primary;
+                    const tagBg     = evH ? '#eff6ff' : GREEN.light;
+                    const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                    return (
+                      <div style={{ animation: 'fadeIn 0.2s ease', marginBottom: '1.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: tagColor, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>2</span>
+                          <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>
+                            Choose a variety of <span style={{ color: tagColor }}>{fs.seed_type?.name}</span> to schedule
+                          </p>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {fs.varieties?.map(v => {
+                            const vKey = `${seedTypeKey}::${v.id}::${v.name}`;
+                            const isScheduled = !!scheduleForms[vKey];
+                            return (
+                              <button key={v.id} type="button"
+                                onClick={() => {
+                                  setActiveScheduleTab(vKey);
+                                  if (!scheduleForms[vKey]) {
+                                    setScheduleForms(prev => ({
+                                      ...prev,
+                                      [vKey]: {
+                                        total_bags: '',
+                                        delivery_date: '',
+                                        lot_number: '',
+                                        remarks: '',
+                                        season: fs.season || '',
+                                        year: fs.year || new Date().getFullYear(),
+                                      },
+                                    }));
+                                  }
+                                  setScheduleErrors(prev => ({ ...prev, [vKey]: {} }));
+                                }}
+                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isScheduled ? tagColor : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isScheduled ? tagColor : tagBg, color: isScheduled ? 'white' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s' }}>
+                                {isScheduled && <CheckCircle size={13} />}
+                                {v.name}
+                                {isScheduled && <span style={{ fontSize: '0.65rem', opacity: 0.85 }}>· encoded</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {activeScheduleTab && activeScheduleTab.includes('::') && (() => {
+                    const [fsId, varietyId, varietyName] = activeScheduleTab.split('::');
+                    const fs = finalSeeds.find(s => s.id?.toString() === fsId);
+                    if (!fs) return null;
                     const key = activeScheduleTab;
                     const f   = scheduleForms[key] || {};
                     const errs = scheduleErrors[key] || {};
@@ -1122,31 +1298,30 @@ export default function SeedInventory() {
                     const tagColor = evH ? '#1e40af' : GREEN.primary;
                     const tagBg    = evH ? '#eff6ff' : GREEN.light;
                     const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-
                     return (
                       <div style={{ animation: 'fadeIn 0.2s ease' }}>
-                        {/* Step 2 label */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
-                          <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: tagColor, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>2</span>
+                          <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: tagColor, color: 'white', fontSize: '0.72rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {fs?.varieties?.length > 1 ? '3' : '2'}
+                          </span>
                           <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>
-                            Enter delivery details for <span style={{ color: tagColor }}>{fs?.seed_type?.name}</span>
+                            Delivery details for <span style={{ color: tagColor }}>{varietyName}</span>
                           </p>
                         </div>
-
-                        {/* Seed info banner */}
                         <div style={{ backgroundColor: tagBg, border: `1px solid ${tagBorder}`, borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                           <Leaf size={15} color={tagColor} />
                           <div>
-                            <p style={{ fontWeight: 700, fontSize: '0.8rem', color: tagColor, margin: 0 }}>
-                              {fs?.seed_type?.name} · {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}
-                            </p>
-                            <p style={{ fontSize: '0.68rem', color: tagColor, opacity: 0.8, margin: 0 }}>
-                              Varieties: {fs?.varieties?.map(v => v.name).join(', ') || '—'}
-                            </p>
+                            <p style={{ fontWeight: 700, fontSize: '0.8rem', color: tagColor, margin: 0 }}>{fs?.seed_type?.name} · {evH ? 'Region (NRP/RFO)' : 'PhilRice (RCEF)'}</p>
+                            <p style={{ fontSize: '0.68rem', color: tagColor, opacity: 0.8, margin: 0 }}>Variety: {varietyName}</p>
                           </div>
+                          {fs?.varieties?.length > 1 && (
+                            <button type="button"
+                              onClick={() => setActiveScheduleTab(fsId)}
+                              style={{ marginLeft: 'auto', fontSize: '0.7rem', color: tagColor, background: 'none', border: `1px solid ${tagBorder}`, borderRadius: '0.5rem', padding: '0.2rem 0.5rem', cursor: 'pointer', fontWeight: 600 }}>
+                              ← Change variety
+                            </button>
+                          )}
                         </div>
-
-                        {/* Season + Year */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                           <div>
                             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Season <span style={{ color: '#dc2626' }}>*</span></label>
@@ -1163,8 +1338,6 @@ export default function SeedInventory() {
                             {errs.year && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.year}</p>}
                           </div>
                         </div>
-
-                        {/* Bags + Date */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
                           <div>
                             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Expected Bags <span style={{ color: '#dc2626' }}>*</span></label>
@@ -1177,8 +1350,6 @@ export default function SeedInventory() {
                             {errs.delivery_date && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errs.delivery_date}</p>}
                           </div>
                         </div>
-
-                        {/* Lot + Remarks */}
                         <div style={{ marginBottom: '0.875rem' }}>
                           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Lot Number</label>
                           <input type="text" value={f.lot_number || ''} onChange={e => updateScheduleForm(key, 'lot_number', e.target.value)} placeholder="e.g. LOT-2026-001" style={inp()} />
@@ -1187,8 +1358,6 @@ export default function SeedInventory() {
                           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Remarks</label>
                           <textarea value={f.remarks || ''} onChange={e => updateScheduleForm(key, 'remarks', e.target.value)} rows={2} placeholder="Optional notes..." style={{ ...inp(), resize: 'vertical' }} />
                         </div>
-
-                        {/* Multi-tab hint */}
                         {finalSeeds.length > 1 && (
                           <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '0.625rem', padding: '0.625rem 0.875rem', fontSize: '0.72rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                             <AlertCircle size={12} color="#9ca3af" />
@@ -1199,7 +1368,6 @@ export default function SeedInventory() {
                     );
                   })()}
 
-                  {/* No tab selected hint */}
                   {!activeScheduleTab && Object.keys(scheduleForms).length === 0 && (
                     <div style={{ textAlign: 'center', padding: '1.5rem', color: '#9ca3af', backgroundColor: '#f9fafb', borderRadius: '0.875rem', border: '1.5px dashed #e5e7eb' }}>
                       <CalendarClock size={28} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.625rem' }} />
@@ -1208,18 +1376,21 @@ export default function SeedInventory() {
                     </div>
                   )}
 
-                  {/* Summary of filled tabs */}
                   {Object.keys(scheduleForms).length > 0 && !activeScheduleTab && (
                     <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.875rem', padding: '0.875rem 1rem', marginBottom: '0.5rem' }}>
                       <p style={{ fontWeight: 700, fontSize: '0.8rem', color: GREEN.accent, margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                         <CheckCircle size={14} /> Ready to save:
                       </p>
                       {Object.keys(scheduleForms).map(key => {
-                        const fs = finalSeeds.find(s => s.id?.toString() === key);
+                        const [fsId, varietyId, varietyName] = key.split('::');
+                        const fs = finalSeeds.find(s => s.id?.toString() === fsId || s.id?.toString() === key);
                         const f  = scheduleForms[key];
                         return (
-                          <div key={key} style={{ fontSize: '0.75rem', color: GREEN.accent, display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem' }}>
+                          <div key={key} style={{ fontSize: '0.75rem', color: GREEN.accent, display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                             <span style={{ fontWeight: 700 }}>{fs?.seed_type?.name}</span>
+                            {varietyName && (
+                              <><span style={{ color: '#6b7280' }}>·</span><span>{varietyName}</span></>
+                            )}
                             <span style={{ color: '#6b7280' }}>·</span>
                             <span>{f.total_bags || '—'} bags</span>
                             <span style={{ color: '#6b7280' }}>·</span>
@@ -1233,11 +1404,10 @@ export default function SeedInventory() {
               )}
             </div>
 
-            {/* Modal footer */}
             <div style={{ padding: '1rem 1.75rem 1.5rem', borderTop: '1px solid #f3f4f6', display: 'flex', gap: '0.75rem', position: 'sticky', bottom: 0, backgroundColor: 'white', borderRadius: '0 0 1.25rem 1.25rem' }}>
               <button onClick={() => setScheduleModal(false)} style={{ flex: 1, padding: '0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#374151' }}>Cancel</button>
               <button onClick={handleSaveSchedule} disabled={scheduleSaving || finalSeeds.length === 0}
-                style={{ flex: 2, padding: '0.875rem', backgroundColor: (scheduleSaving || finalSeeds.length === 0) ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, fontSize: '0.875rem', cursor: (scheduleSaving || finalSeeds.length === 0) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', transition: 'background 0.15s' }}>
+                style={{ flex: 2, padding: '0.875rem', backgroundColor: (scheduleSaving || finalSeeds.length === 0) ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, fontSize: '0.875rem', cursor: (scheduleSaving || finalSeeds.length === 0) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                 <CalendarClock size={16} />
                 {scheduleSaving ? 'Saving...' : editSchedule ? 'Update Schedule' : 'Save Schedule'}
               </button>
@@ -1246,7 +1416,7 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ ALLOCATION MODAL (unchanged) ══ */}
+      {/* ══ ALLOCATION MODAL ══ */}
       {allocModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', animation: 'fadeIn 0.2s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', animation: 'slideUp 0.25s ease' }}>

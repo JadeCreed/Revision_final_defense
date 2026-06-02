@@ -125,6 +125,9 @@ export const saveFinalSeeds = (data)         => API.post('/seed-poll/final-seeds
 // Farmer search
 export const searchFarmers = (params) =>
   API.get('/distribution/farmers/search/', { params });
+// Farmer distribution detail for BRGY two-panel distribution view
+export const getFarmerDistributionDetail = (farmerId) =>
+  API.get(`/distribution/farmers/${farmerId}/distribution-detail/`);
 // ── DISTRIBUTION: BRGY requests program deletion ──
 export const requestDeleteEvent = (eventId, data)       => API.post(`/distribution/events/${eventId}/request-delete/`, data);
 // ── DISTRIBUTION: Admin confirms program deletion ──

@@ -376,10 +376,12 @@ class DistributionEventSerializer(serializers.ModelSerializer):
 
 class DistributionEventListSerializer(serializers.ModelSerializer):
     """Lightweight list — no batches."""
+    seed_type_name   = serializers.SerializerMethodField()
     total_encoded    = serializers.SerializerMethodField()
     total_approved   = serializers.SerializerMethodField()
     total_remaining  = serializers.SerializerMethodField()
     batch_count      = serializers.SerializerMethodField()
+    approved_batch_count = serializers.SerializerMethodField()
     intervention_display = serializers.CharField(
         source='get_intervention_display', read_only=True
     )
@@ -391,12 +393,12 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
         model  = DistributionEvent
         fields = [
             'id', 'barangay', 'intervention', 'intervention_display',
-            'variety_name', 'season', 'season_display', 'year',
+            'seed_type_name', 'variety_name', 'season', 'season_display', 'year',
             'organization_name', 'total_members',
             'status', 'status_display',
             'seed_delivered', 'seed_delivered_at',
             'total_encoded', 'total_approved', 'total_remaining',
-            'batch_count', 'created_at',
+            'batch_count', 'approved_batch_count', 'created_at',
             'delete_requested', 'delete_request_note', 'delete_requested_at',
         ]
 
@@ -414,6 +416,9 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
 
     def get_batch_count(self, obj):
         return obj.batches.count()
+
+    def get_approved_batch_count(self, obj):
+        return obj.batches.filter(status='APPROVED').count()
 
     def get_season_display(self, obj):
         return {'WET': 'Wet Season', 'DRY': 'Dry Season'}.get(obj.season, obj.season)

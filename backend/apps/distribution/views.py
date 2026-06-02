@@ -215,6 +215,88 @@ class FarmerSearchView(APIView):
         return Response(serializer.data)
 
 
+class FarmerDistributionDetailView(APIView):
+    """
+    GET /api/distribution/farmers/<farmer_id>/distribution-detail/
+    Returns approved batch entries grouped by seed type for the BRGY distribution two-panel view.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, farmer_id):
+        try:
+            farmer = User.objects.get(id=farmer_id, role='FARMER', is_active=True)
+        except User.DoesNotExist:
+            return Response({"error": "Farmer not found."}, status=404)
+
+        if request.user.role == 'BRGY':
+            barangay = getattr(request.user, 'barangay', None)
+            if farmer.barangay != barangay:
+                return Response({"error": "Access denied."}, status=403)
+
+        entries = DistributionEntry.objects.filter(
+            farmer=farmer,
+            batch__status='APPROVED',
+        ).select_related(
+            'batch__event__seed_type',
+            'batch__event',
+            'variety',
+        ).order_by('batch__event__seed_type__name', '-batch__approved_at')
+
+        grouped = {}
+        for entry in entries:
+            seed_type = entry.batch.event.seed_type
+            if not seed_type:
+                continue
+            key = seed_type.id
+            if key in grouped:
+                continue
+
+            seed_type_name = seed_type.name or ''
+            is_inbred_type = self._is_inbred(seed_type_name)
+            grouped[key] = {
+                'seed_type_id':   seed_type.id,
+                'seed_type_name': seed_type_name,
+                'event_id':       entry.batch.event.id,
+                'event_name':     entry.batch.event.organization_name,
+                'batch_id':       entry.batch.id,
+                'batch_number':   entry.batch.batch_number,
+                'entry_id':       entry.id,
+                'row_number':     entry.row_number,
+                'farm_area_ha':   str(entry.farm_area_ha) if entry.farm_area_ha is not None else None,
+                'area_planted':   str(entry.area_planted) if entry.area_planted is not None else None,
+                'data_sharing':   entry.data_sharing,
+                'variety_name':   entry.variety.name if entry.variety else '',
+                'qty_bags':       entry.qty_bags,
+                'date_received':  entry.date_received.isoformat() if entry.date_received else None,
+                'crop_establishment': entry.crop_establishment,
+                'expected_sowing_date': entry.expected_sowing_date,
+                'authorized_representative': entry.authorized_representative,
+                'is_distribution_encoded': bool(entry.qty_bags) and (bool(entry.date_received) if is_inbred_type else True),
+            }
+
+        try:
+            profile = farmer.profile
+            hectares = float(profile.hectares) if getattr(profile, 'hectares', None) is not None else 0
+        except Exception:
+            hectares = 0
+
+        return Response({
+            'farmer': {
+                'id':             farmer.id,
+                'first_name':     farmer.first_name,
+                'last_name':      farmer.last_name,
+                'contact_number': farmer.contact_number,
+                'barangay':       farmer.barangay,
+                'rsbsa_number':   farmer.rsbsa_number,
+                'hectares':       hectares,
+            },
+            'seed_entries': list(grouped.values()),
+        })
+
+    def _is_inbred(self, seed_type_name):
+        n = (seed_type_name or '').upper()
+        return 'INBRED' in n or n == 'RCEF'
+
 
 # ═══════════════════════════════════════════════════════════
 # DISTRIBUTION EVENTS
