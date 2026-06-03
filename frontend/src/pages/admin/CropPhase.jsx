@@ -55,20 +55,20 @@ const SEED_TAB_MAP = Object.fromEntries(SEED_TABS.map(t => [t.key, t]));
 
 const STD_DAYS = {
   dry: {
-    'Seed Distribution':  1,
+    'Seed Distribution':  3,
     'Crop Establishment': 20,
     'Tillering':          45,
     'Flowering':          20,
     'Ripening':           50,
-    'Harvesting':         3,
+    'Harvesting':         5,
   },
   wet: {
-    'Seed Distribution':  1,
+    'Seed Distribution':  3,
     'Crop Establishment': 20,
     'Tillering':          45,
     'Flowering':          20,
     'Ripening':           40,
-    'Harvesting':         3,
+    'Harvesting':         5,
   },
 };
 
@@ -676,7 +676,7 @@ const CropPhase = () => {
   );
 
   return (
-    <div style={{ padding: '1.5rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', background: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ padding: '1.5rem 1.75rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', minHeight: '100vh' }}>
       <style>{`
         @keyframes cp-fadein { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }
         @keyframes cp-spin   { to { transform:rotate(360deg) } }
