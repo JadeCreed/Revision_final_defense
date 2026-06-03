@@ -43,6 +43,16 @@ class CropMonitoringRecord(models.Model):
         related_name='monitoring_encoded'
     )
 
+    # ── ADDED: direct poll link — nullable so old records are not broken ──
+    poll = models.ForeignKey(
+        'seed_poll.Poll',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='crop_monitoring_records',
+        help_text='Season poll this record belongs to.'
+    )
+
     # ── WHERE ──
     barangay = models.CharField(max_length=100)
 
@@ -133,7 +143,16 @@ class BarangayCropSummary(models.Model):
     Avoids expensive real-time aggregation on GIS map load.
     """
 
-    barangay       = models.CharField(max_length=100, unique=True)
+    # ── ADDED: poll FK so summary is per-season ──
+    poll = models.ForeignKey(
+        'seed_poll.Poll',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='crop_summaries',
+    )
+
+    barangay       = models.CharField(max_length=100)
     dominant_phase = models.CharField(
         max_length=20,
         choices=CropMonitoringRecord.PHASE_CHOICES,
@@ -154,6 +173,8 @@ class BarangayCropSummary(models.Model):
     )
 
     class Meta:
+        # ── ADDED: one summary per barangay per poll ──
+        unique_together = ('poll', 'barangay')
         ordering = ['barangay']
         verbose_name = 'Barangay Crop Summary'
         verbose_name_plural = 'Barangay Crop Summaries'

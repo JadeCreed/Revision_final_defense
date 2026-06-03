@@ -47,9 +47,11 @@ class GISPlotsView(APIView):
 
         # ── SEASON/YEAR FILTER from selected poll ──
         from apps.seed_poll.models import Poll
-        from django.utils import timezone as tz
 
-        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else Poll.objects.order_by('-created_at').first()
+        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
         poll_year = active_poll.year if active_poll else None
         poll_season = active_poll.season if active_poll else None
 
@@ -61,18 +63,8 @@ class GISPlotsView(APIView):
         if barangay_filter:
             records_qs = records_qs.filter(barangay__iexact=barangay_filter)
 
-        if poll_year and poll_season:
-            if poll_season == 'WET':
-                records_qs = records_qs.filter(
-                    date_observed__year=poll_year,
-                    date_observed__month__gte=5,
-                    date_observed__month__lte=10,
-                )
-            elif poll_season == 'DRY':
-                records_qs = records_qs.filter(
-                    Q(date_observed__year=poll_year - 1, date_observed__month__gte=11) |
-                    Q(date_observed__year=poll_year, date_observed__month__lte=4)
-                )
+        if active_poll:
+            records_qs = records_qs.filter(poll=active_poll)
 
         # Build one entry per farmer+seed_source combination (latest record per combo)
         seen = {}
@@ -386,25 +378,17 @@ class GISMapSummaryView(APIView):
         poll_id_param = request.query_params.get('poll_id', None)
         from django.db.models import Q
 
-        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else Poll.objects.order_by('-created_at').first()
+        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
         poll_year = active_poll.year if active_poll else None
         poll_season = active_poll.season if active_poll else None
 
         def monitoring_season_filter(qs):
-            if not poll_year or not poll_season:
+            if not active_poll:
                 return qs
-            if poll_season == 'WET':
-                return qs.filter(
-                    date_observed__year=poll_year,
-                    date_observed__month__gte=5,
-                    date_observed__month__lte=10,
-                )
-            if poll_season == 'DRY':
-                return qs.filter(
-                    Q(date_observed__year=poll_year - 1, date_observed__month__gte=11) |
-                    Q(date_observed__year=poll_year, date_observed__month__lte=4)
-                )
-            return qs
+            return qs.filter(poll=active_poll)
 
         def distribution_season_filter(qs):
             if not poll_year or not poll_season:

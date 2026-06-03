@@ -281,40 +281,38 @@ class ATCropMonitoringCreateView(APIView):
         if not date_observed:
             return Response({'error': 'Date observed is required.'}, status=400)
 
-        latest_final_seed = FinalSeed.objects.order_by('-year', '-id').first()
-        if latest_final_seed:
-            def season_months(value):
-                if value == 'WET':
-                    return [5, 6, 7, 8, 9, 10, 11]
-                if value == 'DRY':
-                    return [12, 1, 2, 3, 4]
-                return None
+        from apps.seed_poll.models import Poll
 
-            months = season_months(latest_final_seed.season)
-            # Block only if SAME phase + SAME seed source already recorded this season
-            # This allows same phase with different seed sources (e.g., Juan with HYBRID + OWN_SEED both in TILLERING)
-            duplicate_query = CropMonitoringRecord.objects.filter(
-                farmer=farmer,
-                crop_phase=crop_phase,
-                seed_source=seed_source or '',
-                date_observed__year=latest_final_seed.year,
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+        if not active_poll:
+            return Response(
+                {'error': 'No active season found. Admin must open a poll first.'},
+                status=400
             )
-            if months:
-                duplicate_query = duplicate_query.filter(date_observed__month__in=months)
-            if duplicate_query.exists():
-                return Response({
-                    'error': (
-                        f'This farmer already has a {crop_phase} record for '
-                        f'{seed_source or "unspecified"} seed this season. '
-                        f'Different seed source? Select Hybrid, Inbred, or Own Seed.'
-                    )
-                }, status=400)
+
+        duplicate_exists = CropMonitoringRecord.objects.filter(
+            farmer=farmer,
+            poll=active_poll,
+            crop_phase=crop_phase,
+            seed_source=seed_source or '',
+        ).exists()
+        if duplicate_exists:
+            return Response({
+                'error': (
+                    f'This farmer already has a {crop_phase} record for '
+                    f'{seed_source or "unspecified"} seed in {active_poll}.'
+                )
+            }, status=400)
 
         # Build record
         record = CropMonitoringRecord.objects.create(
             farmer=farmer,
             encoded_by=request.user,
             barangay=farmer.barangay,
+            poll=active_poll,
             crop_phase=crop_phase,
             seed_source=seed_source,
             phase_status=phase_status,

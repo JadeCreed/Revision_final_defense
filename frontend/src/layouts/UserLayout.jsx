@@ -11,7 +11,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bell, X, LogOut, User, ChevronRight } from 'lucide-react'; // ✅ single import
-import { getUnreadCount } from '../api/axios';
+import { getUnreadCount, getGisActivePoll } from '../api/axios';
 import { USER_NAV, ROLE_COLORS, ROLE_LABELS } from '../components/navigation/UserNavConfig';
 import logo from '../assets/logo.png';
 
@@ -30,6 +30,7 @@ const UserLayout = () => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDesktop, setIsDesktop]     = useState(window.innerWidth >= DESKTOP_BREAKPOINT);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeSeason, setActiveSeason] = useState(null);
 
   // Refs
   const unreadPollRef = useRef(null);
@@ -46,6 +47,17 @@ const UserLayout = () => {
     }
   }, [role]);
 
+  const fetchActiveSeason = useCallback(async () => {
+    try {
+      const res = await getGisActivePoll();
+      if (res.data) {
+        setActiveSeason(res.data);
+      }
+    } catch {
+      // Silent fail — season pill is non-critical
+    }
+  }, []);
+
   // ── RESIZE LISTENER ──
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= DESKTOP_BREAKPOINT);
@@ -57,11 +69,12 @@ const UserLayout = () => {
   //  fetchUnreadCount is defined above so no reference error
   useEffect(() => {
     fetchUnreadCount();
+    fetchActiveSeason();
     unreadPollRef.current = setInterval(fetchUnreadCount, 60000);
     return () => {
       if (unreadPollRef.current) clearInterval(unreadPollRef.current);
     };
-  }, [fetchUnreadCount]);
+  }, [fetchUnreadCount, fetchActiveSeason]);
 
   // ── RECHECK when user visits announcements page ──
   // After reading announcements, dot should disappear quickly
@@ -316,6 +329,58 @@ const UserLayout = () => {
 
           {/* Right side: bell + avatar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
+
+            {/* ── ACTIVE SEASON PILL ── */}
+            {activeSeason && (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                backgroundColor: isDesktop ? '#f0fdf4' : 'rgba(255,255,255,0.15)',
+                border: isDesktop ? '1px solid #bbf7d0' : '1px solid rgba(255,255,255,0.25)',
+                borderRadius: '999px',
+                padding: '0.25rem 0.75rem',
+                flexShrink: 0,
+              }}>
+                <svg
+                  width="13" height="13" viewBox="0 0 24 24"
+                  fill="none" stroke={isDesktop ? '#16a34a' : 'rgba(255,255,255,0.9)'}
+                  strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}
+                >
+                  {activeSeason.season === 'WET' ? (
+                    <>
+                      <path d="M12 2v6M12 22v-2M4.93 4.93l4.24 4.24M14.83 14.83l4.24 4.24M2 12h6M22 12h-2M4.93 19.07l4.24-4.24M14.83 9.17l4.24-4.24" />
+                    </>
+                  ) : (
+                    <>
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                    </>
+                  )}
+                </svg>
+                <div style={{ lineHeight: 1 }}>
+                  <span style={{
+                    fontSize: '0.6rem',
+                    fontWeight: 700,
+                    color: isDesktop ? '#16a34a' : 'rgba(255,255,255,0.7)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.04em',
+                    display: 'block',
+                  }}>
+                    {activeSeason.season === 'WET' ? 'Wet Season' : 'Dry Season'}
+                  </span>
+                  <span style={{
+                    fontSize: '0.8rem',
+                    fontWeight: 800,
+                    color: isDesktop ? '#14532d' : 'white',
+                    display: 'block',
+                  }}>
+                    {activeSeason.year}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* ── BELL ICON with unread dot ── */}
             <button

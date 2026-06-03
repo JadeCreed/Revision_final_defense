@@ -5,25 +5,30 @@
 
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from django.db.models import Count, OuterRef, Subquery
+from django.db.models import OuterRef, Subquery
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
-def _refresh_summary(barangay: str, reporter=None):
+def _refresh_summary(barangay: str, poll=None, reporter=None):
     """
     Recompute the BarangayCropSummary for a given barangay.
     Uses the LATEST record per farmer (their current phase).
     """
+    base_qs = CropMonitoringRecord.objects.filter(barangay=barangay)
+
+    # ── ADDED: scope to poll if provided ──
+    if poll is not None:
+        base_qs = base_qs.filter(poll=poll)
+
     latest_record = (
-        CropMonitoringRecord.objects
-        .filter(barangay=barangay, farmer_id=OuterRef('farmer_id'))
+        base_qs
+        .filter(farmer_id=OuterRef('farmer_id'))
         .order_by('-date_observed', '-encoded_at')
         .values('pk')[:1]
     )
 
     latest_ids = (
-        CropMonitoringRecord.objects
-        .filter(barangay=barangay)
+        base_qs
         .values('farmer_id')
         .annotate(latest_id=Subquery(latest_record))
         .values_list('latest_id', flat=True)
@@ -44,7 +49,10 @@ def _refresh_summary(barangay: str, reporter=None):
     # Dominant phase = the one with highest count
     dominant = max(counts, key=counts.get) if total > 0 else 'DISTRIBUTION'
 
-    summary, _ = BarangayCropSummary.objects.get_or_create(barangay=barangay)
+    summary, _ = BarangayCropSummary.objects.get_or_create(
+        poll=poll,
+        barangay=barangay,
+    )
     summary.dominant_phase       = dominant
     summary.total_farmers        = total
     summary.distribution_count   = counts['DISTRIBUTION']
@@ -60,9 +68,14 @@ def _refresh_summary(barangay: str, reporter=None):
 
 @receiver(post_save, sender=CropMonitoringRecord)
 def on_record_saved(sender, instance, **kwargs):
-    _refresh_summary(instance.barangay, reporter=instance.encoded_by)
+    # ── CHANGED: pass poll from the record itself ──
+    _refresh_summary(
+        instance.barangay,
+        poll=instance.poll,
+        reporter=instance.encoded_by,
+    )
 
 
 @receiver(post_delete, sender=CropMonitoringRecord)
 def on_record_deleted(sender, instance, **kwargs):
-    _refresh_summary(instance.barangay)
+    _refresh_summary(instance.barangay, poll=instance.poll)
