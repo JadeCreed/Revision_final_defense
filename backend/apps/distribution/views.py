@@ -463,8 +463,46 @@ class DistributionBatchDetailView(APIView):
 class DistributionBatchSubmitView(APIView):
     """
     POST /api/distribution/batches/<id>/submit/
-    BRGY submits a batch to admin for review.
-    Batch must be DRAFT and have at least 1 entry.
+    BRGY submits a beneficiary batch to admin for review.
+    Batch must be DRAFT or REJECTED and contain at least one entry.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        batch = get_object_or_404(DistributionBatch, pk=pk)
+
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if batch.event.barangay != brgy:
+                return Response({"error": "Access denied."}, status=403)
+
+        if batch.status not in ('DRAFT', 'REJECTED'):
+            return Response({
+                "error": f"Batch is already {batch.get_status_display()}. Only DRAFT or REJECTED batches can be submitted."
+            }, status=400)
+
+        if batch.entries.count() == 0:
+            return Response({"error": "Cannot submit empty batch."}, status=400)
+
+        batch.status = 'SUBMITTED'
+        batch.submitted_at = timezone.now()
+        batch.rejected_reason = ''
+        batch.distribution_status = 'PENDING'
+        batch.save()
+
+        log_action(event=batch.event, batch=batch, user=request.user, action='SUBMITTED',
+                   notes=f"Batch {batch.batch_number} submitted with {batch.entries.count()} entries")
+
+        return Response({
+            "message": f"Batch {batch.batch_number} submitted for admin review.",
+            "status": "SUBMITTED"
+        })
+
+
+class DistributionBatchSubmitDistributionView(APIView):
+    """
+    POST /api/distribution/batches/<id>/submit-distribution/
+    BRGY submits an already approved beneficiary batch for distribution review.
     """
     permission_classes = [IsAuthenticated]
 
@@ -477,29 +515,23 @@ class DistributionBatchSubmitView(APIView):
                 return Response({"error": "Access denied."}, status=403)
 
         if batch.status != 'APPROVED':
-            return Response({
-                "error": "Only batches approved in Beneficiaries can be submitted in Distribution."
-            }, status=400)
+            return Response({"error": "Only beneficiary-approved batches can be submitted for distribution review."}, status=400)
 
         if batch.distribution_status not in ('PENDING', 'REJECTED', None, ''):
-            return Response({
-                "error": f"Distribution batch is already {batch.distribution_status}. Cannot resubmit."
-            }, status=400)
+            return Response({"error": f"Distribution batch is already {batch.distribution_status}."}, status=400)
 
         if batch.entries.count() == 0:
-            return Response({
-                "error": "Cannot submit empty batch."
-            }, status=400)
+            return Response({"error": "Cannot submit empty batch."}, status=400)
 
         batch.distribution_status = 'SUBMITTED'
-        batch.submitted_at = timezone.now()
+        batch.distribution_submitted_at = timezone.now()
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='SUBMITTED',
-                   notes=f"Distribution Batch {batch.batch_number} submitted with {batch.entries.count()} entries")
+                   notes=f"Distribution batch {batch.batch_number} submitted for admin review")
 
         return Response({
-            "message": f"Batch {batch.batch_number} submitted for admin review.",
+            "message": f"Distribution batch {batch.batch_number} submitted for admin review.",
             "distribution_status": "SUBMITTED"
         })
 
@@ -526,6 +558,7 @@ class DistributionBatchApproveView(APIView):
         batch.status      = 'APPROVED'
         batch.approved_at = timezone.now()
         batch.approved_by = request.user
+        batch.distribution_status = 'PENDING'
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='APPROVED',
@@ -587,12 +620,14 @@ class DistributionBatchApproveDistributionView(APIView):
                 "error": "Only beneficiary-approved batches can be distribution-approved."
             }, status=400)
 
-        if batch.distribution_status not in ('SUBMITTED', 'REJECTED', None, ''):
+        if batch.distribution_status != 'SUBMITTED':
             return Response({
-                "error": f"Distribution status is already {batch.distribution_status}."
+                "error": f"Distribution status is {batch.distribution_status}, not SUBMITTED."
             }, status=400)
 
         batch.distribution_status = 'APPROVED'
+        batch.distribution_approved_at = timezone.now()
+        batch.distribution_approved_by = request.user
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='APPROVED',
@@ -619,15 +654,15 @@ class DistributionBatchRejectDistributionView(APIView):
                 "error": "Only beneficiary-approved batches can be distribution-rejected."
             }, status=400)
 
-        if batch.distribution_status == 'APPROVED':
-            return Response({"error": "This distribution batch is already approved."}, status=400)
+        if batch.distribution_status != 'SUBMITTED':
+            return Response({"error": f"Distribution status is {batch.distribution_status}, not SUBMITTED."}, status=400)
 
         reason = request.data.get('reason', '').strip()
         if not reason:
             return Response({"error": "Rejection reason is required."}, status=400)
 
         batch.distribution_status = 'REJECTED'
-        batch.rejected_reason = reason
+        batch.distribution_rejected_reason = reason
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='REJECTED',
@@ -837,11 +872,11 @@ class DistributionEntryDetailView(APIView):
     def put(self, request, pk):
         entry = self.get_object(pk)
 
-        editable_statuses = ('DRAFT', 'REJECTED')
+        editable_statuses = ('DRAFT', 'REJECTED', 'APPROVED')
         if entry.batch.status not in editable_statuses:
             if not (request.user.role == 'ADMIN' and entry.batch.status == 'SUBMITTED'):
                 return Response(
-                    {"error": "Cannot edit entries in a submitted or approved batch."},
+                    {"error": "Cannot edit entries in a submitted batch."},
                     status=400
                 )
 
@@ -899,8 +934,9 @@ class DistributionEntrySignatureView(APIView):
     def post(self, request, pk):
         entry = get_object_or_404(DistributionEntry, pk=pk)
 
-        # Only editable in DRAFT (or SUBMITTED if admin)
-        if entry.batch.status not in ('DRAFT', 'SUBMITTED'):
+        # Allow signature capture for approved distribution batches as well, while keeping
+        # the existing guard for locked non-distribution stages.
+        if entry.batch.status not in ('DRAFT', 'SUBMITTED', 'APPROVED'):
             if request.user.role != 'ADMIN':
                 return Response({"error": "Cannot update signature for this batch status."}, status=400)
 

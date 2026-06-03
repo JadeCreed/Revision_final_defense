@@ -257,6 +257,8 @@ class DistributionBatchSerializer(serializers.ModelSerializer):
             'id', 'batch_number', 'status', 'status_display',
             'entry_count', 'is_full',
             'submitted_at', 'approved_at',
+            'distribution_status', 'distribution_submitted_at',
+            'distribution_approved_at', 'distribution_rejected_reason',
             'encoded_by_name', 'approved_by_name',
             'rejected_reason',
             'entries',
@@ -295,6 +297,8 @@ class DistributionBatchListSerializer(serializers.ModelSerializer):
         fields = [
             'id','event','batch_number', 'status', 'status_display',
             'entry_count', 'submitted_at', 'approved_at',
+            'distribution_status', 'distribution_submitted_at',
+            'distribution_rejected_reason',
             'encoded_by_name', 'rejected_reason', 'created_at',
         ]
 

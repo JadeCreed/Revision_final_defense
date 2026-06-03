@@ -154,9 +154,6 @@ class GISPlotsView(APIView):
         try:
             dist_entries = DistributionEntry.objects.filter(
                 batch__status='APPROVED'
-            ).filter(
-                Q(qty_bags__isnull=False) |
-                Q(date_received__isnull=False)
             )
 
             if poll_year and poll_season:
@@ -443,9 +440,6 @@ class GISMapSummaryView(APIView):
                 distribution_season_filter(
                     DistributionEntry.objects.filter(
                         batch__status='APPROVED'
-                    ).filter(
-                        Q(qty_bags__isnull=False) |
-                        Q(date_received__isnull=False)
                     )
                 ).values_list('farmer_id', flat=True)
                 .distinct()
@@ -481,9 +475,6 @@ class GISMapSummaryView(APIView):
                 distribution_season_filter(
                     DistributionEntry.objects.filter(
                         batch__status='APPROVED'
-                    ).filter(
-                        Q(qty_bags__isnull=False) |
-                        Q(date_received__isnull=False)
                     )
                 ).values_list('farmer__barangay', flat=True)
                 .distinct().order_by('farmer__barangay')
@@ -530,9 +521,6 @@ class GISMapSummaryView(APIView):
             for entry in distribution_season_filter(
                 DistributionEntry.objects.filter(
                     batch__status='APPROVED'
-                ).filter(
-                    Q(qty_bags__isnull=False) |
-                    Q(date_received__isnull=False)
                 )
             ).select_related('batch__event__seed_type').order_by('farmer_id', '-batch__approved_at'):
                 src = 'OWN_SEED'

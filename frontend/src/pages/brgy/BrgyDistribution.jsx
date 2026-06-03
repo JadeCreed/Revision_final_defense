@@ -11,7 +11,7 @@ import {
   getEventBatches,
   getBatchDetail,
   updateEntry,
-  submitBatch,
+  submitDistributionBatch,
   searchFarmers,
   getBrgyDistributionContext,
   getFinalSeeds,
@@ -583,9 +583,9 @@ const BrgyDistribution = () => {
     setSubmitConfirm(false);
     setSubmitting(true);
     try {
-      await submitBatch(batchId);
+      await submitDistributionBatch(batchId);
       await loadReportBatch(batchId);
-      showToast('success', 'Batch submitted for admin review.');
+      showToast('success', 'Distribution batch submitted for admin review.');
     } catch (err) {
       showToast('error', err.response?.data?.error || 'Failed to submit.');
     } finally { setSubmitting(false); }

@@ -144,6 +144,7 @@ export const getEventBatches  = (eventId)      => API.get(`/distribution/events/
 export const createBatch      = (eventId)      => API.post(`/distribution/events/${eventId}/batches/`);
 export const getBatchDetail   = (id)           => API.get(`/distribution/batches/${id}/`);
 export const submitBatch      = (id)           => API.post(`/distribution/batches/${id}/submit/`);
+export const submitDistributionBatch = (id) => API.post(`/distribution/batches/${id}/submit-distribution/`);
 export const approveBatch     = (id)           => API.post(`/distribution/batches/${id}/approve/`);
 export const rejectBatch      = (id, data)     => API.post(`/distribution/batches/${id}/reject/`, data);
 export const approveDistributionBatch = (id) => API.post(`/distribution/batches/${id}/distribution-approve/`);

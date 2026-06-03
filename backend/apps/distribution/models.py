@@ -163,6 +163,13 @@ class DistributionBatch(models.Model):
     Admin can edit (emergency) then re-lock.
     """
 
+    DISTRIBUTION_STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('SUBMITTED', 'Submitted'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+    )
+
     STATUS_CHOICES = (
         ('DRAFT',     'Draft'),      # BRGY is still encoding
         ('SUBMITTED', 'Submitted'),  # Sent to admin for review
@@ -185,6 +192,23 @@ class DistributionBatch(models.Model):
     # ── TIMESTAMPS ──
     submitted_at = models.DateTimeField(null=True, blank=True)
     approved_at  = models.DateTimeField(null=True, blank=True)
+
+    distribution_status = models.CharField(
+        max_length=10,
+        choices=DISTRIBUTION_STATUS_CHOICES,
+        default='PENDING',
+        blank=True,
+    )
+    distribution_submitted_at = models.DateTimeField(null=True, blank=True)
+    distribution_approved_at = models.DateTimeField(null=True, blank=True)
+    distribution_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='distribution_batches_approved'
+    )
+    distribution_rejected_reason = models.TextField(blank=True, default='')
 
     # ── WHO ──
     encoded_by  = models.ForeignKey(

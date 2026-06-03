@@ -316,6 +316,7 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers }) => {
 const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers, totalApprovedFarmers }) => {
   const cfg = SEED_TYPE_MAP[seedKey] || { label: seedKey, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' };
   const [animated, setAnimated] = useState(false);
+  const displayDenominator = totalApprovedFarmers > 0 ? totalApprovedFarmers : total;
 
   useEffect(() => {
     setAnimated(false);
@@ -327,7 +328,7 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers,
     .map(tier => ({
       ...tier,
       count:   tierCounts[tier.key] || 0,
-      percent: total > 0 ? Math.round(((tierCounts[tier.key] || 0) / total) * 100) : 0,
+      percent: displayDenominator > 0 ? Math.round(((tierCounts[tier.key] || 0) / displayDenominator) * 100) : 0,
     }))
     .filter(t => t.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -491,7 +492,7 @@ const MonitoringOverviewPanel = ({ plots, summary, animate }) => {
 };
 
 // ─── UTILIZATION OVERVIEW PANEL ───────────────────────────────
-const UtilizationOverviewPanel = ({ harvestRecords, animate }) => {
+const UtilizationOverviewPanel = ({ harvestRecords, summary, animate }) => {
   // Compute everything from harvestRecords using our formula (same as BrgyHarvest)
   const brgyUtil = useMemo(() => buildBrgyUtilFromHarvest(harvestRecords), [harvestRecords]);
   const haData   = harvestRecords.length > 0;
@@ -562,7 +563,7 @@ const UtilizationOverviewPanel = ({ harvestRecords, animate }) => {
               total={globalSeedTierCounts[st.key]?.total || 0}
               animate={animate}
               encodedFarmers={harvestRecords ? [...new Set(harvestRecords.map(r => r.farmer))].length : 0}
-              totalApprovedFarmers={0}
+              totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
             />
           ))
         )}
@@ -1104,7 +1105,7 @@ const GisMap = () => {
   const PanelBody = () => {
     if (!activeBarangay) {
       return activeTab === 'utilization'
-        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} animate={panelAnimate} />
+        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} summary={summary} animate={panelAnimate} />
         : <MonitoringOverviewPanel plots={filteredPlots} summary={summary} animate={panelAnimate} />;
     }
     return (
