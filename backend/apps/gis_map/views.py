@@ -214,7 +214,7 @@ class GISPlotsView(APIView):
                         'longitude': None,
                         'area_ha': None,
                         'land_type': 'Seed Distribution',
-                        'crop_phase_key': 'Seed Distribution',
+                        'crop_phase_key': 'DISTRIBUTION',
                         'seed_source': seed_src,
                         'seed_source_label': SEED_SOURCE_LABEL.get(seed_src, 'Unspecified'),
                         'encoded_by': None,
@@ -329,6 +329,7 @@ class GISPlotsView(APIView):
             logger.warning(f'GIS plots: distribution flag error: {e}')
 
         # Total approved farmers per barangay (for percentage denominator)
+        approved_per_brgy = {}
         try:
             approved_counts = (
                 User.objects
@@ -347,54 +348,8 @@ class GISPlotsView(APIView):
             logger.warning(f'GIS plots: approved count error: {e}')
 
         # Total approved area per barangay
+        area_by_brgy = {}
         try:
-            area_by_brgy = {}
-            seen_area_farmers = set()
-            for entry in DistributionEntry.objects.filter(
-                batch__status='APPROVED'
-            ).select_related('farmer').order_by('farmer_id'):
-                if not entry.farmer or not entry.farmer.barangay:
-                    continue
-                if entry.farmer_id in seen_area_farmers:
-                    continue
-                seen_area_farmers.add(entry.farmer_id)
-                if entry.farm_area_ha:
-                    brgy = entry.farmer.barangay
-                    area_by_brgy[brgy] = area_by_brgy.get(brgy, 0) + float(entry.farm_area_ha)
-            for data in seen.values():
-                data['total_approved_area_ha_in_brgy'] = round(
-                    area_by_brgy.get(data['barangay'], 0), 2
-                )
-        except Exception as e:
-            logger.warning(f'GIS plots: area error: {e}')
-
-        return Response({
-            'plots': list(seen.values()),
-            'approved_counts': approved_per_brgy,
-            'area_by_brgy': area_by_brgy,
-        })
-
-        # Total approved farmers per barangay (for percentage denominator)
-        try:
-            approved_counts = (
-                User.objects
-                .filter(role='FARMER', status='APPROVED', is_active=True)
-                .values('barangay')
-                .annotate(total=Count('id'))
-            )
-            approved_per_brgy = {
-                item['barangay']: item['total']
-                for item in approved_counts
-                if item['barangay']
-            }
-            for data in seen.values():
-                data['total_approved_in_brgy'] = approved_per_brgy.get(data['barangay'], 0)
-        except Exception as e:
-            logger.warning(f'GIS plots: approved count error: {e}')
-
-        # Total approved area per barangay
-        try:
-            area_by_brgy = {}
             seen_area_farmers = set()
             for entry in DistributionEntry.objects.filter(
                 batch__status='APPROVED'

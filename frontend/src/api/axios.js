@@ -201,7 +201,6 @@ export const downloadReport = (params) =>
 export const getReportLogs = () =>
   API.get('/reports/logs/');
 
-
 // GIS Map
 export const getGisPlots    = (params) => API.get('/gis/plots/', { params });
 export const createGisPlot  = (data)   => API.post('/gis/plots/', data);

@@ -191,8 +191,9 @@ DEFAULT_FROM_EMAIL = "dumpchlb121@gmail.com"
 # =========================
 # Seeding density (kg/ha) per seed type - DA standard
 SEEDING_DENSITY = {
-    'HYBRID': 15,      # kg/ha
-    'INBRED': 40,      # kg/ha
+    'HYBRID':   15,
+    'INBRED':   40,
+    'OWN_SEED': 50,
 }
 
 # Standard yield (kg/ha dry weight) per seed type

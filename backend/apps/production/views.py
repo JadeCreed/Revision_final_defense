@@ -312,7 +312,7 @@ class HarvestRecordListCreateView(ListCreateAPIView):
     POST /api/production/harvest/ — Create new harvest record
     """
     serializer_class = HarvestRecordSerializer
-    permission_classes = [IsAuthenticated, IsBPUser]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
@@ -337,7 +337,7 @@ class HarvestRecordDetailView(RetrieveUpdateDestroyAPIView):
     DELETE /api/production/harvest/<id>/ — Delete harvest record
     """
     serializer_class = HarvestRecordSerializer
-    permission_classes = [IsAuthenticated, IsBPUser]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user

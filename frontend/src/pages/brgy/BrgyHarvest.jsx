@@ -1017,28 +1017,27 @@ const BrgyHarvest = () => {
     setSaving(true);
     try {
       const payload = {
-        farmer:             Number(formData.farmer_id),
-        seed_source:        formData.seed_source,
-        variety:            formData.variety,
-        harvest_area_ha:    formData.harvest_area_ha,
-        harvest_bags:       formData.harvest_bags,
-        harvest_date:       formData.harvest_date,
-        notes:              formData.notes,
+        farmer:               Number(formData.farmer_id),
+        seed_source:          formData.seed_source,
+        variety:              formData.variety,
+        harvest_area_ha:      parseFloat(formData.harvest_area_ha),
+        harvest_bags:         parseInt(formData.harvest_bags, 10),
+        harvest_date:         formData.harvest_date,
+        notes:                formData.notes || '',
+        weight_type:          'DRIED',
+        moisture_content_pct: 12,
       };
 
-      // Only include seed_bags_received for gov programs
       if (formData.seed_source !== 'OWN_SEED' && formData.seed_bags_received) {
-        payload.seed_bags_received = formData.seed_bags_received;
+        payload.seed_bags_received = parseInt(formData.seed_bags_received, 10) || null;
       }
 
       let savedId;
       if (formData._existing_id) {
-        // Update existing record for this seed type
         const res = await API.patch(`/production/harvest/${formData._existing_id}/`, payload);
         savedId = res.data.id;
         pushToast(`${getSeedCfg(formData.seed_source).label} record updated.`);
       } else {
-        // Create new record
         const res = await API.post('/production/harvest/', payload);
         savedId = res.data.id;
         pushToast(`${getSeedCfg(formData.seed_source).label} record saved.`);
