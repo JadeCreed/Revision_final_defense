@@ -476,26 +476,31 @@ class DistributionBatchSubmitView(APIView):
             if batch.event.barangay != brgy:
                 return Response({"error": "Access denied."}, status=403)
 
-        if batch.status not in ('DRAFT', 'REJECTED'):
+        if batch.status != 'APPROVED':
             return Response({
-                "error": f"Batch is already {batch.get_status_display()}. Cannot resubmit."
+                "error": "Only batches approved in Beneficiaries can be submitted in Distribution."
+            }, status=400)
+
+        if batch.distribution_status not in ('PENDING', 'REJECTED', None, ''):
+            return Response({
+                "error": f"Distribution batch is already {batch.distribution_status}. Cannot resubmit."
             }, status=400)
 
         if batch.entries.count() == 0:
             return Response({
-                "error": "Cannot submit empty batch. Please add at least one farmer."
+                "error": "Cannot submit empty batch."
             }, status=400)
 
-        batch.status       = 'SUBMITTED'
+        batch.distribution_status = 'SUBMITTED'
         batch.submitted_at = timezone.now()
         batch.save()
 
         log_action(event=batch.event, batch=batch, user=request.user, action='SUBMITTED',
-                   notes=f"Batch {batch.batch_number} submitted with {batch.entries.count()} entries")
+                   notes=f"Distribution Batch {batch.batch_number} submitted with {batch.entries.count()} entries")
 
         return Response({
             "message": f"Batch {batch.batch_number} submitted for admin review.",
-            "status":  "SUBMITTED"
+            "distribution_status": "SUBMITTED"
         })
 
 
@@ -564,6 +569,73 @@ class DistributionBatchRejectView(APIView):
         return Response({
             "message": "Batch rejected. BRGY has been notified.",
             "status":  "REJECTED"
+        })
+
+
+class DistributionBatchApproveDistributionView(APIView):
+    """
+    POST /api/distribution/batches/<id>/distribution-approve/
+    Admin approves the distribution-side review of an already approved beneficiary batch.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, pk):
+        batch = get_object_or_404(DistributionBatch, pk=pk)
+
+        if batch.status != 'APPROVED':
+            return Response({
+                "error": "Only beneficiary-approved batches can be distribution-approved."
+            }, status=400)
+
+        if batch.distribution_status not in ('SUBMITTED', 'REJECTED', None, ''):
+            return Response({
+                "error": f"Distribution status is already {batch.distribution_status}."
+            }, status=400)
+
+        batch.distribution_status = 'APPROVED'
+        batch.save()
+
+        log_action(event=batch.event, batch=batch, user=request.user, action='APPROVED',
+                   notes=f"Distribution approval recorded for batch {batch.batch_number}")
+
+        return Response({
+            "message": f"Distribution batch {batch.batch_number} approved.",
+            "distribution_status": "APPROVED"
+        })
+
+
+class DistributionBatchRejectDistributionView(APIView):
+    """
+    POST /api/distribution/batches/<id>/distribution-reject/
+    Admin rejects the distribution-side review for an approved beneficiary batch.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, pk):
+        batch = get_object_or_404(DistributionBatch, pk=pk)
+
+        if batch.status != 'APPROVED':
+            return Response({
+                "error": "Only beneficiary-approved batches can be distribution-rejected."
+            }, status=400)
+
+        if batch.distribution_status == 'APPROVED':
+            return Response({"error": "This distribution batch is already approved."}, status=400)
+
+        reason = request.data.get('reason', '').strip()
+        if not reason:
+            return Response({"error": "Rejection reason is required."}, status=400)
+
+        batch.distribution_status = 'REJECTED'
+        batch.rejected_reason = reason
+        batch.save()
+
+        log_action(event=batch.event, batch=batch, user=request.user, action='REJECTED',
+                   notes=f"Distribution rejection recorded for batch {batch.batch_number}: {reason}")
+
+        return Response({
+            "message": f"Distribution batch {batch.batch_number} rejected.",
+            "distribution_status": "REJECTED"
         })
 
 
@@ -765,10 +837,13 @@ class DistributionEntryDetailView(APIView):
     def put(self, request, pk):
         entry = self.get_object(pk)
 
-        # Allow editing in DRAFT batches.
-        # If a batch was unlocked for emergency editing, ADMIN may also edit SUBMITTED entries.
-        if entry.batch.status == 'SUBMITTED' and request.user.role != 'ADMIN':
-            return Response({"error": "Cannot edit entries in a SUBMITTED batch."}, status=400)
+        editable_statuses = ('DRAFT', 'REJECTED')
+        if entry.batch.status not in editable_statuses:
+            if not (request.user.role == 'ADMIN' and entry.batch.status == 'SUBMITTED'):
+                return Response(
+                    {"error": "Cannot edit entries in a submitted or approved batch."},
+                    status=400
+                )
 
         allowed = ['farm_area_ha', 'crop_establishment', 'qty_bags', 'date_received',
                    'expected_sowing_date', 'authorized_representative',
@@ -855,6 +930,60 @@ class DistributionEntrySignatureView(APIView):
         })
 
 
+class DistributionEntryEncodeView(APIView):
+    """
+    POST /api/distribution/entries/<id>/encode-distribution/
+    Save distribution fields for an entry whose batch is already approved
+    in beneficiaries, which is the correct point for distribution encoding.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        entry = get_object_or_404(DistributionEntry, pk=pk)
+
+        if entry.batch.status != 'APPROVED':
+            return Response({
+                "error": "Distribution data can only be encoded for approved beneficiary batches."
+            }, status=400)
+
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if entry.batch.event.barangay != brgy:
+                return Response({"error": "Access denied."}, status=403)
+
+        allowed = [
+            'qty_bags', 'crop_establishment', 'date_received',
+            'expected_sowing_date', 'authorized_representative',
+            'area_planted', 'data_sharing',
+        ]
+        data = {k: v for k, v in request.data.items() if k in allowed}
+
+        if 'qty_bags' in data and data['qty_bags'] not in ('', None):
+            try:
+                data['qty_bags'] = int(round(float(str(data['qty_bags']))))
+            except (ValueError, TypeError, OverflowError):
+                data['qty_bags'] = None
+        else:
+            data['qty_bags'] = None
+        if 'date_received' in data and data['date_received'] in ('', None):
+            data['date_received'] = None
+        if 'area_planted' in data and data['area_planted'] in ('', None):
+            data['area_planted'] = None
+
+        serializer = DistributionEntrySerializer(entry, data=data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            log_action(
+                event=entry.batch.event,
+                batch=entry.batch,
+                user=request.user,
+                action='EDITED',
+                notes=f"Distribution data encoded for row {entry.row_number}: {list(data.keys())}"
+            )
+            return Response(serializer.data)
+        return Response(serializer.errors, status=400)
+
+
 # ═══════════════════════════════════════════════════════════
 # ADMIN — PENDING APPROVALS
 # ═══════════════════════════════════════════════════════════
@@ -862,15 +991,25 @@ class DistributionEntrySignatureView(APIView):
 class AdminPendingBatchesView(APIView):
     """
     GET /api/distribution/admin/pending/
-    Returns all SUBMITTED batches waiting for approval.
-    Sorted by submission date — oldest first.
+    Returns SUBMITTED batches waiting for approval.
+    Admin sees all; BRGY sees only their barangay.
     """
-    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        batches = DistributionBatch.objects.filter(
-            status='SUBMITTED'
-        ).select_related('event', 'encoded_by').order_by('submitted_at')
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if not brgy:
+                return Response({"error": "No barangay assigned."}, status=400)
+            batches = DistributionBatch.objects.filter(
+                status='SUBMITTED', event__barangay=brgy
+            ).select_related('event', 'encoded_by').order_by('submitted_at')
+        elif request.user.role == 'ADMIN':
+            batches = DistributionBatch.objects.filter(
+                status='SUBMITTED'
+            ).select_related('event', 'encoded_by').order_by('submitted_at')
+        else:
+            return Response({"error": "Access denied."}, status=403)
 
         serializer = DistributionBatchListSerializer(batches, many=True)
         return Response(serializer.data)
@@ -880,16 +1019,29 @@ class AdminDistributionStatsView(APIView):
     """
     GET /api/distribution/admin/stats/
     Summary stats for admin dashboard.
+    Admin sees all; BRGY sees only their barangay.
     """
-    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        total_events   = DistributionEvent.objects.count()
-        pending_batches = DistributionBatch.objects.filter(status='SUBMITTED').count()
-        approved_batches = DistributionBatch.objects.filter(status='APPROVED').count()
-        total_entries  = DistributionEntry.objects.filter(
-            batch__status='APPROVED'
-        ).count()
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if not brgy:
+                return Response({"error": "No barangay assigned."}, status=400)
+            events_qs = DistributionEvent.objects.filter(barangay=brgy)
+            batches_qs = DistributionBatch.objects.filter(event__barangay=brgy)
+            entries_qs = DistributionEntry.objects.filter(batch__event__barangay=brgy)
+        elif request.user.role == 'ADMIN':
+            events_qs = DistributionEvent.objects.all()
+            batches_qs = DistributionBatch.objects.all()
+            entries_qs = DistributionEntry.objects.all()
+        else:
+            return Response({"error": "Access denied."}, status=403)
+
+        total_events = events_qs.count()
+        pending_batches = batches_qs.filter(status='SUBMITTED').count()
+        approved_batches = batches_qs.filter(status='APPROVED').count()
+        total_entries = entries_qs.filter(batch__status='APPROVED').count()
 
         return Response({
             "total_events":    total_events,
@@ -949,6 +1101,58 @@ class BrgyDistributionContextView(APIView):
             'total_approved_farmers': total_farmers,
             'current_season':        current_season,
         })
+
+
+class FarmerHarvestContextView(APIView):
+    """
+    GET /api/distribution/entries/farmer-harvest-context/
+    Returns beneficiary auto-fill context for the Harvest menu.
+    Only approved distribution entries for the current barangay are returned.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if user.role not in ('BRGY', 'ADMIN'):
+            return Response({}, status=200)
+
+        barangay = getattr(user, 'barangay', None)
+        if not barangay and user.role == 'ADMIN':
+            barangay = request.query_params.get('barangay', '').strip() or None
+
+        if not barangay:
+            return Response({}, status=200)
+
+        entries = (
+            DistributionEntry.objects
+            .filter(batch__status='APPROVED', farmer__barangay=barangay)
+            .select_related('farmer', 'batch__event__seed_type')
+            .order_by('-encoded_at')
+        )
+
+        result = {}
+        for entry in entries:
+            farmer_id = str(entry.farmer_id)
+            seed_type_name = (getattr(entry.batch.event.seed_type, 'name', '') or '').upper()
+
+            if 'HYBRID' in seed_type_name:
+                key = 'HYBRID'
+                area_ha = float(entry.farm_area_ha) if entry.farm_area_ha not in (None, '') else None
+            elif 'INBRED' in seed_type_name or 'CERTIFIED' in seed_type_name:
+                key = 'INBRED'
+                area_ha = float(entry.area_planted) if entry.area_planted not in (None, '') else None
+            else:
+                continue
+
+            result.setdefault(farmer_id, {})
+            if key not in result[farmer_id]:
+                result[farmer_id][key] = {
+                    'area_ha': area_ha,
+                    'seed_bags': entry.qty_bags,
+                }
+
+        return Response(result)
+
 
 class AdminConfirmSeedDeliveryView(APIView):
     """

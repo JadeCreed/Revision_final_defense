@@ -146,6 +146,8 @@ export const getBatchDetail   = (id)           => API.get(`/distribution/batches
 export const submitBatch      = (id)           => API.post(`/distribution/batches/${id}/submit/`);
 export const approveBatch     = (id)           => API.post(`/distribution/batches/${id}/approve/`);
 export const rejectBatch      = (id, data)     => API.post(`/distribution/batches/${id}/reject/`, data);
+export const approveDistributionBatch = (id) => API.post(`/distribution/batches/${id}/distribution-approve/`);
+export const rejectDistributionBatch  = (id, data) => API.post(`/distribution/batches/${id}/distribution-reject/`, data);
 export const reopenBatch      = (id)           => API.post(`/distribution/batches/${id}/reopen/`);
 export const unlockBatch      = (id, data)     => API.post(`/distribution/batches/${id}/unlock/`, data);
 export const getBatchAudit    = (id)           => API.get(`/distribution/batches/${id}/audit/`);
@@ -153,6 +155,7 @@ export const getBrgyDistributionContext = ()   =>API.get('/distribution/brgy-con
 // Entries
 export const addEntryToBatch  = (batchId, data) => API.post(`/distribution/batches/${batchId}/entries/`, data);
 export const updateEntry      = (id, data)      => API.put(`/distribution/entries/${id}/`, data);
+export const encodeDistributionEntry = (id, data) => API.post(`/distribution/entries/${id}/encode-distribution/`, data);
 export const deleteEntry      = (id)            => API.delete(`/distribution/entries/${id}/`);
 export const saveSignature    = (id, data)      => API.post(`/distribution/entries/${id}/signature/`, data);
 

@@ -243,7 +243,7 @@ const GanttPhaseRow = ({ phase, stdWin, actualBar, monthCols, encodedByLabel }) 
   const tlEnd   = monthCols[monthCols.length - 1].end;
   const totalMs = tlEnd.getTime() - tlStart.getTime();
   const toLeft  = d => Math.max(0, Math.min(100, ((d.getTime() - tlStart.getTime()) / totalMs) * 100));
-  const toWidth = (s, e) => Math.max(3, toLeft(e) - toLeft(s));
+  const toWidth = (s, e) => Math.max(2, toLeft(e) - toLeft(s));
   const c = phaseColor(phase);
 
   const grayBarEl = stdWin ? (
@@ -264,20 +264,27 @@ const GanttPhaseRow = ({ phase, stdWin, actualBar, monthCols, encodedByLabel }) 
   let pct        = null;
   if (actualBar?.start) {
     const ae = actualBar.end || actualBar.start;
-    const al = toLeft(actualBar.start);
-    const aw = Math.max(1, toWidth(actualBar.start, ae));
-    if (stdWin?.days) {
-      const stdMs = stdWin.end.getTime() - stdWin.start.getTime() || 1;
-      const actMs = ae.getTime() - actualBar.start.getTime();
-      pct = Math.min(100, Math.round((actMs / stdMs) * 100));
+    let barLeft = toLeft(actualBar.start);
+    let barWidth = Math.max(2, toWidth(actualBar.start, ae));
+
+    if (stdWin) {
+      const stdMs = Math.max(1, stdWin.end.getTime() - stdWin.start.getTime());
+      const actMs = Math.max(0, ae.getTime() - actualBar.start.getTime());
+      const stdWidth = toWidth(stdWin.start, stdWin.end);
+      const fillRatio = actMs === 0 ? 0.08 : Math.min(1, actMs / stdMs);
+
+      barLeft = toLeft(stdWin.start);
+      barWidth = Math.max(stdWidth * 0.08, stdWidth * fillRatio);
+      pct = Math.min(100, Math.round(fillRatio * 100));
     }
+
     colorBarEl = (
       <div
         title={`Actual: ${fmtShort(actualBar.start)} → ${actualBar.end ? fmtShort(ae) : 'ongoing'} · ${actualBar.count} encoding${actualBar.count !== 1 ? 's' : ''}`}
         style={{
           position: 'absolute',
-          left:  `${al}%`,
-          width: `${aw}%`,
+          left:  `${barLeft}%`,
+          width: `${barWidth}%`,
           top: '50%', transform: 'translateY(-50%)',
           height: 22, borderRadius: 99,
           background: c, opacity: 0.9, zIndex: 2,

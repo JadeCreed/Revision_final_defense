@@ -9,8 +9,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import {
   Plus, Search, ChevronRight, ChevronLeft,
   CheckCircle, Clock, XCircle, Send, Pen,
-  Trash2, AlertCircle, FileText, ChevronDown,
-  ChevronUp, Eye, Edit2, Package, Download
+  Trash2, AlertCircle, FileText, Eye, Edit2, Package, Download
 } from 'lucide-react';
 import {
   getDistributionEvents,
@@ -518,7 +517,7 @@ const BrgyBeneficiaries = () => {
       date_received: entry.date_received || '',
       authorized_representative: entry.authorized_representative || '',
       data_sharing: entry.data_sharing || false,
-      selected_variety_id: entry.variety || null,
+      selected_variety_id: entry.variety ?? null,
       show_optional: !!(entry.qty_bags || entry.area_planted),
     });
     setEncodeErrors({});
@@ -592,15 +591,27 @@ const BrgyBeneficiaries = () => {
     try {
       if (view === 'edit') {
         // Update existing entry
+        const parseDecimal = (value) => {
+          if (value === '' || value === null || value === undefined) return null;
+          const parsed = parseFloat(value);
+          return Number.isNaN(parsed) ? null : parsed;
+        };
+
+        const parseInteger = (value) => {
+          if (value === '' || value === null || value === undefined) return null;
+          const parsed = parseInt(value, 10);
+          return Number.isNaN(parsed) ? null : parsed;
+        };
+
         const payload = {
-          farm_area_ha: eventIsHybrid ? Number(encodeForm.farm_area_ha) : null,
-          qty_bags: encodeForm.show_optional && encodeForm.qty_bags
-            ? Number(encodeForm.qty_bags) : null,
-          area_planted: eventIsInbred ? Number(encodeForm.area_planted) : null,
-          crop_establishment: encodeForm.show_optional ? encodeForm.crop_establishment : null,
-          expected_sowing_date: encodeForm.show_optional ? encodeForm.expected_sowing_date : null,
-          date_received: encodeForm.show_optional ? encodeForm.date_received : null,
-          data_sharing: eventIsInbred ? encodeForm.data_sharing : false,
+          farm_area_ha: eventIsHybrid ? parseDecimal(encodeForm.farm_area_ha) : null,
+          qty_bags: encodeForm.qty_bags ? parseInteger(encodeForm.qty_bags) : null,
+          area_planted: eventIsInbred ? parseDecimal(encodeForm.area_planted) : null,
+          crop_establishment: encodeForm.crop_establishment || null,
+          expected_sowing_date: encodeForm.expected_sowing_date || '',
+          authorized_representative: encodeForm.authorized_representative || '',
+          date_received: encodeForm.date_received || null,
+          data_sharing: eventIsInbred ? Boolean(encodeForm.data_sharing) : false,
           variety: encodeForm.selected_variety_id || null,
         };
         await updateEntry(editEntry.id, payload);
@@ -1547,88 +1558,6 @@ const BrgyBeneficiaries = () => {
               style={{ width: '100%', padding: '0.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.8rem', color: '#6b7280' }}>
               Clear Signature
             </button>
-          </div>
-
-          {/* ── OPTIONAL FIELDS (collapsible) ── */}
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.5rem', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
-            <button
-              onClick={() => setEncodeForm(p => ({ ...p, show_optional: !p.show_optional }))}
-              style={{ width: '100%', padding: '1rem 1.25rem', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left' }}>
-              <div>
-                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: 0 }}>
-                  Fill Out Optional Fields
-                </p>
-                <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>
-                  {eventIsHybrid
-                    ? 'QTY (bags) — can also be encoded in Distribution when seed arrives'
-                    : 'No. of bags, Rice variety, Crop Estab, Expected Sowing Date, Date Received — can be encoded in Distribution'
-                  }
-                </p>
-              </div>
-              {encodeForm.show_optional ? <ChevronUp size={18} color="#9ca3af" /> : <ChevronDown size={18} color="#9ca3af" />}
-            </button>
-
-            {encodeForm.show_optional && (
-              <div style={{ padding: '0 1.25rem 1.25rem', borderTop: '1px solid #f3f4f6', animation: 'fadeIn 0.2s ease' }}>
-                <div style={{ height: '1rem' }} />
-
-                {/* Hybrid optional: QTY */}
-                {eventIsHybrid && (
-                  <div style={{ marginBottom: '0.875rem' }}>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>QTY (bags)</label>
-                    <input type="number" min="1" step="1" value={encodeForm.qty_bags}
-                      onChange={e => setEncodeForm(p => ({ ...p, qty_bags: e.target.value }))}
-                      placeholder="e.g. 2" style={inp(false)} />
-                  </div>
-                )}
-
-                {/* Inbred optional fields */}
-                {eventIsInbred && (
-                  <>
-                    <div style={{ marginBottom: '0.875rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Number of Bags (20kg/bag)</label>
-                      <input type="number" min="1" value={encodeForm.qty_bags}
-                        onChange={e => setEncodeForm(p => ({ ...p, qty_bags: e.target.value }))}
-                        placeholder="e.g. 1" style={inp(false)} />
-                    </div>
-                    <div style={{ marginBottom: '0.875rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Rice Variety Received</label>
-                      <input type="text" value={encodeForm.crop_establishment === 'variety' ? '' : ''}
-                        onChange={e => setEncodeForm(p => ({ ...p, rice_variety_received: e.target.value }))}
-                        placeholder="e.g. RC 216" style={inp(false)} />
-                    </div>
-                    <div style={{ marginBottom: '0.875rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Crop Establishment (D/T)</label>
-                      <select value={encodeForm.crop_establishment}
-                        onChange={e => setEncodeForm(p => ({ ...p, crop_establishment: e.target.value }))}
-                        style={inp(false)}>
-                        <option value="">Select</option>
-                        <option value="DS">Direct Seeding (D)</option>
-                        <option value="TP">Transplanting (T)</option>
-                      </select>
-                    </div>
-                    <div style={{ marginBottom: '0.875rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Expected Sowing Date (Month/Week)</label>
-                      <input type="text" value={encodeForm.expected_sowing_date}
-                        onChange={e => setEncodeForm(p => ({ ...p, expected_sowing_date: e.target.value }))}
-                        placeholder="e.g. June/2nd Week" style={inp(false)} />
-                    </div>
-                    <div style={{ marginBottom: '0.875rem' }}>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Date Received (MM/DD/YY)</label>
-                      <input type="date" value={encodeForm.date_received}
-                        onChange={e => setEncodeForm(p => ({ ...p, date_received: e.target.value }))}
-                        style={inp(false)} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Name of Authorized Representative</label>
-                      <input type="text" value={encodeForm.authorized_representative}
-                        onChange={e => setEncodeForm(p => ({ ...p, authorized_representative: e.target.value }))}
-                        placeholder="Last Name, First Name, Middle Initial" style={inp(false)} />
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
           </div>
 
           {/* Save button */}
