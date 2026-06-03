@@ -1,10 +1,13 @@
 // src/pages/admin/Distribution.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  getDistributionEvents, getAdminPendingBatches,
-  getDistributionStats, approveBatch, rejectBatch,
+  getDistributionEvents,
+  getDistributionStats,
+  approveBatch, rejectBatch,
+  approveDistributionBatch, rejectDistributionBatch,
   unlockBatch, getBatchDetail, getEventBatches,
-  getDistributionEvent, searchFarmers, updateEntry,
+  searchFarmers, updateEntry,
+  getAdminDistributionPending,
 } from '../../api/axios';
 import {
   Search, ChevronRight, ChevronLeft, CheckCircle,
@@ -90,11 +93,19 @@ const SignatureModal = ({ sig, onClose }) => {
   );
 };
 
+const TABS = [
+  { key: 'events', label: 'All Events', Icon: ClipboardList },
+  { key: 'pending', label: 'Pending Review', Icon: Clock },
+  { key: 'approved', label: 'Approved Batches', Icon: CheckCircle },
+];
+
 const AdminDistribution = () => {
+  const [activeTab, setActiveTab] = useState('events');
   // VIEW: 'landing' | 'brgy_detail' | 'batch_detail' | 'report' | 'farmer_detail'
   const [view, setView]               = useState('landing');
   const [events, setEvents]           = useState([]);
   const [stats, setStats]             = useState(null);
+  const [distPending, setDistPending] = useState([]);
   const [loading, setLoading]         = useState(true);
 
   // Landing search
@@ -155,13 +166,15 @@ const AdminDistribution = () => {
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
-      const [evRes, sRes] = await Promise.all([
+      const [evRes, sRes, dpRes] = await Promise.all([
         getDistributionEvents(),
         getDistributionStats(),
+        getAdminDistributionPending(),
       ]);
       const evData = evRes.data || [];
       setEvents(evData);
       setStats(sRes.data);
+      setDistPending(dpRes.data || []);
 
       // Group by barangay
       const groups = {};
@@ -354,11 +367,32 @@ const AdminDistribution = () => {
     }
   };
 
+  const handleApproveDistribution = async (batchId) => {
+    setActionLoading(p => ({ ...p, [batchId]: 'dist_approve' }));
+    try {
+      await approveDistributionBatch(batchId);
+      showToast('success', 'Distribution batch approved.');
+      fetchAll();
+      if (reportBatchId === batchId) {
+        const res = await getBatchDetail(batchId);
+        setReportBatchData(res.data);
+      }
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'Failed.');
+    } finally {
+      setActionLoading(p => ({ ...p, [batchId]: null }));
+    }
+  };
+
   const handleReject = async () => {
     if (!rejectReason.trim()) return;
     setActionLoading(p => ({ ...p, [rejectModal]: 'reject' }));
     try {
-      await rejectBatch(rejectModal, { reason: rejectReason });
+      if (rejectType === 'distribution') {
+        await rejectDistributionBatch(rejectModal, { reason: rejectReason });
+      } else {
+        await rejectBatch(rejectModal, { reason: rejectReason });
+      }
       setRejectModal(null);
       setRejectReason('');
       showToast('success', 'Batch rejected.');
@@ -393,6 +427,33 @@ const AdminDistribution = () => {
   const filteredBrgyGroups = Object.values(brgyGroups).filter(g =>
     !filterSeason || g.events.some(ev => ev.season === filterSeason)
   );
+
+  const pendingDistributionBatches = distPending.filter(batch => batch.distribution_status === 'SUBMITTED');
+  const approvedDistributionBatches = distPending.filter(batch => batch.distribution_status === 'APPROVED');
+
+  const pendingByBrgy = (() => {
+    const groups = {};
+    pendingDistributionBatches.forEach(batch => {
+      const ev = events.find(e => e.id === batch.event || e.id === batch.event_id);
+      if (!ev) return;
+      const key = ev.barangay;
+      if (!groups[key]) groups[key] = { barangay: ev.barangay, batches: [], firstEvent: ev };
+      groups[key].batches.push({ ...batch, _event: ev });
+    });
+    return Object.values(groups);
+  })();
+
+  const approvedByBrgy = (() => {
+    const groups = {};
+    approvedDistributionBatches.forEach(batch => {
+      const ev = events.find(e => e.id === batch.event || e.id === batch.event_id);
+      if (!ev) return;
+      const key = ev.barangay;
+      if (!groups[key]) groups[key] = { barangay: ev.barangay, batches: [], firstEvent: ev };
+      groups[key].batches.push({ ...batch, _event: ev });
+    });
+    return Object.values(groups);
+  })();
 
   // ─────────────────────────────────────────
   // LOADING
@@ -435,6 +496,14 @@ const AdminDistribution = () => {
       <Toast toast={toast} />
       <SignatureModal sig={viewSig} onClose={() => setViewSig(null)} />
 
+      <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb' }}>
+        {TABS.map(({ key, label, Icon }) => (
+          <button key={key} onClick={() => { setActiveTab(key); setView('landing'); }} style={{ flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === key ? 'white' : 'transparent', color: activeTab === key ? '#1a1a1a' : '#6b7280', fontWeight: activeTab === key ? 700 : 400, cursor: 'pointer', fontSize: '0.8rem', boxShadow: activeTab === key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem' }}>
+            <Icon size={14} /> {label}
+          </button>
+        ))}
+      </div>
+
       {/* ── BREADCRUMB ── */}
       {view !== 'landing' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '1.25rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
@@ -470,7 +539,7 @@ const AdminDistribution = () => {
       {/* ══════════════════════════════════════════
           VIEW: LANDING
       ══════════════════════════════════════════ */}
-      {view === 'landing' && (
+      {activeTab === 'events' && view === 'landing' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           {/* Header */}
           <div style={{ marginBottom: '1.5rem' }}>
@@ -596,7 +665,7 @@ const AdminDistribution = () => {
       {/* ══════════════════════════════════════════
           VIEW: BRGY DETAIL (show programs/events)
       ══════════════════════════════════════════ */}
-      {view === 'brgy_detail' && (
+      {activeTab === 'events' && view === 'brgy_detail' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ marginBottom: '1.25rem' }}>
             <h2 style={{ fontWeight: 800, fontSize: '1.25rem', color: '#1a1a1a', margin: 0 }}>Brgy. {selectedBrgy}</h2>
@@ -649,7 +718,7 @@ const AdminDistribution = () => {
       {/* ══════════════════════════════════════════
           VIEW: BATCH DETAIL (show batch cards)
       ══════════════════════════════════════════ */}
-      {view === 'batch_detail' && selectedEvent && (
+      {activeTab === 'events' && view === 'batch_detail' && selectedEvent && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           {/* Event header */}
           <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', color: 'white' }}>
@@ -702,7 +771,7 @@ const AdminDistribution = () => {
       {/* ══════════════════════════════════════════
           VIEW: REPORT (Distribution masterlist)
       ══════════════════════════════════════════ */}
-      {view === 'report' && selectedEvent && (
+      {activeTab === 'events' && view === 'report' && selectedEvent && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           {/* Header */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
@@ -868,7 +937,7 @@ const AdminDistribution = () => {
       {/* ══════════════════════════════════════════
           VIEW: FARMER DETAIL (Admin encodes QTY/dist data)
       ══════════════════════════════════════════ */}
-      {view === 'farmer_detail' && selectedEntry && (
+      {activeTab === 'events' && view === 'farmer_detail' && selectedEntry && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           {/* Farmer info */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
@@ -1002,6 +1071,74 @@ const AdminDistribution = () => {
         </div>
       )}
 
+      {activeTab === 'pending' && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          {pendingByBrgy.length === 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', border: '1px solid #f3f4f6' }}>
+              <CheckCircle size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No pending distribution batches</p>
+            </div>
+          ) : pendingByBrgy.map(group => (
+            <div key={group.barangay} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div>
+                  <p style={{ fontWeight: 800, margin: 0, color: '#1a1a1a' }}>Brgy. {group.barangay}</p>
+                  <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{group.batches.length} distribution batch(es) submitted for review</p>
+                </div>
+                <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700 }}>Distribution: Submitted</span>
+              </div>
+              {group.batches.map(batch => (
+                <div key={batch.id} style={{ borderTop: '1px solid #f3f4f6', paddingTop: '0.75rem', marginTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Batch {batch.batch_number}</p>
+                      <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{batch._event?.organization_name} · {batch.entry_count} farmers</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      <button onClick={() => { setActiveTab('events'); setView('report'); setSelectedEvent(batch._event); setSelectedBatch(batch); setReportBatchId(batch.id); openBatchReport(batch); }} style={{ padding: '0.5rem 0.875rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Eye size={13} /> View</button>
+                      <button onClick={() => setConfirmAction({ batchId: batch.id, batchNumber: batch.batch_number, type: 'distribution' })} style={{ padding: '0.5rem 0.875rem', backgroundColor: GREEN.soft, color: GREEN.accent, border: '1px solid ' + GREEN.border, borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}><CheckCircle size={13} /> Approve</button>
+                      <button onClick={() => { setRejectType('distribution'); setRejectModal(batch.id); setRejectReason(''); }} style={{ padding: '0.5rem 0.875rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}><XCircle size={13} /> Reject</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'approved' && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          {approvedByBrgy.length === 0 ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', border: '1px solid #f3f4f6' }}>
+              <CheckCircle size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No approved distribution batches yet</p>
+            </div>
+          ) : approvedByBrgy.map(group => (
+            <div key={group.barangay} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginBottom: '0.875rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <div>
+                  <p style={{ fontWeight: 800, margin: 0, color: '#1a1a1a' }}>Brgy. {group.barangay}</p>
+                  <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{group.batches.length} distribution-approved batch(es)</p>
+                </div>
+                <span style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 700, border: '1px solid ' + GREEN.border }}>Distribution: Approved</span>
+              </div>
+              {group.batches.map(batch => (
+                <div key={batch.id} style={{ borderTop: '1px solid #f3f4f6', paddingTop: '0.75rem', marginTop: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div>
+                      <p style={{ fontWeight: 700, color: '#1a1a1a', margin: 0 }}>Batch {batch.batch_number}</p>
+                      <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{batch._event?.organization_name} · {batch.entry_count} farmers</p>
+                    </div>
+                    <button onClick={() => { setActiveTab('events'); setView('report'); setSelectedEvent(batch._event); setSelectedBatch(batch); setReportBatchId(batch.id); openBatchReport(batch); }} style={{ padding: '0.5rem 0.875rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Eye size={13} /> View</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── CONFIRM APPROVE ── */}
       {confirmAction && (
         <div style={{ position: 'fixed', left: '50%', bottom: '1rem', transform: 'translateX(-50%)', zIndex: 650, width: 'min(100%, 420px)', animation: 'slideUp 0.25s ease' }}>
@@ -1017,7 +1154,7 @@ const AdminDistribution = () => {
             </div>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button onClick={() => setConfirmAction(null)} style={{ flex: 1, padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#374151', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={async () => { setConfirmAction(null); await handleApprove(confirmAction.batchId); }} style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', backgroundColor: GREEN.primary, color: 'white', fontWeight: 700, cursor: 'pointer' }}>Confirm Approve</button>
+              <button onClick={async () => { setConfirmAction(null); if (confirmAction.type === 'distribution') { await handleApproveDistribution(confirmAction.batchId); } else { await handleApprove(confirmAction.batchId); } }} style={{ flex: 2, padding: '0.75rem', borderRadius: '0.75rem', border: 'none', backgroundColor: GREEN.primary, color: 'white', fontWeight: 700, cursor: 'pointer' }}>Confirm Approve</button>
             </div>
           </div>
         </div>

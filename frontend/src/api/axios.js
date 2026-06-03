@@ -170,6 +170,7 @@ export const getCropMonitoringBarangaySummary = () => API.get('/crop-monitoring/
 
 // Admin
 export const getAdminPendingBatches = ()       => API.get('/distribution/admin/pending/');
+export const getAdminDistributionPending = () => API.get('/distribution/admin/distribution-pending/');
 export const getDistributionStats   = ()       => API.get('/distribution/admin/stats/');
 export const confirmSeedDelivery    = (eventId) => API.post(`/distribution/events/${eventId}/confirm-delivery/`);
 

@@ -1051,6 +1051,34 @@ class AdminPendingBatchesView(APIView):
         return Response(serializer.data)
 
 
+class AdminDistributionPendingView(APIView):
+    """
+    GET /api/distribution/admin/distribution-pending/
+    Returns distribution-review batches with distribution_status in SUBMITTED/APPROVED.
+    Used by AdminDistribution.jsx for Pending Review and Approved Batches tabs.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if request.user.role == 'BRGY':
+            brgy = getattr(request.user, 'barangay', None)
+            if not brgy:
+                return Response({"error": "No barangay assigned."}, status=400)
+            batches = DistributionBatch.objects.filter(
+                distribution_status__in=['SUBMITTED', 'APPROVED'],
+                event__barangay=brgy,
+            ).select_related('event', 'encoded_by').order_by('-distribution_submitted_at', '-distribution_approved_at')
+        elif request.user.role == 'ADMIN':
+            batches = DistributionBatch.objects.filter(
+                distribution_status__in=['SUBMITTED', 'APPROVED']
+            ).select_related('event', 'encoded_by').order_by('-distribution_submitted_at', '-distribution_approved_at')
+        else:
+            return Response({"error": "Access denied."}, status=403)
+
+        serializer = DistributionBatchListSerializer(batches, many=True)
+        return Response(serializer.data)
+
+
 class AdminDistributionStatsView(APIView):
     """
     GET /api/distribution/admin/stats/
