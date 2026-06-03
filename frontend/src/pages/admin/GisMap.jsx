@@ -313,7 +313,7 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers }) => {
 // ─── UTIL SEED TYPE CARD (CROP UTILIZATION) ───────────────────
 // Shows tier breakdown (Master Farmer / Exceptional / Normal etc)
 // for one seed type in one barangay (or all brgys for overview)
-const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate }) => {
+const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers, totalApprovedFarmers }) => {
   const cfg = SEED_TYPE_MAP[seedKey] || { label: seedKey, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' };
   const [animated, setAnimated] = useState(false);
 
@@ -369,13 +369,29 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate }) => {
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: dominant.color }}>{dominant.label}</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>{dominant.percent}%</span>
+            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>
+              {totalApprovedFarmers > 0
+                ? `${Math.round((encodedFarmers / totalApprovedFarmers) * 100)}%`
+                : `${dominant.percent}%`}
+            </span>
           </div>
           <div style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: animated ? `${Math.max(2, dominant.percent)}%` : '0%', backgroundColor: dominant.color, borderRadius: '999px', transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)' }} />
+            <div
+              style={{
+                height: '100%',
+                width: animated ? `${totalApprovedFarmers > 0
+                  ? Math.max(2, Math.round((encodedFarmers / totalApprovedFarmers) * 100))
+                  : Math.max(2, dominant.percent)}%` : '0%',
+                backgroundColor: dominant.color,
+                borderRadius: '999px',
+                transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)',
+              }}
+            />
           </div>
           <p style={{ margin: '0.4rem 0 0', fontSize: '0.65rem', color: '#64748b' }}>
-            {dominant.count} of {total} farmer{total !== 1 ? 's' : ''}
+            {totalApprovedFarmers > 0
+              ? `${encodedFarmers} of ${totalApprovedFarmers} approved farmers encoded`
+              : `${dominant.count} of ${total} farmer${total !== 1 ? 's' : ''}`}
           </p>
         </div>
       )}
@@ -545,6 +561,8 @@ const UtilizationOverviewPanel = ({ harvestRecords, animate }) => {
               tierCounts={globalSeedTierCounts[st.key]?.tierCounts || {}}
               total={globalSeedTierCounts[st.key]?.total || 0}
               animate={animate}
+              encodedFarmers={harvestRecords ? [...new Set(harvestRecords.map(r => r.farmer))].length : 0}
+              totalApprovedFarmers={0}
             />
           ))
         )}
@@ -612,8 +630,16 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
   const headerBadgeColor = activeTab === 'utilization'
     ? (utilTier?.color || '#94a3b8')
     : (dominantPhase ? phaseColor(dominantPhase) : '#94a3b8');
+
+  const totalApprovedInBrgy = approvedCounts?.[barangayName] || 0;
+  const encodingProgressPct = totalApprovedInBrgy > 0
+    ? Math.round((encodedCount / totalApprovedInBrgy) * 100)
+    : 0;
+
   const headerBadgeLabel = activeTab === 'utilization'
-    ? (brgyAvgUtil !== null ? `${fmtNum(brgyAvgUtil, 1)}% · ${utilTier?.label}` : 'No harvest data')
+    ? (totalApprovedInBrgy > 0
+        ? `${encodedCount}/${totalApprovedInBrgy} farmers · ${encodingProgressPct}% encoded`
+        : encodedCount > 0 ? `${encodedCount} farmers encoded` : 'No harvest data')
     : (dominantPhase ? `Dominant: ${dominantPhase}` : 'No phase data yet');
 
   return (
@@ -652,9 +678,9 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
                 </div>
               ))
             : [
-                { label: 'Farmers',        value: encodedCount > 0 ? `${encodedCount}` : '—' },
-                { label: 'Production',     value: harvestMT > 0 ? `${fmtNum(harvestMT)} MT` : '—' },
-                { label: 'Area harvested', value: harvestArea > 0 ? `${fmtNum(harvestArea)} ha` : '—' },
+                { label: 'Farmers encoded', value: (() => { const total = approvedCounts?.[barangayName] || 0; return total > 0 ? `${encodedCount}/${total}` : `${encodedCount}`; })() },
+                { label: 'Production',      value: harvestMT > 0 ? `${fmtNum(harvestMT)} MT` : '—' },
+                { label: 'Area harvested',  value: harvestArea > 0 ? `${fmtNum(harvestArea)} ha` : '—' },
               ].map(item => (
                 <div key={item.label} style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: '0.75rem', padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'white' }}>{item.value}</p>
@@ -663,6 +689,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
               ))
           }
         </div>
+
       </div>
 
       {/* SCROLLABLE BODY */}
@@ -700,6 +727,8 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
                   tierCounts={brgySeedTierCounts[st.key]?.tierCounts || {}}
                   total={brgySeedTierCounts[st.key]?.total || 0}
                   animate={animate}
+                  encodedFarmers={encodedCount}
+                  totalApprovedFarmers={totalApprovedInBrgy}
                 />
               ))}
             </>
