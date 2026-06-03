@@ -15,6 +15,8 @@ from .views import (
     SeedVarietyListView,
     DeletePollView,
     FinalSeedListCreateView,
+    GISActivePollView,
+    GISAllPollsView,
 )
 
 urlpatterns = [
@@ -35,6 +37,10 @@ urlpatterns = [
 
     # SHARED
     path('varieties/', SeedVarietyListView.as_view(), name='variety-list'),
+
+    # GIS
+    path('gis-active-poll/', GISActivePollView.as_view(), name='gis-active-poll'),
+    path('gis-all-polls/', GISAllPollsView.as_view(), name='gis-all-polls'),
 
     # FARMER
     path('active/', FarmerActivePollView.as_view(), name='farmer-active-poll'),

@@ -43,6 +43,15 @@ class GISPlotsView(APIView):
 
     def get(self, request):
         barangay_filter = request.query_params.get('barangay', '')
+        poll_id_param = request.query_params.get('poll_id', None)
+
+        # ── SEASON/YEAR FILTER from selected poll ──
+        from apps.seed_poll.models import Poll
+        from django.utils import timezone as tz
+
+        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else Poll.objects.order_by('-created_at').first()
+        poll_year = active_poll.year if active_poll else None
+        poll_season = active_poll.season if active_poll else None
 
         # Get ALL monitoring records, ordered by farmer + seed_source + latest date
         records_qs = CropMonitoringRecord.objects.select_related(
@@ -51,6 +60,19 @@ class GISPlotsView(APIView):
 
         if barangay_filter:
             records_qs = records_qs.filter(barangay__iexact=barangay_filter)
+
+        if poll_year and poll_season:
+            if poll_season == 'WET':
+                records_qs = records_qs.filter(
+                    date_observed__year=poll_year,
+                    date_observed__month__gte=5,
+                    date_observed__month__lte=10,
+                )
+            elif poll_season == 'DRY':
+                records_qs = records_qs.filter(
+                    Q(date_observed__year=poll_year - 1, date_observed__month__gte=11) |
+                    Q(date_observed__year=poll_year, date_observed__month__lte=4)
+                )
 
         # Build one entry per farmer+seed_source combination (latest record per combo)
         seen = {}
@@ -136,6 +158,19 @@ class GISPlotsView(APIView):
                 Q(qty_bags__isnull=False) |
                 Q(date_received__isnull=False)
             )
+
+            if poll_year and poll_season:
+                if poll_season == 'WET':
+                    dist_entries = dist_entries.filter(
+                        batch__approved_at__year=poll_year,
+                        batch__approved_at__month__gte=5,
+                        batch__approved_at__month__lte=10,
+                    )
+                elif poll_season == 'DRY':
+                    dist_entries = dist_entries.filter(
+                        Q(batch__approved_at__year=poll_year - 1, batch__approved_at__month__gte=11) |
+                        Q(batch__approved_at__year=poll_year, batch__approved_at__month__lte=4)
+                    )
             if barangay_filter:
                 dist_entries = dist_entries.filter(farmer__barangay__iexact=barangay_filter)
 
@@ -395,11 +430,50 @@ class GISMapSummaryView(APIView):
 
     def get(self, request):
         from django.utils import timezone
+        from apps.seed_poll.models import Poll
+        poll_id_param = request.query_params.get('poll_id', None)
+        from django.db.models import Q
+
+        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else Poll.objects.order_by('-created_at').first()
+        poll_year = active_poll.year if active_poll else None
+        poll_season = active_poll.season if active_poll else None
+
+        def monitoring_season_filter(qs):
+            if not poll_year or not poll_season:
+                return qs
+            if poll_season == 'WET':
+                return qs.filter(
+                    date_observed__year=poll_year,
+                    date_observed__month__gte=5,
+                    date_observed__month__lte=10,
+                )
+            if poll_season == 'DRY':
+                return qs.filter(
+                    Q(date_observed__year=poll_year - 1, date_observed__month__gte=11) |
+                    Q(date_observed__year=poll_year, date_observed__month__lte=4)
+                )
+            return qs
+
+        def distribution_season_filter(qs):
+            if not poll_year or not poll_season:
+                return qs
+            if poll_season == 'WET':
+                return qs.filter(
+                    batch__approved_at__year=poll_year,
+                    batch__approved_at__month__gte=5,
+                    batch__approved_at__month__lte=10,
+                )
+            if poll_season == 'DRY':
+                return qs.filter(
+                    Q(batch__approved_at__year=poll_year - 1, batch__approved_at__month__gte=11) |
+                    Q(batch__approved_at__year=poll_year, batch__approved_at__month__lte=4)
+                )
+            return qs
 
         try:
             # Unique farmers being monitored (regardless of seed source)
             monitored_farmer_ids = set(
-                CropMonitoringRecord.objects
+                monitoring_season_filter(CropMonitoringRecord.objects)
                 .values_list('farmer_id', flat=True)
                 .distinct()
             )
@@ -411,11 +485,13 @@ class GISMapSummaryView(APIView):
 
         try:
             distributed_farmer_ids = set(
-                DistributionEntry.objects.filter(
-                    batch__status='APPROVED'
-                ).filter(
-                    Q(qty_bags__isnull=False) |
-                    Q(date_received__isnull=False)
+                distribution_season_filter(
+                    DistributionEntry.objects.filter(
+                        batch__status='APPROVED'
+                    ).filter(
+                        Q(qty_bags__isnull=False) |
+                        Q(date_received__isnull=False)
+                    )
                 ).values_list('farmer_id', flat=True)
                 .distinct()
             )
@@ -436,7 +512,7 @@ class GISMapSummaryView(APIView):
 
         try:
             active_barangays = list(
-                CropMonitoringRecord.objects
+                monitoring_season_filter(CropMonitoringRecord.objects)
                 .values_list('barangay', flat=True)
                 .distinct().order_by('barangay')
             )
@@ -447,11 +523,13 @@ class GISMapSummaryView(APIView):
 
         try:
             dist_barangays = list(
-                DistributionEntry.objects.filter(
-                    batch__status='APPROVED'
-                ).filter(
-                    Q(qty_bags__isnull=False) |
-                    Q(date_received__isnull=False)
+                distribution_season_filter(
+                    DistributionEntry.objects.filter(
+                        batch__status='APPROVED'
+                    ).filter(
+                        Q(qty_bags__isnull=False) |
+                        Q(date_received__isnull=False)
+                    )
                 ).values_list('farmer__barangay', flat=True)
                 .distinct().order_by('farmer__barangay')
             )
@@ -476,9 +554,9 @@ class GISMapSummaryView(APIView):
         try:
             seed_breakdown = {}
             seen_combos = set()
-            for rec in CropMonitoringRecord.objects.order_by(
-                'farmer_id', 'seed_source', '-date_observed'
-            ):
+            for rec in monitoring_season_filter(
+                CropMonitoringRecord.objects
+            ).order_by('farmer_id', 'seed_source', '-date_observed'):
                 src = rec.seed_source or 'UNKNOWN'
                 combo = f"{rec.farmer_id}__{src}"
                 if combo in seen_combos:
@@ -494,11 +572,13 @@ class GISMapSummaryView(APIView):
                 seed_breakdown[src]['total_farmers'] += 1
                 seed_breakdown[src]['phases'][phase] = seed_breakdown[src]['phases'].get(phase, 0) + 1
 
-            for entry in DistributionEntry.objects.filter(
-                batch__status='APPROVED'
-            ).filter(
-                Q(qty_bags__isnull=False) |
-                Q(date_received__isnull=False)
+            for entry in distribution_season_filter(
+                DistributionEntry.objects.filter(
+                    batch__status='APPROVED'
+                ).filter(
+                    Q(qty_bags__isnull=False) |
+                    Q(date_received__isnull=False)
+                )
             ).select_related('batch__event__seed_type').order_by('farmer_id', '-batch__approved_at'):
                 src = 'OWN_SEED'
                 seed_type_name = None
@@ -544,19 +624,20 @@ class GISMapSummaryView(APIView):
 class GISBarangaysView(APIView):
     """
     GET /api/gis/barangays/
-    All barangays with approved farmers for the filter dropdown.
+    Returns all 22 Lucban barangays for the filter dropdown.
     """
     permission_classes = [IsAuthenticated]
 
+    LUCBAN_BARANGAYS = [
+        'Abang', 'Aliliw', 'Atulinao', 'Ayuti', 'Igang', 'Kabatete',
+        'Kakawit', 'Kalangay', 'Kalyaat', 'Kilib', 'Kulapi',
+        'Mahabang Parang', 'Malupak', 'Manasa', 'May-It', 'Nagsinamo',
+        'Nalunao', 'Palola', 'Piis', 'Samil', 'Tiawe', 'Tinamnan',
+    ]
+
     def get(self, request):
         try:
-            barangays = list(
-                User.objects.filter(
-                    role='FARMER', status='APPROVED', is_active=True
-                ).values_list('barangay', flat=True)
-                .distinct().order_by('barangay')
-            )
-            return Response([b for b in barangays if b])
+            return Response(sorted(self.LUCBAN_BARANGAYS))
         except Exception as e:
             logger.error(f'GIS barangays error: {e}')
             return Response([])

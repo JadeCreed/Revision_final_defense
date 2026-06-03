@@ -78,6 +78,75 @@ const SignatureModal = ({ sig, onClose }) => {
   );
 };
 
+const TabbedSeedPanel = ({ activeTab, onTabChange, inbredEntry, hybridEntry, inbredForm, hybridForm, setInbredForm, setHybridForm, inbredErrors, hybridErrors, setInbredErrors, setHybridErrors, inbredSaving, hybridSaving, handleSaveInbred, handleSaveHybrid, inp }) => {
+  const tabs = [
+    { id: 'inbred', label: 'Inbred', subtitle: 'PhilRice', accent: GREEN.primary, soft: GREEN.light, border: GREEN.border },
+    { id: 'hybrid', label: 'Hybrid', subtitle: 'Region', accent: '#1e40af', soft: '#eff6ff', border: '#bfdbfe' },
+  ];
+
+  return (
+    <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e5e7eb', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', padding: '0.75rem', borderBottom: '1px solid #f3f4f6', backgroundColor: '#fafafa', flexWrap: 'wrap' }}>
+        {tabs.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              style={{
+                flex: '1 1 160px',
+                minHeight: '52px',
+                borderRadius: '0.75rem',
+                border: `1.5px solid ${isActive ? tab.border : '#e5e7eb'}`,
+                backgroundColor: isActive ? tab.soft : 'white',
+                color: isActive ? tab.accent : '#374151',
+                padding: '0.625rem 0.75rem',
+                textAlign: 'left',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.125rem',
+                fontWeight: 700,
+                boxShadow: isActive ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',
+              }}
+            >
+              <span style={{ fontSize: '0.85rem' }}>{tab.label}</span>
+              <span style={{ fontSize: '0.72rem', color: isActive ? tab.accent : '#9ca3af', fontWeight: 600 }}>{tab.subtitle}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ padding: '1rem' }}>
+        {activeTab === 'inbred' ? (
+          <InbredPanel
+            entry={inbredEntry}
+            form={inbredForm}
+            setForm={setInbredForm}
+            errors={inbredErrors}
+            setErrors={setInbredErrors}
+            saving={inbredSaving}
+            onSave={handleSaveInbred}
+            inp={inp}
+          />
+        ) : (
+          <HybridPanel
+            entry={hybridEntry}
+            form={hybridForm}
+            setForm={setHybridForm}
+            errors={hybridErrors}
+            setErrors={setHybridErrors}
+            saving={hybridSaving}
+            onSave={handleSaveHybrid}
+            inp={inp}
+          />
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ── Inbred Form Panel ──
 const InbredPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, onCancel, inp }) => {
   const isEncoded = entry?.is_distribution_encoded;
@@ -301,6 +370,7 @@ const BrgyDistribution = () => {
   const [hybridSaving, setHybridSaving] = useState(false);
   const [confirmSnack, setConfirmSnack] = useState(null);
   const [pendingSave, setPendingSave] = useState(null);
+  const [activeSeedTab, setActiveSeedTab] = useState('inbred');
 
   // Report view
   const [reportView, setReportView] = useState(false);
@@ -776,42 +846,29 @@ const BrgyDistribution = () => {
                 </div>
               </div>
 
-              {/* Two panels — responsive */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'row',
-                gap: '1rem',
-                flexWrap: 'wrap',
-              }}>
-                <style>{`
-                  @media (max-width: 640px) {
-                    .dist-panels { flex-direction: column !important; }
-                  }
-                `}</style>
-                <div className="dist-panels" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', flexWrap: 'wrap' }}>
-                  {/* Inbred panel */}
-                  <InbredPanel
-                    entry={farmerDetail.seed_entries?.find(e => isInbred(e.seed_type_name))}
-                    form={inbredForm}
-                    setForm={setInbredForm}
-                    errors={inbredErrors}
-                    setErrors={setInbredErrors}
-                    saving={inbredSaving}
-                    onSave={handleSaveInbred}
-                    inp={inp}
-                  />
-                  {/* Hybrid panel */}
-                  <HybridPanel
-                    entry={farmerDetail.seed_entries?.find(e => isHybrid(e.seed_type_name))}
-                    form={hybridForm}
-                    setForm={setHybridForm}
-                    errors={hybridErrors}
-                    setErrors={setHybridErrors}
-                    saving={hybridSaving}
-                    onSave={handleSaveHybrid}
-                    inp={inp}
-                  />
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <TabbedSeedPanel
+                  activeTab={activeSeedTab}
+                  onTabChange={setActiveSeedTab}
+                  inbredEntry={farmerDetail.seed_entries?.find(e => isInbred(e.seed_type_name))}
+                  hybridEntry={farmerDetail.seed_entries?.find(e => isHybrid(e.seed_type_name))}
+                  inbredForm={inbredForm}
+                  hybridForm={hybridForm}
+                  setInbredForm={setInbredForm}
+                  setHybridForm={setHybridForm}
+                  inbredErrors={inbredErrors}
+                  hybridErrors={hybridErrors}
+                  setInbredErrors={setInbredErrors}
+                  setHybridErrors={setHybridErrors}
+                  inbredSaving={inbredSaving}
+                  hybridSaving={hybridSaving}
+                  handleSaveInbred={handleSaveInbred}
+                  handleSaveHybrid={handleSaveHybrid}
+                  inp={inp}
+                />
+                <p style={{ margin: 0, fontSize: '0.72rem', color: '#9ca3af' }}>
+                  Switch tabs to review or update each seed type without losing your input.
+                </p>
               </div>
             </>
           ) : (

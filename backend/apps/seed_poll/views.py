@@ -311,6 +311,59 @@ class AdminPollResultsView(APIView):
 # FARMER VIEWS
 # ═══════════════════════════════════════════════════════════
 
+class GISActivePollView(APIView):
+    """
+    GET /api/seed-poll/gis-active-poll/
+    Returns the latest poll info used by GIS to detect the active season/year.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        latest_poll = Poll.objects.order_by('-created_at').first()
+        if not latest_poll:
+            return Response({
+                'poll_id': None,
+                'season': None,
+                'year': None,
+                'season_display': None,
+                'status': None,
+                'poll_key': None,
+            })
+
+        return Response({
+            'poll_id': latest_poll.id,
+            'season': latest_poll.season,
+            'year': latest_poll.year,
+            'season_display': latest_poll.get_season_display(),
+            'status': latest_poll.status,
+            'poll_key': f"{latest_poll.year}-{latest_poll.season}",
+        })
+
+
+class GISAllPollsView(APIView):
+    """
+    GET /api/seed-poll/gis-all-polls/
+    Returns all polls for GIS season/history selector.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        polls = Poll.objects.order_by('-year', '-created_at')
+        result = []
+        for poll in polls:
+            result.append({
+                'poll_id': poll.id,
+                'season': poll.season,
+                'year': poll.year,
+                'season_display': poll.get_season_display(),
+                'status': poll.status,
+                'poll_key': f"{poll.year}-{poll.season}",
+                'label': f"{poll.get_season_display()} {poll.year}",
+                'created_at': poll.created_at.isoformat(),
+            })
+        return Response(result)
+
+
 class FarmerActivePollView(APIView):
     """
     GET /api/seed-poll/active/

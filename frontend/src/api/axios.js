@@ -105,6 +105,7 @@ export const getSeedVarieties     = ()         => API.get('/seed-poll/varieties/
 
 // Farmer
 export const getActivePoll        = ()         => API.get('/seed-poll/active/');
+export const getGisActivePoll     = ()         => API.get('/seed-poll/gis-active-poll/');
 export const submitVote           = (id, data) => API.post(`/seed-poll/${id}/vote/`, data);
 
 // BRGY
@@ -203,8 +204,9 @@ export const getGisPlots    = (params) => API.get('/gis/plots/', { params });
 export const createGisPlot  = (data)   => API.post('/gis/plots/', data);
 export const updateGisPlot  = (id, d)  => API.patch(`/gis/plots/${id}/`, d);
 export const deleteGisPlot  = (id)     => API.delete(`/gis/plots/${id}/`);
-export const getMapSummary  = ()       => API.get('/gis/summary/');
+export const getMapSummary  = (params = {}) => API.get('/gis/summary/', { params });
 export const getGisBarangays= ()       => API.get('/gis/barangays/');
+export const getGisAllPolls = ()       => API.get('/seed-poll/gis-all-polls/');
 
 // ── PRODUCTION ──
 export const getHarvestRecords        = (params = {}) => API.get('/production/harvest/', { params });
