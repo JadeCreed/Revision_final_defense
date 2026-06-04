@@ -120,6 +120,7 @@ const SeedPoll = () => {
   const [actionLoading, setActionLoading]   = useState({});
   const [activePollExists, setActivePollExists] = useState(false);
   const [deletingPollId, setDeletingPollId] = useState(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [closeConfirmId, setCloseConfirmId] = useState(null);
 
   const [form, setForm] = useState({ title: '', season: getDetectedSeason(), year: new Date().getFullYear(), end_date: '' });
@@ -331,7 +332,12 @@ const SeedPoll = () => {
   };
 
   const handleDeletePoll = async (pollId) => {
-    if (!window.confirm('Permanently delete this poll? This cannot be undone.')) return;
+    setDeleteConfirmId(pollId);
+  };
+
+  const doDeletePoll = async () => {
+    const pollId = deleteConfirmId;
+    setDeleteConfirmId(null);
     setDeletingPollId(pollId);
     try {
       await deletePoll(pollId);
@@ -1196,6 +1202,30 @@ const SeedPoll = () => {
                 ) : (
                   <><CheckCircle size={18} /> Confirm Final Seeds</>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════ DELETE POLL CONFIRM MODAL ══════════════ */}
+      {deleteConfirmId && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 260, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ width: '100%', maxWidth: '420px', backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '56px', height: '56px', borderRadius: '999px', backgroundColor: '#fef2f2', color: '#dc2626', margin: '0 auto 0.75rem' }}>
+              <Leaf size={24} />
+            </div>
+            <h3 style={{ margin: '0 0 0.5rem', textAlign: 'center', fontSize: '1.1rem', fontWeight: 800, color: '#111827' }}>Delete this poll?</h3>
+            <p style={{ margin: '0 0 0.75rem', textAlign: 'center', color: '#4b5563', fontSize: '0.9rem', lineHeight: 1.5 }}>This action is permanent and cannot be undone.</p>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', backgroundColor: '#f3f4f6', color: '#374151', borderRadius: '999px', padding: '0.35rem 0.6rem', fontSize: '0.75rem', fontWeight: 700 }}>
+                {polls.find(p => p.id === deleteConfirmId)?.title || 'Selected Poll'}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setDeleteConfirmId(null)} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#374151' }}>Cancel</button>
+              <button onClick={doDeletePoll} disabled={deletingPollId === deleteConfirmId} style={{ flex: 1, padding: '0.75rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.75rem', cursor: deletingPollId === deleteConfirmId ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.875rem', opacity: deletingPollId === deleteConfirmId ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem' }}>
+                {deletingPollId === deleteConfirmId ? 'Deleting...' : 'Delete Permanently'}
               </button>
             </div>
           </div>

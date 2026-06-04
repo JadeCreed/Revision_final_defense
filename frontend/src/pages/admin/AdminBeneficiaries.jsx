@@ -108,7 +108,7 @@ const AdminBeneficiaries = () => {
 
   // ── Pending drill-down ──
   const [pendingView, setPendingView]       = useState('brgy_list');
-  const [selectedEvent, setSelectedEvent]   = useState(null);
+  const [selectedBrgyGroup, setSelectedBrgyGroup] = useState(null);
 
   // ── Approved tab ──
   const [approvedByBrgy, setApprovedByBrgy] = useState({});
@@ -198,8 +198,18 @@ const AdminBeneficiaries = () => {
       const event = events.find(ev => ev.id === batch.event || ev.id === batch.event_id);
       if (!event) return;
       const key = event.barangay;
-      if (!groups[key]) groups[key] = { barangay: event.barangay, batches: [], firstEvent: event };
+      if (!groups[key]) {
+        groups[key] = {
+          barangay: event.barangay,
+          batches: [],
+          events: [],
+          firstEvent: event,
+        };
+      }
       groups[key].batches.push(batch);
+      if (!groups[key].events.find(e => e.id === event.id)) {
+        groups[key].events.push(event);
+      }
     });
     return Object.values(groups);
   })();
@@ -397,7 +407,7 @@ const AdminBeneficiaries = () => {
           <button key={key}
             onClick={() => {
               setActiveTab(key);
-              if (key === 'pending') { setPendingView('brgy_list'); setSelectedEvent(null); }
+              if (key === 'pending') { setPendingView('brgy_list'); setSelectedBrgyGroup(null); }
               if (key === 'approved') { setApprovedView('brgy_list'); setSelectedApprovedBrgy(null); }
             }}
             style={{
@@ -414,7 +424,13 @@ const AdminBeneficiaries = () => {
             <Icon size={14} />
             {label}
             {key === 'pending' && pending.length > 0 && (
-              <span style={{ backgroundColor: '#854d0e', color: 'white', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>
+              <span style={{
+                backgroundColor: '#dc2626', color: 'white',
+                borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700,
+                padding: '0px 6px', minWidth: 18, height: 16,
+                display: 'inline-flex', alignItems: 'center',
+                justifyContent: 'center', lineHeight: 1,
+              }}>
                 {pending.length}
               </span>
             )}
@@ -555,15 +571,15 @@ const AdminBeneficiaries = () => {
       {activeTab === 'pending' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           {/* Sub-nav breadcrumb */}
-          {pendingView === 'batch_list' && selectedEvent && (
+          {pendingView === 'batch_list' && selectedBrgyGroup && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
-              <button onClick={() => { setPendingView('brgy_list'); setSelectedEvent(null); }}
+              <button onClick={() => { setPendingView('brgy_list'); setSelectedBrgyGroup(null); }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN.primary, fontWeight: 700, fontSize: '0.8rem', padding: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
                 <ChevronLeft size={14} /> Pending Review
               </button>
               <ChevronRight size={12} color="#9ca3af" />
               <span style={{ color: '#374151', fontWeight: 700 }}>
-                {selectedEvent.barangay} — {selectedEvent.organization_name}
+                {selectedBrgyGroup.barangay} — {selectedBrgyGroup.firstEvent?.organization_name}
               </span>
             </div>
           )}
@@ -581,7 +597,7 @@ const AdminBeneficiaries = () => {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
                   {pendingByBrgy.map((group, idx) => (
                     <div key={group.barangay} className="card-hover"
-                      onClick={() => { setSelectedEvent(group.firstEvent); setPendingView('batch_list'); }}
+                      onClick={() => { setSelectedBrgyGroup(group); setPendingView('batch_list'); }}
                       style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', cursor: 'pointer', border: `1px solid ${GREEN.border}`, animation: `slideUp ${0.3 + idx * 0.05}s ease` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem' }}>
                         <div>
@@ -595,10 +611,16 @@ const AdminBeneficiaries = () => {
                           </p>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
-                          <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#854d0e', margin: 0, lineHeight: 1 }}>{group.batches.length}</p>
-                            <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>batch{group.batches.length !== 1 ? 'es' : ''} pending</p>
-                          </div>
+                          <span style={{
+                            backgroundColor: '#fef9c3', color: '#854d0e',
+                            border: '1px solid #fde68a', borderRadius: '999px',
+                            fontSize: '0.72rem', fontWeight: 700,
+                            padding: '0.25rem 0.75rem', whiteSpace: 'nowrap',
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            lineHeight: 1.1,
+                          }}>
+                            {group.batches.length} batch{group.batches.length !== 1 ? 'es' : ''} pending
+                          </span>
                           <ChevronRight size={20} color="#9ca3af" />
                         </div>
                       </div>
@@ -610,72 +632,94 @@ const AdminBeneficiaries = () => {
           )}
 
           {/* Batch list view */}
-          {pendingView === 'batch_list' && selectedEvent && (() => {
-            const evBatches = pending.filter(b => b.event === selectedEvent.id || b.event_id === selectedEvent.id);
-            const evH = isHybrid(selectedEvent.seed_type_name || selectedEvent.intervention || '');
+          {pendingView === 'batch_list' && selectedBrgyGroup && (() => {
+            const allEventIds = selectedBrgyGroup.events.map(e => e.id);
+            const allBrgyBatches = pending.filter(b =>
+              allEventIds.includes(b.event) || allEventIds.includes(b.event_id)
+            );
+
             return (
               <div style={{ animation: 'fadeIn 0.2s ease' }}>
-                {/* Event header */}
                 <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', color: 'white' }}>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
                     <div>
                       <p style={{ fontSize: '0.72rem', opacity: 0.75, margin: '0 0 0.25rem', fontWeight: 700, textTransform: 'uppercase' }}>
-                        {selectedEvent.intervention} · {selectedEvent.season_display} {selectedEvent.year}
+                        {selectedBrgyGroup.firstEvent?.season_display} {selectedBrgyGroup.firstEvent?.year}
                       </p>
-                      <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{selectedEvent.organization_name}</h2>
+                      <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>{selectedBrgyGroup.firstEvent?.organization_name}</h2>
                       <p style={{ fontSize: '0.72rem', opacity: 0.7, margin: '0.25rem 0 0' }}>
-                        Brgy. {selectedEvent.barangay}{selectedEvent.variety_name ? ` · ${selectedEvent.variety_name}` : ''}
+                        Brgy. {selectedBrgyGroup.barangay}
                       </p>
                     </div>
-                    <span style={{ backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', borderRadius: '999px', padding: '0.35rem 0.75rem', fontSize: '0.75rem', fontWeight: 700 }}>
-                      {evBatches.length} pending batch{evBatches.length !== 1 ? 'es' : ''}
+                    <span style={{
+                      backgroundColor: 'rgba(255,255,255,0.16)', color: 'white',
+                      border: '1px solid rgba(255,255,255,0.18)', borderRadius: '999px',
+                      padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700,
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      whiteSpace: 'nowrap', lineHeight: 1.1,
+                    }}>
+                      {allBrgyBatches.length} pending batch{allBrgyBatches.length !== 1 ? 'es' : ''}
                     </span>
                   </div>
                 </div>
 
-                {evBatches.length === 0 ? (
-                  <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', color: '#9ca3af', border: '1px solid #f3f4f6' }}>
-                    No submitted batches found.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {evBatches.map((batch, idx) => (
-                      <div key={batch.id} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${GREEN.border}`, animation: `slideUp ${0.25 + idx * 0.05}s ease` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-                              <StatusBadge status={batch.status} />
-                              <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1a1a1a' }}>Batch {batch.batch_number}</span>
-                            </div>
-                            <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0 }}>
-                              {batch.entry_count} farmer{batch.entry_count !== 1 ? 's' : ''} · Encoded by {batch.encoded_by_name}
-                            </p>
-                            <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: '0.125rem 0 0' }}>
-                              Submitted: {batch.submitted_at ? new Date(batch.submitted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
-                            </p>
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
-                          <button onClick={() => openBatchDetail(batch.id)}
-                            style={{ padding: '0.5rem 1rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <Eye size={14} /> View Details
-                          </button>
-                          <button
-                            onClick={() => setConfirmAction({ batchId: batch.id, batchNumber: batch.batch_number })}
-                            disabled={actionLoading[batch.id] === 'approve'}
-                            style={{ padding: '0.5rem 1rem', backgroundColor: GREEN.soft, color: GREEN.accent, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem', opacity: actionLoading[batch.id] === 'approve' ? 0.7 : 1 }}>
-                            <CheckCircle size={14} />
-                            {actionLoading[batch.id] === 'approve' ? 'Approving...' : 'Approve'}
-                          </button>
-                          <button onClick={() => { setRejectModal(batch.id); setRejectReason(''); }}
-                            style={{ padding: '0.5rem 1rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                            <XCircle size={14} /> Reject
-                          </button>
-                        </div>
+                {selectedBrgyGroup.events.map(event => {
+                  const evBatches = pending.filter(b => b.event === event.id || b.event_id === event.id);
+                  if (evBatches.length === 0) return null;
+                  const evH = isHybrid(event.seed_type_name || event.intervention || '');
+                  const tagColor = evH ? '#1e40af' : GREEN.primary;
+                  const tagBg = evH ? '#eff6ff' : GREEN.light;
+                  const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+
+                  return (
+                    <div key={event.id} style={{ marginBottom: '1.25rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem', paddingLeft: '0.25rem' }}>
+                        <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.2rem 0.75rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                          {event.seed_type_name || (evH ? 'Hybrid' : 'Inbred')}
+                        </span>
+                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{event.intervention}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        {evBatches.map((batch, idx) => (
+                          <div key={batch.id} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${tagBorder}`, animation: `slideUp ${0.25 + idx * 0.05}s ease` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                              <div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
+                                  <StatusBadge status={batch.status} />
+                                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1a1a1a' }}>Batch {batch.batch_number}</span>
+                                </div>
+                                <p style={{ color: '#6b7280', fontSize: '0.8rem', margin: 0 }}>
+                                  {batch.entry_count} farmer{batch.entry_count !== 1 ? 's' : ''} · Encoded by {batch.encoded_by_name}
+                                </p>
+                                <p style={{ color: '#9ca3af', fontSize: '0.72rem', margin: '0.125rem 0 0' }}>
+                                  Submitted: {batch.submitted_at ? new Date(batch.submitted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                                </p>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
+                              <button onClick={() => openBatchDetail(batch.id)}
+                                style={{ padding: '0.5rem 1rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <Eye size={14} /> View Details
+                              </button>
+                              <button
+                                onClick={() => setConfirmAction({ batchId: batch.id, batchNumber: batch.batch_number })}
+                                disabled={actionLoading[batch.id] === 'approve'}
+                                style={{ padding: '0.5rem 1rem', backgroundColor: GREEN.soft, color: GREEN.accent, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem', opacity: actionLoading[batch.id] === 'approve' ? 0.7 : 1 }}>
+                                <CheckCircle size={14} />
+                                {actionLoading[batch.id] === 'approve' ? 'Approving...' : 'Approve'}
+                              </button>
+                              <button onClick={() => { setRejectModal(batch.id); setRejectReason(''); }}
+                                style={{ padding: '0.5rem 1rem', backgroundColor: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                <XCircle size={14} /> Reject
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })()}

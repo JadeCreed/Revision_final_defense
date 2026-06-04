@@ -145,7 +145,8 @@ class GISPlotsView(APIView):
         # Attach approved distribution info, even for farmers without monitoring data
         try:
             dist_entries = DistributionEntry.objects.filter(
-                batch__status='APPROVED'
+                batch__status='APPROVED',
+                qty_bags__isnull=False,
             )
 
             if poll_year and poll_season:
@@ -309,6 +310,7 @@ class GISPlotsView(APIView):
             dist_farmer_ids = set(
                 DistributionEntry.objects.filter(
                     batch__status='APPROVED',
+                    qty_bags__isnull=False,
                     farmer_id__in=farmer_ids,
                 ).values_list('farmer_id', flat=True)
             )
@@ -341,7 +343,8 @@ class GISPlotsView(APIView):
         try:
             seen_area_farmers = set()
             for entry in DistributionEntry.objects.filter(
-                batch__status='APPROVED'
+                batch__status='APPROVED',
+                qty_bags__isnull=False,
             ).select_related('farmer').order_by('farmer_id'):
                 if not entry.farmer or not entry.farmer.barangay:
                     continue
@@ -423,7 +426,8 @@ class GISMapSummaryView(APIView):
             distributed_farmer_ids = set(
                 distribution_season_filter(
                     DistributionEntry.objects.filter(
-                        batch__status='APPROVED'
+                        batch__status='APPROVED',
+                        qty_bags__isnull=False,
                     )
                 ).values_list('farmer_id', flat=True)
                 .distinct()
@@ -504,7 +508,8 @@ class GISMapSummaryView(APIView):
 
             for entry in distribution_season_filter(
                 DistributionEntry.objects.filter(
-                    batch__status='APPROVED'
+                    batch__status='APPROVED',
+                    qty_bags__isnull=False,
                 )
             ).select_related('batch__event__seed_type').order_by('farmer_id', '-batch__approved_at'):
                 src = 'OWN_SEED'

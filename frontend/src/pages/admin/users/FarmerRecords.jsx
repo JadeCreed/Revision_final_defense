@@ -807,7 +807,7 @@ const FarmerRecords = () => {
       </div>
 
       <div style={{ display: 'flex', marginBottom: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb', width: 'fit-content' }}>
-        {[{ key: 'accounts', label: 'Farmer Accounts' }, { key: 'masterlist', label: 'Farmer Masterlist' }].map(({ key, label }) => (
+        {[{ key: 'accounts', label: 'Pending Farmers' }, { key: 'masterlist', label: 'Registered Farmers' }].map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)}
             style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === key ? 'white' : 'transparent', color: activeTab === key ? '#1a4d1a' : '#6b7280', fontWeight: activeTab === key ? '700' : '400', fontSize: '0.875rem', cursor: 'pointer', boxShadow: activeTab === key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}

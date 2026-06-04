@@ -1,76 +1,113 @@
 // src/layouts/UserLayout.jsx
 // ============================================================
-// FIXES IN THIS VERSION:
-// 1. Removed duplicate Bell import
-// 2. fetchUnreadCount defined BEFORE the useEffects that use it
-// 3. bellPulse animation style added in correct location
-// 4. Bell icon navigates to announcements + shows unread count dot
+// Bell dropdown and top-header layout for the user portal.
 // ============================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bell, X, LogOut, User, ChevronRight } from 'lucide-react'; // ✅ single import
-import { getUnreadCount, getGisActivePoll } from '../api/axios';
+import { getGisActivePoll } from '../api/axios';
 import { USER_NAV, ROLE_COLORS, ROLE_LABELS } from '../components/navigation/UserNavConfig';
 import logo from '../assets/logo.png';
 
 const DESKTOP_BREAKPOINT = 768;
 
-const BellDropdown = ({ unreadCount, isDesktop, colors, role, navigate, onMarkRead }) => {
+const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
   const [open, setOpen] = useState(false);
   const dropRef = useRef(null);
 
   const NOTIF_KEY = `brgy_bell_notifs_${role}`;
 
-  const getNotifs = () => {
-    try {
-      return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-    } catch {
-      return [];
-    }
+  const readNotifs = () => {
+    try { return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]'); }
+    catch { return []; }
   };
 
-  const [notifs, setNotifs] = useState(getNotifs);
+  const [notifs, setNotifs] = useState(readNotifs);
   const unread = notifs.filter(n => !n.read).length;
+
+  const syncSeedNotif = () => {
+    if (role !== 'BRGY') return;
+    try {
+      const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
+      if (!seeds) return;
+
+      const season = seeds.season || 'WET';
+      const year = seeds.year || new Date().getFullYear();
+      const notifId = `seed_${season}_${year}`;
+      const dismissKey = `brgy_seed_dismissed_${season}_${year}`;
+      const isDismissed = localStorage.getItem(dismissKey) === 'true';
+
+      const existing = readNotifs();
+      const alreadyExists = existing.find(n => n.id === notifId);
+
+      if (alreadyExists) {
+        if (isDismissed && !alreadyExists.read) {
+          const updated = existing.map(n =>
+            n.id === notifId ? { ...n, read: true } : n
+          );
+          localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+          setNotifs(updated);
+        } else {
+          setNotifs([...existing]);
+        }
+        return;
+      }
+
+      const infoText = Array.isArray(seeds.varieties)
+        ? seeds.varieties
+            .map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`)
+            .filter(Boolean)
+            .join(' · ')
+        : 'New seed varieties have been confirmed.';
+
+      const newNotif = {
+        id: notifId,
+        title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
+        info: infoText,
+        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+        read: isDismissed,
+        route: '/brgy',
+      };
+
+      const next = [newNotif, ...existing];
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+      setNotifs(next);
+    } catch {}
+  };
 
   useEffect(() => {
     const handler = (e) => {
-      if (dropRef.current && !dropRef.current.contains(e.target)) {
-        setOpen(false);
-      }
+      if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   useEffect(() => {
-    if (role !== 'BRGY') return;
-    try {
-      const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
-      if (!seeds) return;
-      const notifId = `seed_${seeds.season}_${seeds.year}`;
-      const existing = getNotifs();
-      if (existing.find(n => n.id === notifId)) return;
-      const newNotif = {
-        id: notifId,
-        title: `Confirmed Seed Varieties — ${seeds.season_display} ${seeds.year}`,
-        info: seeds.varieties || 'New seed varieties have been finalized.',
-        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-        read: false,
-        route: '/brgy',
-      };
-      const updated = [newNotif, ...existing];
-      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-      setNotifs(updated);
-    } catch {}
+    syncSeedNotif();
+
+    const onStorage = (e) => {
+      if (!e || !e.key) return;
+      if (e.key === NOTIF_KEY) {
+        setNotifs(readNotifs());
+        return;
+      }
+      if (e.key === 'brgy_final_seeds_notif' || e.key.startsWith('brgy_seed_dismissed_')) {
+        setNotifs(readNotifs());
+        syncSeedNotif();
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, [role]);
 
   const handleNotifClick = (notif) => {
     const updated = notifs.map(n => n.id === notif.id ? { ...n, read: true } : n);
     localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
     setNotifs(updated);
-    onMarkRead();
     setOpen(false);
     navigate(notif.route);
   };
@@ -79,60 +116,76 @@ const BellDropdown = ({ unreadCount, isDesktop, colors, role, navigate, onMarkRe
     <div ref={dropRef} style={{ position: 'relative' }}>
       <button
         onClick={() => setOpen(p => !p)}
+        title={unread > 0 ? `${unread} unread notification${unread > 1 ? 's' : ''}` : 'Notifications'}
         style={{
           background: 'none', border: 'none', cursor: 'pointer',
           padding: '0.25rem', position: 'relative', display: 'flex', alignItems: 'center',
         }}
-        title={unread > 0 ? `${unread} unread notification${unread > 1 ? 's' : ''}` : 'Notifications'}
       >
         <Bell size={22} color={isDesktop ? '#374151' : 'rgba(255,255,255,0.9)'} />
-        {(unread > 0 || unreadCount > 0) && (
+        {unread > 0 && (
           <span style={{
             position: 'absolute', top: '0px', right: '0px', minWidth: '16px', height: '16px',
             backgroundColor: '#dc2626', borderRadius: '999px', border: `2px solid ${isDesktop ? 'white' : colors.primary}`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem',
-            fontWeight: 700, color: 'white', padding: '0 2px', animation: 'bellPulse 2s ease-in-out infinite',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 700, color: 'white',
+            padding: '0 2px', animation: 'bellPulse 2s ease-in-out infinite',
           }}>
-            {Math.min(unread || unreadCount, 9)}{(unread || unreadCount) > 9 ? '+' : ''}
+            {Math.min(unread, 9)}{unread > 9 ? '+' : ''}
           </span>
         )}
       </button>
 
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '320px',
-          backgroundColor: 'white', borderRadius: '0.875rem', border: '1px solid #e5e7eb',
-          boxShadow: '0 12px 30px rgba(0,0,0,0.12)', overflow: 'hidden', zIndex: 60,
+          position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: '340px', backgroundColor: 'white', borderRadius: '1rem',
+          border: '1px solid #e5e7eb', boxShadow: '0 16px 40px rgba(0,0,0,0.13)', overflow: 'hidden', zIndex: 60,
+          animation: 'notifDropIn 0.2s ease forwards',
         }}>
-          <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#111827' }}>Notifications</p>
-              <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: '#6b7280' }}>{unread > 0 ? `${unread} new` : 'All caught up'}</p>
+          <style>{`
+            @keyframes notifDropIn {
+              from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+              to   { opacity: 1; transform: translateY(0) scale(1); }
+            }
+          `}</style>
+
+          <div style={{ padding: '0.875rem 1rem 0.75rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Bell size={16} color="#374151" />
+              <span style={{ fontSize: '0.9rem', fontWeight: 800, color: '#111827' }}>Notifications</span>
+              {unread > 0 && <span style={{ backgroundColor: '#dc2626', color: 'white', fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px', borderRadius: '999px' }}>{unread} NEW</span>}
             </div>
-            <Bell size={16} color="#6b7280" />
+            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px' }}>
+              <X size={15} color="#9ca3af" />
+            </button>
           </div>
-          <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+
+          <div style={{ maxHeight: '340px', overflowY: 'auto' }}>
             {notifs.length === 0 ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280' }}>
-                <div style={{ fontSize: '1.4rem', marginBottom: '0.35rem' }}>🔔</div>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>No notifications yet</div>
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+                <Bell size={28} color="#d1d5db" />
+                <p style={{ fontSize: '0.85rem', fontWeight: 600, color: '#6b7280', margin: 0 }}>No notifications yet</p>
+                <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>You&apos;re all caught up</p>
               </div>
             ) : notifs.map((notif, idx) => (
               <button
                 key={notif.id}
                 onClick={() => handleNotifClick(notif)}
                 style={{
-                  width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
-                  padding: '0.875rem 1rem', backgroundColor: notif.read ? 'white' : '#f0fdf4',
-                  borderBottom: idx < notifs.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer', padding: '0.875rem 1rem',
+                  backgroundColor: notif.read ? 'white' : '#f0fdf4', borderBottom: idx < notifs.length - 1 ? '1px solid #f3f4f6' : 'none',
+                  transition: 'background-color 0.15s',
                 }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = notif.read ? '#f9fafb' : '#dcfce7'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = notif.read ? 'white' : '#f0fdf4'}
               >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                  <strong style={{ fontSize: '0.82rem', color: '#111827' }}>{notif.title}</strong>
-                  {!notif.read && <span style={{ width: '8px', height: '8px', borderRadius: '999px', backgroundColor: '#16a34a', flexShrink: 0 }} />}
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.3rem' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#111827', lineHeight: 1.3, flex: 1 }}>{notif.title}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                    {!notif.read && <span style={{ width: '8px', height: '8px', borderRadius: '999px', backgroundColor: '#dc2626', flexShrink: 0 }} />}
+                    <span style={{ fontSize: '0.7rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>{notif.date}</span>
+                  </div>
                 </div>
-                <p style={{ margin: '0.25rem 0 0.35rem', fontSize: '0.78rem', color: '#6b7280', lineHeight: 1.45 }}>{notif.info}</p>
-                <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{notif.date}</span>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: notif.read ? '#6b7280' : '#166534', lineHeight: 1.45 }}>{notif.info}</p>
               </button>
             ))}
           </div>
@@ -154,23 +207,7 @@ const UserLayout = () => {
   // ── STATE ──
   const [profileOpen, setProfileOpen] = useState(false);
   const [isDesktop, setIsDesktop]     = useState(window.innerWidth >= DESKTOP_BREAKPOINT);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [activeSeason, setActiveSeason] = useState(null);
-
-  // Refs
-  const unreadPollRef = useRef(null);
-
-  // ── FETCH UNREAD COUNT ──
-  // ✅ Defined BEFORE the useEffects that use it
-  const fetchUnreadCount = useCallback(async () => {
-    if (role === 'ADMIN') return; // admin has its own badge system
-    try {
-      const res = await getUnreadCount();
-      setUnreadCount(res.data.unread_count || 0);
-    } catch {
-      // Silent fail — bell dot is non-critical
-    }
-  }, [role]);
 
   const fetchActiveSeason = useCallback(async () => {
     try {
@@ -190,27 +227,9 @@ const UserLayout = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // ── INITIAL FETCH + POLL every 60s ──
-  //  fetchUnreadCount is defined above so no reference error
   useEffect(() => {
-    fetchUnreadCount();
     fetchActiveSeason();
-    unreadPollRef.current = setInterval(fetchUnreadCount, 60000);
-    return () => {
-      if (unreadPollRef.current) clearInterval(unreadPollRef.current);
-    };
-  }, [fetchUnreadCount, fetchActiveSeason]);
-
-  // ── RECHECK when user visits announcements page ──
-  // After reading announcements, dot should disappear quickly
-  useEffect(() => {
-    const isOnAnnouncementsPage = location.pathname.includes('/announcements');
-    if (isOnAnnouncementsPage) {
-      // Small delay to let the page mark things as read first
-      const t = setTimeout(fetchUnreadCount, 1500);
-      return () => clearTimeout(t);
-    }
-  }, [location.pathname, fetchUnreadCount]);
+  }, [fetchActiveSeason]);
 
   // ── LOGOUT ──
   const handleLogout = () => {
@@ -509,12 +528,10 @@ const UserLayout = () => {
 
             {/* ── BELL ICON with dropdown ── */}
             <BellDropdown
-              unreadCount={unreadCount}
               isDesktop={isDesktop}
               colors={colors}
               role={role}
               navigate={navigate}
-              onMarkRead={() => setUnreadCount(0)}
             />
 
             {/* Avatar — opens profile drawer */}
