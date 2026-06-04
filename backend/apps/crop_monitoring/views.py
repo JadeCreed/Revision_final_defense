@@ -10,7 +10,7 @@ from django.db.models import Q
 from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
-from apps.seed_poll.models import FinalSeed, Poll
+from apps.seed_poll.models import FinalSeed
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
@@ -47,11 +47,6 @@ class ATFarmerListView(APIView):
         if not assigned_barangays:
             return Response({'farmers': [], 'barangays': []})
 
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
-
         qs = User.objects.filter(
             role='FARMER',
             status='APPROVED',
@@ -83,13 +78,12 @@ class ATFarmerListView(APIView):
                 farmer=farmer
             ).order_by('-date_observed', '-encoded_at').first()
 
-            # Get one record per seed source for this farmer this season
+            # Get one record per seed source for this farmer
             seed_records = {}
             for seed_key in ['HYBRID', 'INBRED', 'OWN_SEED']:
                 rec = CropMonitoringRecord.objects.filter(
                     farmer=farmer,
                     seed_source=seed_key,
-                    poll=active_poll,
                 ).order_by('-date_observed', '-encoded_at').first()
                 if rec:
                     seed_records[seed_key] = {
