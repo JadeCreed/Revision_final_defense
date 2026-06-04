@@ -230,7 +230,7 @@ const Toast = ({ toast }) => {
 };
 
 // ─── SEED TYPE BREAKDOWN CARD (CROP MONITORING) ───────────────
-const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers }) => {
+const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers, totalApprovedFarmers }) => {
   const cfg = SEED_TYPE_MAP[seedKey] || { label: seedKey, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0', hasDistribution: true };
   const allowedPhases = getPhasesForSeedType(seedKey);
   const [animated, setAnimated] = useState(false);
@@ -241,11 +241,13 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers }) => {
     return () => window.clearTimeout(t);
   }, [phaseCounts]);
 
+  const denominator = totalApprovedFarmers > 0 ? totalApprovedFarmers : totalFarmers;
+
   const phaseList = allowedPhases
     .map(ph => ({
       ...ph,
       count:   phaseCounts[ph.key] || 0,
-      percent: totalFarmers > 0 ? Math.round(((phaseCounts[ph.key] || 0) / totalFarmers) * 100) : 0,
+      percent: denominator > 0 ? Math.round(((phaseCounts[ph.key] || 0) / denominator) * 100) : 0,
     }))
     .filter(ph => ph.count > 0)
     .sort((a, b) => b.count - a.count);
@@ -478,7 +480,7 @@ const MonitoringOverviewPanel = ({ plots, summary, animate }) => {
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 0.5rem' }} className='gis-panel-scroll'>
         <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed type breakdown</p>
         {SEED_TYPES.map(st => (
-          <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} animate={animate} />
+          <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} totalApprovedFarmers={summary?.total_approved_farmers ?? 0} animate={animate} />
         ))}
         {plots.length === 0 && (
           <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
@@ -699,7 +701,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
           <>
             <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed type breakdown</p>
             {SEED_TYPES.map(st => (
-              <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} animate={animate} />
+              <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} totalApprovedFarmers={totalApprovedInBrgy} animate={animate} />
             ))}
             {brgyPlots.length === 0 && (
               <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
