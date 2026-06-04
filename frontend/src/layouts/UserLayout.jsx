@@ -17,6 +17,131 @@ import logo from '../assets/logo.png';
 
 const DESKTOP_BREAKPOINT = 768;
 
+const BellDropdown = ({ unreadCount, isDesktop, colors, role, navigate, onMarkRead }) => {
+  const [open, setOpen] = useState(false);
+  const dropRef = useRef(null);
+
+  const NOTIF_KEY = `brgy_bell_notifs_${role}`;
+
+  const getNotifs = () => {
+    try {
+      return JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  };
+
+  const [notifs, setNotifs] = useState(getNotifs);
+  const unread = notifs.filter(n => !n.read).length;
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (dropRef.current && !dropRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    if (role !== 'BRGY') return;
+    try {
+      const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
+      if (!seeds) return;
+      const notifId = `seed_${seeds.season}_${seeds.year}`;
+      const existing = getNotifs();
+      if (existing.find(n => n.id === notifId)) return;
+      const newNotif = {
+        id: notifId,
+        title: `Confirmed Seed Varieties — ${seeds.season_display} ${seeds.year}`,
+        info: seeds.varieties || 'New seed varieties have been finalized.',
+        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+        read: false,
+        route: '/brgy',
+      };
+      const updated = [newNotif, ...existing];
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+      setNotifs(updated);
+    } catch {}
+  }, [role]);
+
+  const handleNotifClick = (notif) => {
+    const updated = notifs.map(n => n.id === notif.id ? { ...n, read: true } : n);
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+    setNotifs(updated);
+    onMarkRead();
+    setOpen(false);
+    navigate(notif.route);
+  };
+
+  return (
+    <div ref={dropRef} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setOpen(p => !p)}
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          padding: '0.25rem', position: 'relative', display: 'flex', alignItems: 'center',
+        }}
+        title={unread > 0 ? `${unread} unread notification${unread > 1 ? 's' : ''}` : 'Notifications'}
+      >
+        <Bell size={22} color={isDesktop ? '#374151' : 'rgba(255,255,255,0.9)'} />
+        {(unread > 0 || unreadCount > 0) && (
+          <span style={{
+            position: 'absolute', top: '0px', right: '0px', minWidth: '16px', height: '16px',
+            backgroundColor: '#dc2626', borderRadius: '999px', border: `2px solid ${isDesktop ? 'white' : colors.primary}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem',
+            fontWeight: 700, color: 'white', padding: '0 2px', animation: 'bellPulse 2s ease-in-out infinite',
+          }}>
+            {Math.min(unread || unreadCount, 9)}{(unread || unreadCount) > 9 ? '+' : ''}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: '320px',
+          backgroundColor: 'white', borderRadius: '0.875rem', border: '1px solid #e5e7eb',
+          boxShadow: '0 12px 30px rgba(0,0,0,0.12)', overflow: 'hidden', zIndex: 60,
+        }}>
+          <div style={{ padding: '0.875rem 1rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div>
+              <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 800, color: '#111827' }}>Notifications</p>
+              <p style={{ margin: '0.15rem 0 0', fontSize: '0.72rem', color: '#6b7280' }}>{unread > 0 ? `${unread} new` : 'All caught up'}</p>
+            </div>
+            <Bell size={16} color="#6b7280" />
+          </div>
+          <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+            {notifs.length === 0 ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: '#6b7280' }}>
+                <div style={{ fontSize: '1.4rem', marginBottom: '0.35rem' }}>🔔</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>No notifications yet</div>
+              </div>
+            ) : notifs.map((notif, idx) => (
+              <button
+                key={notif.id}
+                onClick={() => handleNotifClick(notif)}
+                style={{
+                  width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer',
+                  padding: '0.875rem 1rem', backgroundColor: notif.read ? 'white' : '#f0fdf4',
+                  borderBottom: idx < notifs.length - 1 ? '1px solid #f3f4f6' : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+                  <strong style={{ fontSize: '0.82rem', color: '#111827' }}>{notif.title}</strong>
+                  {!notif.read && <span style={{ width: '8px', height: '8px', borderRadius: '999px', backgroundColor: '#16a34a', flexShrink: 0 }} />}
+                </div>
+                <p style={{ margin: '0.25rem 0 0.35rem', fontSize: '0.78rem', color: '#6b7280', lineHeight: 1.45 }}>{notif.info}</p>
+                <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{notif.date}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const UserLayout = () => {
   const { role, firstName, lastName, logout } = useAuth();
   const navigate = useNavigate();
@@ -382,53 +507,15 @@ const UserLayout = () => {
               </div>
             )}
 
-            {/* ── BELL ICON with unread dot ── */}
-            <button
-              onClick={() => navigate(`/${role?.toLowerCase()}/announcements`)}
-              style={{
-                background: 'none',
-                border:     'none',
-                cursor:     'pointer',
-                padding:    '0.25rem',
-                position:   'relative',
-                display:    'flex',
-                alignItems: 'center',
-              }}
-              title={
-                unreadCount > 0
-                  ? `${unreadCount} unread announcement${unreadCount > 1 ? 's' : ''}`
-                  : 'Announcements'
-              }
-            >
-              <Bell
-                size={22}
-                color={isDesktop ? '#374151' : 'rgba(255,255,255,0.9)'}
-              />
-
-              {/* Red dot with count — only shows when there are unread announcements */}
-              {unreadCount > 0 && (
-                <span style={{
-                  position:        'absolute',
-                  top:             '0px',
-                  right:           '0px',
-                  minWidth:        '16px',
-                  height:          '16px',
-                  backgroundColor: '#dc2626',
-                  borderRadius:    '999px',
-                  border:          `2px solid ${isDesktop ? 'white' : colors.primary}`,
-                  display:         'flex',
-                  alignItems:      'center',
-                  justifyContent:  'center',
-                  fontSize:        '0.55rem',
-                  fontWeight:      700,
-                  color:           'white',
-                  padding:         '0 2px',
-                  animation:       'bellPulse 2s ease-in-out infinite',
-                }}>
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
+            {/* ── BELL ICON with dropdown ── */}
+            <BellDropdown
+              unreadCount={unreadCount}
+              isDesktop={isDesktop}
+              colors={colors}
+              role={role}
+              navigate={navigate}
+              onMarkRead={() => setUnreadCount(0)}
+            />
 
             {/* Avatar — opens profile drawer */}
             <button
