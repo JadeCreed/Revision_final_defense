@@ -171,7 +171,6 @@ class FarmerSearchView(APIView):
             is_active=True,
             status='APPROVED',
             barangay=barangay,
-            contact_number__isnull=False,  # Contact required
         ).select_related('profile')
 
         if search:

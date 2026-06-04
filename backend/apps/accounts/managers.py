@@ -34,8 +34,10 @@ class CustomUserManager(BaseUserManager):
         # ✅ FORCE REQUIRED ADMIN FIELDS
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('is_verified', True)
+        extra_fields.setdefault('status', 'APPROVED')
         extra_fields.setdefault('role', 'ADMIN')
-        extra_fields['is_verified'] = True  # always force admin accounts to be verified
 
         # 🔴 VALIDATION (VERY IMPORTANT)
         if extra_fields.get('is_staff') is not True:

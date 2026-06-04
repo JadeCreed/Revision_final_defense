@@ -10,7 +10,7 @@ from django.db.models import Q
 from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
-from apps.seed_poll.models import FinalSeed
+from apps.seed_poll.models import FinalSeed, Poll
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
@@ -47,6 +47,11 @@ class ATFarmerListView(APIView):
         if not assigned_barangays:
             return Response({'farmers': [], 'barangays': []})
 
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
         qs = User.objects.filter(
             role='FARMER',
             status='APPROVED',
@@ -78,6 +83,22 @@ class ATFarmerListView(APIView):
                 farmer=farmer
             ).order_by('-date_observed', '-encoded_at').first()
 
+            # Get one record per seed source for this farmer this season
+            seed_records = {}
+            for seed_key in ['HYBRID', 'INBRED', 'OWN_SEED']:
+                rec = CropMonitoringRecord.objects.filter(
+                    farmer=farmer,
+                    seed_source=seed_key,
+                    poll=active_poll,
+                ).order_by('-date_observed', '-encoded_at').first()
+                if rec:
+                    seed_records[seed_key] = {
+                        'phase': rec.crop_phase,
+                        'phase_display': rec.get_crop_phase_display(),
+                        'record_id': rec.id,
+                        'date_observed': str(rec.date_observed),
+                    }
+
             results.append({
                 'id':           farmer.id,
                 'full_name':    farmer.get_full_name(),
@@ -95,6 +116,7 @@ class ATFarmerListView(APIView):
                     str(latest.date_observed) if latest else None
                 ),
                 'latest_record_id': latest.id if latest else None,
+                'seed_records': seed_records,
             })
 
             dist_entry = DistributionEntry.objects.filter(
@@ -293,18 +315,21 @@ class ATCropMonitoringCreateView(APIView):
                 status=400
             )
 
-        duplicate_exists = CropMonitoringRecord.objects.filter(
+        existing_record = CropMonitoringRecord.objects.filter(
             farmer=farmer,
             poll=active_poll,
-            crop_phase=crop_phase,
-            seed_source=seed_source or '',
-        ).exists()
-        if duplicate_exists:
+            seed_source=seed_source,
+        ).first()
+        if existing_record:
             return Response({
                 'error': (
-                    f'This farmer already has a {crop_phase} record for '
-                    f'{seed_source or "unspecified"} seed in {active_poll}.'
-                )
+                    f'This farmer already has a monitoring record for '
+                    f'{existing_record.get_crop_phase_display()} '
+                    f'in {seed_source or "unspecified"} seed this season. '
+                    f'Use update to change the phase.'
+                ),
+                'existing_record_id': existing_record.id,
+                'existing_phase': existing_record.crop_phase,
             }, status=400)
 
         # Build record
@@ -439,14 +464,6 @@ class ATCropMonitoringUpdateView(APIView):
         # Only the AT who encoded can edit
         if record.encoded_by != request.user:
             return Response({'error': 'You can only edit your own records.'}, status=403)
-
-        # Within 24 hours only
-        from django.utils import timezone
-        from datetime import timedelta
-        if timezone.now() - record.encoded_at > timedelta(hours=24):
-            return Response({
-                'error': 'Records can only be edited within 24 hours of encoding.'
-            }, status=403)
 
         allowed = [
             'crop_phase', 'seed_source', 'crop_establishment', 'area_monitored_ha',
