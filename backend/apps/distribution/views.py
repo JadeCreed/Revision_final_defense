@@ -200,6 +200,18 @@ class FarmerSearchView(APIView):
                 entry_qs = entry_qs.filter(batch_id=batch_id)
             elif event_id:
                 entry_qs = entry_qs.filter(batch__event_id=event_id)
+            else:
+                # Filter by current active poll season/year
+                from apps.seed_poll.models import Poll
+                active_poll = (
+                    Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+                    or Poll.objects.order_by('-created_at').first()
+                )
+                if active_poll:
+                    entry_qs = entry_qs.filter(
+                        batch__event__season=active_poll.season,
+                        batch__event__year=active_poll.year,
+                    )
 
             approved_farmer_ids = entry_qs.values_list('farmer_id', flat=True).distinct()
             qs = qs.filter(id__in=approved_farmer_ids)
@@ -232,9 +244,22 @@ class FarmerDistributionDetailView(APIView):
             if farmer.barangay != barangay:
                 return Response({"error": "Access denied."}, status=403)
 
-        entries = DistributionEntry.objects.filter(
+        from apps.seed_poll.models import Poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
+        entries_filter = dict(
             farmer=farmer,
             batch__status='APPROVED',
+        )
+        if active_poll:
+            entries_filter['batch__event__season'] = active_poll.season
+            entries_filter['batch__event__year']   = active_poll.year
+
+        entries = DistributionEntry.objects.filter(
+            **entries_filter
         ).select_related(
             'batch__event__seed_type',
             'batch__event',
@@ -1087,6 +1112,12 @@ class AdminDistributionStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        from apps.seed_poll.models import Poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
         if request.user.role == 'BRGY':
             brgy = getattr(request.user, 'barangay', None)
             if not brgy:
@@ -1100,6 +1131,12 @@ class AdminDistributionStatsView(APIView):
             entries_qs = DistributionEntry.objects.all()
         else:
             return Response({"error": "Access denied."}, status=403)
+
+        # Filter by current active season
+        if active_poll:
+            events_qs  = events_qs.filter(season=active_poll.season, year=active_poll.year)
+            batches_qs = batches_qs.filter(event__season=active_poll.season, event__year=active_poll.year)
+            entries_qs = entries_qs.filter(batch__event__season=active_poll.season, batch__event__year=active_poll.year)
 
         total_events = events_qs.count()
         pending_batches = batches_qs.filter(status='SUBMITTED').count()

@@ -1,6 +1,8 @@
 from django.urls import path
 from .views import (
     ATProfileView,
+    ATProfileUpdateView,
+    ChangePasswordView,
     BPProfileView,
     FarmerRegisterView,
     LoginView,
@@ -74,6 +76,8 @@ urlpatterns = [
     path('farmers/', FarmerListView.as_view(), name='farmer-list'),  # GET all farmers
     path('farmers/<int:id>/', FarmerDetailView.as_view(), name='farmer-detail'),  # GET/PUT/DELETE
     path('profile/at/', ATProfileView.as_view(), name='at-profile'),
+    path('at/profile/', ATProfileUpdateView.as_view(), name='at-profile-update'),
+    path('change-password/', ChangePasswordView.as_view(), name='change-password'),
     path('profile/bp/', BPProfileView.as_view(), name='bp-profile'),
     path('farmer/deactivate/', FarmerDeactivateView.as_view(), name='farmer-deactivate'),
     path('admin/deactivate-user/<int:user_id>/', AdminDeactivateView.as_view(), name='admin-deactivate-user'),

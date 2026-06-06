@@ -27,7 +27,6 @@ const FarmerDashboard = () => {
 
   // ── Status ──
   const [status, setStatus] = useState(null);
-  const [userId, setUserId] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
 
   // ── Notification visibility ──
@@ -44,89 +43,38 @@ const FarmerDashboard = () => {
   const [annLoading, setAnnLoading] = useState(true);
 
   const pollRef = useRef(null);
-  const userIdRef = useRef(null);
+  const APPROVED_SEEN_KEY = 'farmer_approved_seen';
 
   // ── Fetch profile status ──
   const fetchProfileStatus = useCallback(async () => {
     try {
       const res = await API.get('/accounts/farmer-profile/');
       const newStatus = res.data.user?.status || 'PENDING';
-      const newUserId = res.data.user?.id;
-      setUserId(newUserId);
-      userIdRef.current = newUserId;
       setStatus(newStatus);
 
-      if (newUserId) {
-        const NOTIF_KEY = `brgy_bell_notifs_FARMER`;
+      const NOTIF_KEY = `brgy_bell_notifs_FARMER`;
 
-        if (newStatus === 'APPROVED') {
-          const approvedKey = `farmer_approved_seen_${newUserId}`;
-          const seen = localStorage.getItem(approvedKey) === 'true';
+      if (newStatus === 'APPROVED') {
+        const seen = localStorage.getItem(APPROVED_SEEN_KEY) === 'true';
 
-          if (seen) {
-            setStatusDismissed(true);
-            setStatusVisible(false);
-          } else {
-            setStatusDismissed(false);
-            setStatusVisible(true);
-            const notifId = `farmer_approved_${newUserId}`;
-            try {
-              const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-              const cleaned = existing.filter(n =>
-                n.id !== `farmer_pending_${newUserId}` &&
-                n.id !== `farmer_complete_${newUserId}`
-              );
-              if (!cleaned.find(n => n.id === notifId)) {
-                const newNotif = {
-                  id: notifId,
-                  title: 'Account Approved!',
-                  info: 'Your account has been approved. You can now use all features.',
-                  date: new Date().toLocaleDateString('en-PH', {
-                    month: 'short', day: 'numeric', year: 'numeric',
-                  }),
-                  read: false,
-                  route: '/farmer',
-                };
-                const updated = [newNotif, ...cleaned];
-                localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-                emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-              }
-            } catch {}
-          }
-        } else if (newStatus === 'PENDING') {
+        if (seen) {
+          setStatusDismissed(true);
+          setStatusVisible(false);
+        } else {
           setStatusDismissed(false);
           setStatusVisible(true);
-          const notifId = `farmer_pending_${newUserId}`;
+          const notifId = 'farmer_approved';
           try {
             const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-            if (!existing.find(n => n.id === notifId)) {
-              const newNotif = {
-                id: notifId,
-                title: 'Complete Your Profile',
-                info: 'Please complete your farmer profile before proceeding with account verification.',
-                date: new Date().toLocaleDateString('en-PH', {
-                  month: 'short', day: 'numeric', year: 'numeric',
-                }),
-                read: false,
-                route: '/farmer/profile',
-              };
-              const updated = [newNotif, ...existing];
-              localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-              emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-            }
-          } catch {}
-        } else if (newStatus === 'COMPLETE') {
-          setStatusDismissed(false);
-          setStatusVisible(true);
-          const notifId = `farmer_complete_${newUserId}`;
-          try {
-            const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-            const cleaned = existing.filter(n => n.id !== `farmer_pending_${newUserId}`);
+            const cleaned = existing.filter(n =>
+              n.id !== 'farmer_pending' &&
+              n.id !== 'farmer_complete'
+            );
             if (!cleaned.find(n => n.id === notifId)) {
               const newNotif = {
                 id: notifId,
-                title: 'Pending Review',
-                info: 'Your profile has been submitted and is currently under review by the administrator.',
+                title: 'Account Approved!',
+                info: 'Your account has been approved. You can now use all features.',
                 date: new Date().toLocaleDateString('en-PH', {
                   month: 'short', day: 'numeric', year: 'numeric',
                 }),
@@ -138,10 +86,55 @@ const FarmerDashboard = () => {
               emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
             }
           } catch {}
-        } else if (newStatus === 'REJECTED') {
-          setStatusDismissed(false);
-          setStatusVisible(true);
         }
+      } else if (newStatus === 'PENDING') {
+        setStatusDismissed(false);
+        setStatusVisible(true);
+        const notifId = 'farmer_pending';
+        try {
+          const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+          if (!existing.find(n => n.id === notifId)) {
+            const newNotif = {
+              id: notifId,
+              title: 'Complete Your Profile',
+              info: 'Please complete your farmer profile before proceeding with account verification.',
+              date: new Date().toLocaleDateString('en-PH', {
+                month: 'short', day: 'numeric', year: 'numeric',
+              }),
+              read: false,
+              route: '/farmer/profile',
+            };
+            const updated = [newNotif, ...existing];
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
+          }
+        } catch {}
+      } else if (newStatus === 'COMPLETE') {
+        setStatusDismissed(false);
+        setStatusVisible(true);
+        const notifId = 'farmer_complete';
+        try {
+          const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+          const cleaned = existing.filter(n => n.id !== 'farmer_pending');
+          if (!cleaned.find(n => n.id === notifId)) {
+            const newNotif = {
+              id: notifId,
+              title: 'Pending Review',
+              info: 'Your profile has been submitted and is currently under review by the administrator.',
+              date: new Date().toLocaleDateString('en-PH', {
+                month: 'short', day: 'numeric', year: 'numeric',
+              }),
+              read: false,
+              route: '/farmer',
+            };
+            const updated = [newNotif, ...cleaned];
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
+          }
+        } catch {}
+      } else if (newStatus === 'REJECTED') {
+        setStatusDismissed(false);
+        setStatusVisible(true);
       }
       return newStatus;
     } catch {
@@ -205,22 +198,17 @@ const FarmerDashboard = () => {
   const handleStatusDismiss = () => {
     if (status !== 'APPROVED') return;
 
-    const currentUserId = userIdRef.current || userId;
-    if (currentUserId) {
-      const approvedKey = `farmer_approved_seen_${currentUserId}`;
-      localStorage.setItem(approvedKey, 'true');
+    localStorage.setItem(APPROVED_SEEN_KEY, 'true');
 
-      const NOTIF_KEY = `brgy_bell_notifs_FARMER`;
-      try {
-        const notifId = `farmer_approved_${currentUserId}`;
-        const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-        const updated = existing.map(n =>
-          n.id === notifId ? { ...n, read: true } : n
-        );
-        localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-        emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-      } catch {}
-    }
+    const NOTIF_KEY = `brgy_bell_notifs_FARMER`;
+    try {
+      const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+      const updated = existing.map(n =>
+        n.id === 'farmer_approved' ? { ...n, read: true } : n
+      );
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+      emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
+    } catch {}
 
     setStatusVisible(false);
     setTimeout(() => {

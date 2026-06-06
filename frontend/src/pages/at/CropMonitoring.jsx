@@ -342,7 +342,12 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Date Observed <span style={{ color: '#dc2626' }}>*</span></label>
-          <input type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} max={new Date().toISOString().split('T')[0]} style={inp(!!errors.date_observed)} />
+          <input type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} style={inp(!!errors.date_observed)} />
+          {form.date_observed > new Date().toISOString().split('T')[0] && (
+            <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: '#b45309', margin: '0.35rem 0 0' }}>
+              <AlertCircle size={14} /> Future date — make sure this is intentional.
+            </p>
+          )}
           {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
         </div>
         <div>

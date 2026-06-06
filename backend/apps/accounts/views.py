@@ -661,6 +661,58 @@ class ATProfileView(APIView):
             serializer.save()
             return Response({"message": "Profile updated"})
         return Response(serializer.errors, status=400)
+
+
+class ATProfileUpdateView(APIView):
+    permission_classes = [IsAuthenticated, IsATUser]
+
+    def get(self, request):
+        try:
+            at_profile = request.user.at_profile
+            assigned = list(at_profile.barangays.values_list('name', flat=True))
+        except Exception:
+            assigned = []
+
+        return Response({
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+            'email': request.user.email,
+            'contact_number': request.user.contact_number,
+            'assigned_barangays': assigned,
+        })
+
+    def put(self, request):
+        user = request.user
+        allowed = ['first_name', 'last_name', 'email', 'contact_number']
+
+        for field in allowed:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+
+        try:
+            user.save()
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+
+        return Response({'message': 'Profile updated successfully.'})
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        current = request.data.get('current_password', '')
+        new_pw = request.data.get('new_password', '')
+
+        if not request.user.check_password(current):
+            return Response({'current_password': 'Incorrect current password.'}, status=400)
+
+        if len(new_pw) < 6:
+            return Response({'new_password': 'Password must be at least 6 characters.'}, status=400)
+
+        request.user.set_password(new_pw)
+        request.user.save()
+        return Response({'message': 'Password changed successfully.'})
     
 # AT Deactivation
 class ATDeactivateView(APIView):

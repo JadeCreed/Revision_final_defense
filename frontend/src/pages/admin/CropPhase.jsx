@@ -9,6 +9,7 @@ import AreaMonitoring    from '../../components/AreaMonitoring';
 import ComplianceDonut   from '../../components/ComplianceDonut';
 import DelayChart        from '../../components/DelayChart';
 import DamageChart       from '../../components/DamageChart';
+import AttentionPanel    from '../../components/AttentionPanel';
 
 const SEED_CFG = {
   HYBRID:   { label: 'Hybrid Seed',  color: '#166534', light: '#dcfce7', border: '#86efac' },
@@ -23,9 +24,7 @@ const pc   = k => PHASE_COLORS[k] || '#94a3b8';
 const fmtN = (n, d = 0) => n != null && !isNaN(n)
   ? Number(n).toLocaleString('en-PH', { minimumFractionDigits: d, maximumFractionDigits: d })
   : '—';
-const fmtDate = v => v
-  ? new Date(v).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
-  : '—';
+
 
 // ── Simple dropdown ──────────────────────────────────────────
 const SimpleDropdown = ({ options, value, onChange, placeholder }) => {
@@ -90,55 +89,6 @@ const InsightCard = ({ icon, title, value, sub, accent = '#166534', bg = '#f0fdf
       <div style={{ fontSize: 16, fontWeight: 700, color: accent, lineHeight: 1.2 }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: `${accent}bb`, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
     </div>
-  </div>
-);
-
-// ── Attention table ───────────────────────────────────────────
-const AttentionTable = ({ data }) => (
-  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 16, overflow: 'hidden' }}>
-    <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid #f1f5f9' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>Farmers requiring attention</div>
-      {data?.length > 0 && <div style={{ fontSize: 12, color: '#64748b' }}>{data.length} farmer{data.length !== 1 ? 's' : ''} need follow-up monitoring</div>}
-    </div>
-    {!data?.length ? (
-      <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: 8, color: '#16a34a' }}>
-        <CheckCircle2 size={15} /><span style={{ fontSize: 13 }}>All farmers are on track</span>
-      </div>
-    ) : (
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 520 }}>
-          <thead>
-            <tr>
-              {['Farmer','Barangay','Seed type','Phase','Issue','Date'].map(h => (
-                <th key={h} style={{ textAlign: 'left', fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.05em', padding: '8px 14px', borderBottom: '1px solid #f1f5f9' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((r, i) => {
-              const sc = SEED_CFG[r.seed_type];
-              return (
-                <tr key={i} onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = 'transparent'} style={{ borderBottom: '1px solid #f8fafc' }}>
-                  <td style={{ padding: '9px 14px', fontWeight: 600, color: '#111827' }}>{r.farmer_name}</td>
-                  <td style={{ padding: '9px 14px', color: '#64748b' }}>{r.barangay}</td>
-                  <td style={{ padding: '9px 14px' }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: sc?.light || '#f1f5f9', color: sc?.color || '#64748b' }}>{r.seed_label}</span>
-                  </td>
-                  <td style={{ padding: '9px 14px', color: '#475569', fontSize: 11 }}>{r.phase}</td>
-                  <td style={{ padding: '9px 14px' }}>
-                    {r.status === 'DELAYED'
-                      ? <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626' }}>Delayed {r.delay_days}d</span>
-                      : <span style={{ fontSize: 11, fontWeight: 700, color: '#ea580c' }}>{r.damage_cause || 'Damaged'}</span>
-                    }
-                  </td>
-                  <td style={{ padding: '9px 14px', color: '#94a3b8', fontSize: 11 }}>{fmtDate(r.date_observed)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    )}
   </div>
 );
 
@@ -392,8 +342,8 @@ const CropPhase = () => {
         {/* ── Damage ── */}
         <DamageChart data={data?.cause_of_damage} />
 
-        {/* ── Attention table ── */}
-        <AttentionTable data={data?.attention_list} />
+        {/* ── Attention panel ── */}
+        <AttentionPanel data={data?.attention_list} />
 
         {/* ── Std days reference ── */}
         <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 20px' }}>

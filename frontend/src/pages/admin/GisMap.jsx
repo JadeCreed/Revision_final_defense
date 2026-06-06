@@ -1146,7 +1146,7 @@ const GisMap = () => {
         <div style={{ padding: '1rem 1.25rem 0.5rem', flexShrink: 0 }}>
           <p style={{ margin: '0 0 0.25rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#16a34a' }}>GIS map overview</p>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#111827', margin: 0, lineHeight: 1.15 }}>Lucban crop monitoring & utilization</h1>
-          <p style={{ margin: '0.35rem 0 0', color: '#475569', fontSize: '0.92rem' }}>Switch seasons to compare active and historical poll data without leaving the map view.</p>
+          <p style={{ margin: '0.35rem 0 0', color: 'Switch seasons to compare active and historical poll data without leaving the map view.#475569', fontSize: '0.92rem' }}></p>
         </div>
       )}
 

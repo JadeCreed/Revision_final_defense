@@ -51,6 +51,7 @@ import ATFarmers        from '../pages/at/ATFarmers';
 import ATGisMap         from '../pages/at/ATGisMap';
 import ATReports        from '../pages/at/ATReports';
 import ATAnnouncements  from '../pages/at/ATAnnouncements';
+import ATProfile from '../pages/at/ATProfile';
 
 // ── BRGY pages ──
 import BPDashboard       from '../pages/brgy/BPDashboard';
@@ -131,8 +132,8 @@ const AppRoutes = () => (
         <Route path="/at/gis"              element={<ATGisMap />} />
         <Route path="/at/reports"          element={<ATReports />} />
         <Route path="/at/announcements"    element={<ATAnnouncements />} />
-        <Route path="/at/profile"          element={<FarmerProfile />} />
         <Route path="/at/announcements/:id" element={<AnnouncementDetail />} />
+        <Route path="/at/profile" element={<ATProfile />} />
       </Route>
     </Route>
 

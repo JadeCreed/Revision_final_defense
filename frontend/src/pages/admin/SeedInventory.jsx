@@ -416,6 +416,8 @@ export default function SeedInventory() {
 
   const [search, setSearch]           = useState('');
   const [filterSeason, setFilterSeason] = useState('');
+  const [historyFilter, setHistoryFilter] = useState({ season: '', year: '' });
+  const [historySearch, setHistorySearch] = useState('');
 
   const [deliveryModal, setDeliveryModal] = useState(false);
   const [editDelivery, setEditDelivery]   = useState(null);
@@ -512,6 +514,10 @@ export default function SeedInventory() {
     setSelected(delivery); setView('audit'); setAuditLoading(true);
     try { const res = await getDeliveryAudit(delivery.id); setAuditLogs(res.data || []); }
     catch { setAuditLogs([]); } finally { setAuditLoading(false); }
+  };
+
+  const openHistory = () => {
+    setView('history');
   };
 
   const openEditDelivery = (delivery) => {
@@ -878,8 +884,7 @@ export default function SeedInventory() {
     if (existingSchedule) {
       const existingEntries = existingSchedule.entries.filter(
         existing => !entries.find(e =>
-          e.seedTypeId === existing.seedTypeId ||
-          (e.seedTypeDbId && existing.seedTypeDbId && String(e.seedTypeDbId) === String(existing.seedTypeDbId))
+          e.seedTypeId === existing.seedTypeId
         )
       );
       const mergedEntries = [...existingEntries, ...entries];
@@ -955,7 +960,7 @@ export default function SeedInventory() {
           </button>
           <ChevronRight size={12} color="#9ca3af" />
           <span style={{ color: '#374151', fontWeight: 700 }}>
-            {view === 'detail' ? `${selected?.seed_type_name} — ${selected?.season_display} ${selected?.year}` : 'Audit Trail'}
+            {view === 'detail' ? `${selected?.seed_type_name} — ${selected?.season_display} ${selected?.year}` : view === 'history' ? 'View History' : 'Audit Trail'}
           </span>
         </div>
       )}
@@ -1097,9 +1102,9 @@ export default function SeedInventory() {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {selected._fromSchedule ? (
-                  <button onClick={e => { e.stopPropagation(); openRecordDeliveryFromEntry(selected._scheduleEntry); }}
+                  <button onClick={e => { e.stopPropagation(); openHistory(); }}
                     style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <Plus size={13} /> Record Delivery
+                    <History size={13} /> View History
                   </button>
                 ) : (
                   <>
@@ -1191,6 +1196,111 @@ export default function SeedInventory() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══ HISTORY VIEW ══ */}
+      {view === 'history' && selected && (
+        <div style={{ animation: 'fadeIn 0.25s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+            <h2 style={{ fontWeight: 800, fontSize: '1rem', margin: '0 0 0.25rem' }}>Allocation History</h2>
+            <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0 }}>Past barangay allocations from previous seasons.</p>
+          </div>
+
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {['', 'WET', 'DRY'].map(s => (
+                  <button key={s}
+                    onClick={() => setHistoryFilter(p => ({ ...p, season: s }))}
+                    style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${historyFilter.season === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: historyFilter.season === s ? GREEN.light : 'white', color: historyFilter.season === s ? GREEN.primary : '#6b7280', fontWeight: historyFilter.season === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
+                    {s === '' ? 'All Seasons' : s === 'WET' ? 'Wet Season' : 'Dry Season'}
+                  </button>
+                ))}
+              </div>
+              <select
+                value={historyFilter.year}
+                onChange={e => setHistoryFilter(p => ({ ...p, year: e.target.value }))}
+                style={{ padding: '0.375rem 0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '999px', fontSize: '0.78rem', color: '#374151', cursor: 'pointer', outline: 'none', backgroundColor: 'white' }}>
+                <option value=''>All Years</option>
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+              <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
+                <Search size={14} color="#9ca3af" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <input
+                  value={historySearch}
+                  onChange={e => setHistorySearch(e.target.value)}
+                  placeholder="Search barangay..."
+                  style={{ padding: '0.375rem 0.75rem 0.375rem 2.25rem', border: '1.5px solid #e5e7eb', borderRadius: '999px', fontSize: '0.78rem', width: '100%', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {(() => {
+            const allAllocs = deliveries.flatMap(d =>
+              (d.allocations || []).map(a => ({
+                ...a,
+                seed_type_name: d.seed_type_name,
+                variety_name: d.variety_name,
+                season: d.season,
+                season_display: d.season_display,
+                year: d.year,
+              }))
+            ).filter(a => {
+              const matchSeason = !historyFilter.season || a.season === historyFilter.season;
+              const matchYear = !historyFilter.year || String(a.year) === String(historyFilter.year);
+              const matchSearch = !historySearch || a.barangay?.toLowerCase().includes(historySearch.toLowerCase());
+              return matchSeason && matchYear && matchSearch;
+            });
+
+            if (allAllocs.length === 0) {
+              return (
+                <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', color: '#9ca3af', border: '1px solid #f3f4f6' }}>
+                  <History size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+                  <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.25rem' }}>No allocation history found</p>
+                  <p style={{ fontSize: '0.8rem', margin: 0 }}>Try adjusting the season or year filter.</p>
+                </div>
+              );
+            }
+
+            return (
+              <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '0.5rem', padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>
+                  <span>Barangay</span>
+                  <span>Seed Type / Variety</span>
+                  <span>Season / Year</span>
+                  <span style={{ textAlign: 'center' }}>Bags</span>
+                  <span style={{ textAlign: 'center' }}>Status</span>
+                </div>
+                {allAllocs.map((a, idx) => (
+                  <div key={`${a.id || idx}-${a.barangay}`} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '0.5rem', padding: '0.875rem 1.25rem', borderBottom: idx < allAllocs.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', animation: `slideUp ${0.3 + idx * 0.03}s ease` }} className="row-hover">
+                    <div>
+                      <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>Brgy. {a.barangay}</p>
+                      {a.date_allocated && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{new Date(a.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
+                    </div>
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: '0.8rem', color: '#374151', margin: 0 }}>{a.seed_type_name}</p>
+                      {a.variety_name && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{a.variety_name}</p>}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 600, margin: 0 }}>{a.season_display}</p>
+                      <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{a.year}</p>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <p style={{ fontSize: '1.1rem', fontWeight: 800, color: GREEN.primary, margin: 0 }}>{a.allocated_bags}</p>
+                      <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: 0 }}>bags</p>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <StatusBadge status={a.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
       )}
 

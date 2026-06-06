@@ -616,7 +616,7 @@ const AdminDistribution = () => {
             {['WET', 'DRY'].map(s => (
               <button key={s} onClick={() => setFilterSeason(filterSeason === s ? '' : s)}
                 style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${filterSeason === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: filterSeason === s ? GREEN.light : 'white', color: filterSeason === s ? GREEN.primary : '#6b7280', fontWeight: filterSeason === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
-                {s === 'WET' ? '💧 Wet' : '☀️ Dry'}
+                {s === 'WET' ? ' Wet season' : 'Dry season'}
               </button>
             ))}
           </div>
