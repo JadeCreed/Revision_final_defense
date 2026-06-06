@@ -212,6 +212,15 @@ export const getMapSummary  = (params = {}) => API.get('/gis/summary/', { params
 export const getGisBarangays= ()       => API.get('/gis/barangays/');
 export const getGisAllPolls = ()       => API.get('/seed-poll/gis-all-polls/');
 
+// ── CROP PHASE ──
+export const getCropPhaseAnalytics = (params = {}) => {
+  const query = new URLSearchParams();
+  if (params.poll_id)   query.set('poll_id',   params.poll_id);
+  if (params.seed_type) query.set('seed_type', params.seed_type);
+  return API.get(`/crop-phase/analytics/?${query}`);
+};
+
+
 // ── PRODUCTION ──
 export const getHarvestRecords        = (params = {}) => API.get('/production/harvest/', { params });
 export const createHarvestRecord      = (data)        => API.post('/production/harvest/', data);

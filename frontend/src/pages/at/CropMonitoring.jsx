@@ -1,14 +1,10 @@
 // src/pages/at/CropMonitoring.jsx
-// AT encodes crop phase observations per farmer.
-// Shows all assigned farmers with their latest phase, search + filter,
-// and a bottom-sheet encode form on mobile / side panel on desktop.
-
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  Search, Filter, ChevronRight, ChevronDown,
+  Search, ChevronRight, ChevronLeft, ChevronDown,
   CheckCircle, AlertCircle, Clock, Leaf,
-  Edit2, Plus, X, MapPin, Users,
-  BarChart2, RefreshCw,
+  Plus, X, History, Snowflake, Sun,
+  BarChart2,
 } from 'lucide-react';
 import {
   getATFarmers,
@@ -16,6 +12,7 @@ import {
   createCropRecord,
   updateCropRecord,
   getFarmerCropHistory,
+  getFinalSeeds,
 } from '../../api/axios';
 
 // ─────────────────────────────────────────
@@ -29,7 +26,6 @@ const GREEN = {
   soft:    '#dcfce7',
 };
 
-// Each phase has a color, label, and icon char for the map
 const PHASES = [
   { key: 'ESTABLISHMENT', label: 'Crop Establishment', color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
   { key: 'TILLERING',     label: 'Tillering',          color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
@@ -38,6 +34,7 @@ const PHASES = [
   { key: 'HARVESTING',    label: 'Harvesting',         color: '#ea580c', bg: '#fff7ed', border: '#fed7aa' },
 ];
 
+const PHASE_ORDER = ['ESTABLISHMENT', 'TILLERING', 'FLOWERING', 'RIPENING', 'HARVESTING'];
 const DEFAULT_PHASE_CFG = { key: 'NONE', label: 'Not monitored', color: '#9ca3af', bg: '#f9fafb', border: '#e5e7eb' };
 const getPhaseCfg = (key) => PHASES.find(p => p.key === key) || DEFAULT_PHASE_CFG;
 
@@ -47,10 +44,37 @@ const STATUS_OPTIONS = [
   { key: 'DAMAGED', label: 'Damaged' },
 ];
 
+const SEED_SOURCES = [
+  { key: 'HYBRID',   label: 'Hybrid',    short: 'HY' },
+  { key: 'INBRED',   label: 'Inbred',    short: 'IN' },
+  { key: 'OWN_SEED', label: 'Own Seed',  short: 'OW' },
+];
+
+const ITEMS_PER_PAGE = 10;
+
+// ─────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────
+const getNextAllowedPhase = (seedRecords, seedSource) => {
+  if (!seedSource) return null;
+  const rec = seedRecords?.[seedSource];
+  if (!rec) return 'ESTABLISHMENT';
+  const currentIndex = PHASE_ORDER.indexOf(rec.phase || rec.crop_phase);
+  if (currentIndex === -1) return 'ESTABLISHMENT';
+  if (currentIndex >= PHASE_ORDER.length - 1) return null;
+  return PHASE_ORDER[currentIndex + 1];
+};
+
+const getCurrentPhase = (seedRecords, seedSource) => {
+  if (!seedSource) return null;
+  const rec = seedRecords?.[seedSource];
+  if (!rec) return null;
+  return rec.phase || rec.crop_phase;
+};
+
 // ─────────────────────────────────────────
 // SHARED SMALL COMPONENTS
 // ─────────────────────────────────────────
-
 const PhaseBadge = ({ phase, size = 'md' }) => {
   if (!phase) return (
     <span style={{ backgroundColor: '#f9fafb', color: '#9ca3af', padding: size === 'sm' ? '0.1rem 0.5rem' : '0.2rem 0.625rem', borderRadius: '999px', fontSize: size === 'sm' ? '0.65rem' : '0.72rem', fontWeight: 700, border: '1px solid #e5e7eb' }}>
@@ -68,17 +92,7 @@ const PhaseBadge = ({ phase, size = 'md' }) => {
 const Toast = ({ toast }) => {
   if (!toast) return null;
   return (
-    <div style={{
-      position: 'fixed', bottom: '5rem', left: '50%',
-      transform: 'translateX(-50%)', zIndex: 800,
-      backgroundColor: toast.type === 'success' ? GREEN.primary : '#991b1b',
-      color: 'white', padding: '0.75rem 1.5rem',
-      borderRadius: '0.875rem', fontWeight: 600, fontSize: '0.875rem',
-      display: 'flex', alignItems: 'center', gap: '0.5rem',
-      boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-      animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)',
-      maxWidth: 'calc(100vw - 2rem)',
-    }}>
+    <div style={{ position: 'fixed', bottom: '5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 800, backgroundColor: toast.type === 'success' ? GREEN.primary : '#991b1b', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '0.875rem', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', animation: 'toastIn 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxWidth: 'calc(100vw - 2rem)' }}>
       {toast.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
       {toast.message}
     </div>
@@ -86,12 +100,12 @@ const Toast = ({ toast }) => {
 };
 
 // ─────────────────────────────────────────
-// ENCODE FORM (bottom sheet / modal)
+// ENCODE FORM — HINDI BINAGO, BUO PA RIN
 // ─────────────────────────────────────────
-const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
+const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) => {
   const [form, setForm] = useState({
-    crop_phase:        editRecord?.crop_phase || '',
     seed_source:       editRecord?.seed_source || '',
+    crop_phase:        editRecord?.crop_phase || '',
     crop_establishment:editRecord?.crop_establishment || '',
     phase_status:      editRecord?.phase_status || 'NORMAL',
     delay_days:        editRecord?.delay_days ?? '',
@@ -103,6 +117,10 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
   });
   const [errors, setErrors] = useState({});
 
+  const seedRecords = farmer.seed_records || {};
+  const currentPhaseForSeed = getCurrentPhase(seedRecords, form.seed_source);
+  const nextAllowedPhase = getNextAllowedPhase(seedRecords, form.seed_source);
+
   const inp = (hasErr) => ({
     padding: '0.625rem 0.875rem',
     border: `1.5px solid ${hasErr ? '#dc2626' : '#d1d5db'}`,
@@ -111,35 +129,44 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
     fontFamily: 'inherit', backgroundColor: 'white',
   });
 
-
   const validate = () => {
     const errs = {};
-    if (!form.crop_phase)    errs.crop_phase = 'Phase is required';
+    if (!form.seed_source)   errs.seed_source = 'Seed source is required';
+    if (!form.crop_phase)    errs.crop_phase = 'Select a crop phase';
     if (!form.phase_status)  errs.phase_status = 'Status is required';
     if (form.crop_phase === 'ESTABLISHMENT' && !form.crop_establishment)
       errs.crop_establishment = 'Required for Establishment phase';
-    if (!form.seed_source)   errs.seed_source = 'Seed source is required';
     if (form.phase_status === 'DELAYED' && !form.delay_days)
       errs.delay_days = 'Delay duration is required';
     if (form.phase_status === 'DAMAGED' && !form.damage_cause.trim())
       errs.damage_cause = 'Damage cause is required';
     if (!form.date_observed) errs.date_observed = 'Date observed is required';
+
+    if (form.seed_source && form.crop_phase) {
+      const submittedIndex = PHASE_ORDER.indexOf(form.crop_phase);
+      const currentIndex   = PHASE_ORDER.indexOf(currentPhaseForSeed);
+      const allowed = !currentPhaseForSeed
+        ? form.crop_phase === 'ESTABLISHMENT'
+        : submittedIndex === currentIndex || submittedIndex === currentIndex + 1;
+      if (!allowed) {
+        const expectedLabel = !currentPhaseForSeed
+          ? 'Crop Establishment'
+          : getPhaseCfg(PHASE_ORDER[currentIndex + 1])?.label || '';
+        errs.crop_phase = `Cannot skip phases. Please encode "${expectedLabel}" next.`;
+      }
+    }
     return errs;
   };
 
   const handleSubmit = () => {
     const errs = validate();
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-
-    const payload = {
-      ...form,
-      farmer_id: farmer.id,
-    };
-    onSave(payload);
+    onSave({ ...form, farmer_id: farmer.id });
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '1rem' }}>
+      {/* Farmer info card */}
       <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1rem 1.1rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', flexWrap: 'wrap' }}>
           <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.primary, display: 'grid', placeItems: 'center', color: 'white', fontWeight: 800, fontSize: '1rem', flexShrink: 0 }}>
@@ -153,80 +180,24 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
           </div>
         </div>
         <div style={{ marginTop: '0.9rem', color: '#475569', fontSize: '0.82rem' }}>
-          {farmer.distributed_variety || farmer.distributed_seed_type ? (
-            `Distributed: ${farmer.distributed_seed_type ? `${farmer.distributed_seed_type}${farmer.distributed_variety ? ' — ' : ''}` : ''}${farmer.distributed_variety || ''}`
-          ) : 'Distributed variety not confirmed yet.'}
+          {farmer.distributed_variety || farmer.distributed_seed_type
+            ? `Distributed: ${farmer.distributed_seed_type ? `${farmer.distributed_seed_type}${farmer.distributed_variety ? ' — ' : ''}` : ''}${farmer.distributed_variety || ''}`
+            : 'Distributed variety not confirmed yet.'}
         </div>
       </div>
 
+      {/* SEED SOURCE */}
       <div>
         <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
-          Crop Phase <span style={{ color: '#dc2626' }}>*</span>
-        </label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '0.75rem' }}>
-          {PHASES.map(phase => {
-            const sel = form.crop_phase === phase.key;
-            return (
-              <button key={phase.key} type="button"
-                onClick={() => {
-                  setForm(p => ({
-                    ...p,
-                    crop_phase: phase.key,
-                    sowing_date: phase.key === 'ESTABLISHMENT' ? p.sowing_date : '',
-                    crop_establishment: phase.key === 'ESTABLISHMENT' ? p.crop_establishment : '',
-                  }));
-                  setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
-                }}
-                style={{
-                  minHeight: 72,
-                  border: `2px solid ${sel ? phase.color : '#e2e8f0'}`,
-                  borderRadius: '1rem',
-                  backgroundColor: sel ? phase.bg : 'white',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.9rem',
-                  transition: 'all 0.2s',
-                  boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none',
-                }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: phase.color, flexShrink: 0 }} />
-                <span style={{ fontWeight: sel ? 700 : 600, fontSize: '0.92rem', color: sel ? '#0f172a' : '#334155' }}>{phase.label}</span>
-                {sel && <CheckCircle size={16} color={phase.color} style={{ marginLeft: 'auto' }} />}
-              </button>
-            );
-          })}
-        </div>
-        {errors.crop_phase && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{errors.crop_phase}</p>}
-      </div>
-
-      <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
-          Seed Source <span style={{ color: '#dc2626' }}>*</span>
+          Seed Type <span style={{ color: '#dc2626' }}>*</span>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
-          {[
-            { key: 'HYBRID', label: 'Hybrid' },
-            { key: 'INBRED', label: 'Inbred' },
-            { key: 'OWN_SEED', label: 'Own Seed' },
-          ].map(opt => {
+          {SEED_SOURCES.map(opt => {
             const sel = form.seed_source === opt.key;
             return (
               <button key={opt.key} type="button"
-                onClick={() => {
-                  setForm(p => ({ ...p, seed_source: opt.key }));
-                  setErrors(p => ({ ...p, seed_source: '' }));
-                }}
-                style={{
-                  border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`,
-                  borderRadius: '1rem',
-                  backgroundColor: sel ? '#ecfdf5' : 'white',
-                  color: sel ? '#166534' : '#334155',
-                  fontWeight: 700,
-                  padding: '0.95rem 0.85rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}>
+                onClick={() => { setForm(p => ({ ...p, seed_source: opt.key, crop_phase: '' })); setErrors(p => ({ ...p, seed_source: '', crop_phase: '' })); }}
+                style={{ border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`, borderRadius: '1rem', backgroundColor: sel ? '#ecfdf5' : 'white', color: sel ? '#166534' : '#334155', fontWeight: 700, padding: '0.95rem 0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                 {opt.label}
               </button>
             );
@@ -235,6 +206,74 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
         {errors.seed_source && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.seed_source}</p>}
       </div>
 
+      {/* CROP PHASE — sequential */}
+      <div>
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.4rem' }}>
+          Crop Phase <span style={{ color: '#dc2626' }}>*</span>
+        </label>
+        {form.seed_source && currentPhaseForSeed && (
+          <div style={{ fontSize: '0.72rem', color: '#475569', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.5rem', padding: '0.4rem 0.75rem', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <CheckCircle size={13} color="#16a34a" />
+            Current phase: <strong>{getPhaseCfg(currentPhaseForSeed).label}</strong>
+            {nextAllowedPhase
+              ? <> · Next: <strong>{getPhaseCfg(nextAllowedPhase).label}</strong></>
+              : <> · <strong>All phases completed!</strong></>}
+          </div>
+        )}
+        {form.seed_source && !currentPhaseForSeed && (
+          <div style={{ fontSize: '0.72rem', color: '#1d4ed8', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.5rem', padding: '0.4rem 0.75rem', marginBottom: '0.75rem' }}>
+            No phase recorded yet — start with <strong>Crop Establishment</strong>.
+          </div>
+        )}
+        {!form.seed_source && (
+          <p style={{ fontSize: '0.72rem', color: '#9ca3af', marginBottom: '0.75rem' }}>Select a seed source above to enable phase selection.</p>
+        )}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '0.75rem' }}>
+          {PHASES.map((phase) => {
+            const phaseKey = phase.key;
+            const sel = form.crop_phase === phaseKey;
+            const phaseIndex = PHASE_ORDER.indexOf(phaseKey);
+            const currentIndex = PHASE_ORDER.indexOf(currentPhaseForSeed);
+            const isCompleted = currentPhaseForSeed && phaseIndex < currentIndex;
+            const isCurrent   = currentPhaseForSeed && phaseKey === currentPhaseForSeed;
+            const isNext      = nextAllowedPhase === phaseKey;
+            const isFuture    = currentPhaseForSeed ? phaseIndex > currentIndex + 1 : phaseKey !== 'ESTABLISHMENT';
+            const isClickable = isNext || (!currentPhaseForSeed && phaseKey === 'ESTABLISHMENT');
+
+            const handleLockedClick = () => {
+              if (!form.seed_source) return;
+              if (isCompleted) showToast('error', `"${phase.label}" is already completed for this seed type.`);
+              else if (isCurrent) showToast('error', `Already in "${phase.label}" phase. Encode the next phase to progress.`);
+              else if (isFuture) {
+                const nextLabel = nextAllowedPhase ? getPhaseCfg(nextAllowedPhase).label : '';
+                showToast('error', `Please complete "${nextLabel}" first before skipping to "${phase.label}".`);
+              }
+            };
+
+            return (
+              <button key={phaseKey} type="button"
+                onClick={() => {
+                  if (!isClickable) { handleLockedClick(); return; }
+                  setForm(p => ({ ...p, crop_phase: phaseKey, sowing_date: phaseKey === 'ESTABLISHMENT' ? p.sowing_date : '', crop_establishment: phaseKey === 'ESTABLISHMENT' ? p.crop_establishment : '' }));
+                  setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
+                }}
+                style={{ minHeight: 68, border: `2px solid ${sel ? phase.color : isCurrent ? phase.color : isCompleted ? '#e5e7eb' : isNext ? '#16a34a' : '#e5e7eb'}`, borderRadius: '1rem', backgroundColor: sel ? phase.bg : isCurrent ? phase.bg : isCompleted ? '#f9fafb' : isNext ? '#f0fdf4' : '#f9fafb', cursor: isClickable ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.9rem', transition: 'all 0.2s', opacity: isFuture ? 0.45 : 1, boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: isCompleted ? '#d1d5db' : isCurrent ? phase.color : isNext ? '#16a34a' : isFuture ? '#e5e7eb' : phase.color, flexShrink: 0 }} />
+                <span style={{ fontWeight: 600, fontSize: '0.92rem', flex: 1, textAlign: 'left', color: isCompleted ? '#9ca3af' : isCurrent ? phase.color : isNext ? '#166534' : isFuture ? '#d1d5db' : '#334155' }}>
+                  {phase.label}
+                </span>
+                {isCompleted && !sel && <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: 700, color: '#9ca3af', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '999px', padding: '0.1rem 0.4rem', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}><CheckCircle size={10} /> Done</span>}
+                {isCurrent && !sel && <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: 700, color: phase.color, backgroundColor: phase.bg, border: `1px solid ${phase.border}`, borderRadius: '999px', padding: '0.1rem 0.4rem', flexShrink: 0 }}>Current</span>}
+                {isNext && !sel && <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: 700, color: '#166534', backgroundColor: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.1rem 0.4rem', flexShrink: 0 }}>Next</span>}
+                {sel && <CheckCircle size={16} color={phase.color} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </button>
+            );
+          })}
+        </div>
+        {errors.crop_phase && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.5rem 0 0' }}>{errors.crop_phase}</p>}
+      </div>
+
+      {/* OBSERVATION STATUS */}
       <div>
         <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.75rem' }}>
           Observation Status <span style={{ color: '#dc2626' }}>*</span>
@@ -244,26 +283,8 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
             const sel = form.phase_status === opt.key;
             return (
               <button key={opt.key} type="button"
-                onClick={() => {
-                  setForm(p => ({
-                    ...p,
-                    phase_status: opt.key,
-                    delay_days: opt.key === 'DELAYED' ? p.delay_days : '',
-                    damage_cause: opt.key === 'DAMAGED' ? p.damage_cause : '',
-                    ...(opt.key === 'NORMAL' ? { delay_days: '', damage_cause: '' } : {}),
-                  }));
-                  setErrors(p => ({ ...p, phase_status: '', delay_days: '', damage_cause: '' }));
-                }}
-                style={{
-                  border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`,
-                  borderRadius: '1rem',
-                  backgroundColor: sel ? '#ecfdf5' : 'white',
-                  color: sel ? '#166534' : '#334155',
-                  fontWeight: 700,
-                  padding: '0.95rem 0.85rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}>
+                onClick={() => { setForm(p => ({ ...p, phase_status: opt.key, delay_days: opt.key === 'DELAYED' ? p.delay_days : '', damage_cause: opt.key === 'DAMAGED' ? p.damage_cause : '', ...(opt.key === 'NORMAL' ? { delay_days: '', damage_cause: '' } : {}) })); setErrors(p => ({ ...p, phase_status: '', delay_days: '', damage_cause: '' })); }}
+                style={{ border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`, borderRadius: '1rem', backgroundColor: sel ? '#ecfdf5' : 'white', color: sel ? '#166534' : '#334155', fontWeight: 700, padding: '0.95rem 0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                 {opt.label}
               </button>
             );
@@ -274,49 +295,30 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
 
       {form.phase_status === 'DELAYED' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Delay Duration (days) <span style={{ color: '#dc2626' }}>*</span>
-          </label>
-          <input type="number" step="1" min="0" value={form.delay_days}
-            onChange={e => setForm(p => ({ ...p, delay_days: e.target.value }))}
-            placeholder="e.g. 5" style={inp(!!errors.delay_days)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Delay Duration (days) <span style={{ color: '#dc2626' }}>*</span></label>
+          <input type="number" step="1" min="0" value={form.delay_days} onChange={e => setForm(p => ({ ...p, delay_days: e.target.value }))} placeholder="e.g. 5" style={inp(!!errors.delay_days)} />
           {errors.delay_days && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.delay_days}</p>}
         </div>
       )}
 
       {form.phase_status === 'DAMAGED' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Cause of Damage <span style={{ color: '#dc2626' }}>*</span>
-          </label>
-          <input type="text" value={form.damage_cause}
-            onChange={e => setForm(p => ({ ...p, damage_cause: e.target.value }))}
-            placeholder="Pests, Typhoon, Flooding..." style={inp(!!errors.damage_cause)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Cause of Damage <span style={{ color: '#dc2626' }}>*</span></label>
+          <input type="text" value={form.damage_cause} onChange={e => setForm(p => ({ ...p, damage_cause: e.target.value }))} placeholder="Pests, Typhoon, Flooding..." style={inp(!!errors.damage_cause)} />
           {errors.damage_cause && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.damage_cause}</p>}
         </div>
       )}
 
       {form.crop_phase === 'ESTABLISHMENT' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Crop Establishment Method <span style={{ color: '#dc2626' }}>*</span>
-          </label>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Crop Establishment Method <span style={{ color: '#dc2626' }}>*</span></label>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             {[{ key: 'DS', label: 'Direct Seeding (D)' }, { key: 'TP', label: 'Transplanting (T)' }].map(opt => {
               const sel = form.crop_establishment === opt.key;
               return (
                 <button key={opt.key} type="button"
                   onClick={() => { setForm(p => ({ ...p, crop_establishment: opt.key })); setErrors(p => ({ ...p, crop_establishment: '' })); }}
-                  style={{
-                    border: `2px solid ${sel ? '#2563eb' : '#e2e8f0'}`,
-                    borderRadius: '1rem',
-                    backgroundColor: sel ? '#eff6ff' : 'white',
-                    color: sel ? '#1d4ed8' : '#334155',
-                    fontWeight: 700,
-                    padding: '0.85rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}>
+                  style={{ border: `2px solid ${sel ? '#2563eb' : '#e2e8f0'}`, borderRadius: '1rem', backgroundColor: sel ? '#eff6ff' : 'white', color: sel ? '#1d4ed8' : '#334155', fontWeight: 700, padding: '0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
                   {opt.label}
                 </button>
               );
@@ -326,47 +328,29 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
         </div>
       )}
 
+      {/* DATE + AREA */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Date Observed <span style={{ color: '#dc2626' }}>*</span>
-          </label>
-          <input type="date" value={form.date_observed}
-            onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }}
-            max={new Date().toISOString().split('T')[0]}
-            style={inp(!!errors.date_observed)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Date Observed <span style={{ color: '#dc2626' }}>*</span></label>
+          <input type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} max={new Date().toISOString().split('T')[0]} style={inp(!!errors.date_observed)} />
           {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
         </div>
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Area Monitored (ha)
-          </label>
-          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
-            onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
-            placeholder="e.g. 0.50" style={inp(false)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Area Monitored (ha)</label>
+          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha} onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))} placeholder="e.g. 0.50" style={inp(false)} />
         </div>
       </div>
 
       {form.crop_phase === 'ESTABLISHMENT' && (
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Sowing Date
-          </label>
-          <input type="date" value={form.sowing_date}
-            onChange={e => setForm(p => ({ ...p, sowing_date: e.target.value }))}
-            style={inp(false)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Sowing Date</label>
+          <input type="date" value={form.sowing_date} onChange={e => setForm(p => ({ ...p, sowing_date: e.target.value }))} style={inp(false)} />
         </div>
       )}
 
       <div>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-          Remarks / Field Notes (optional)
-        </label>
-        <textarea value={form.remarks}
-          onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))}
-          placeholder="Any observations, issues, or notes..."
-          rows={4}
-          style={{ ...inp(false), resize: 'vertical', minHeight: 120 }} />
+        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Remarks / Field Notes (optional)</label>
+        <textarea value={form.remarks} onChange={e => setForm(p => ({ ...p, remarks: e.target.value }))} placeholder="Any observations, issues, or notes..." rows={4} style={{ ...inp(false), resize: 'vertical', minHeight: 120 }} />
       </div>
 
       <button onClick={handleSubmit} disabled={saving}
@@ -383,6 +367,7 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving }) => {
 const CropMonitoring = () => {
   const [farmers,      setFarmers]      = useState([]);
   const [stats,        setStats]        = useState(null);
+  const [activeSeason, setActiveSeason] = useState(null);
   const [loading,      setLoading]      = useState(true);
   const [refreshing,   setRefreshing]   = useState(false);
   const [searching,    setSearching]    = useState(false);
@@ -393,19 +378,24 @@ const CropMonitoring = () => {
   const [brgyFilter,   setBrgyFilter]   = useState('');
   const [barangays,    setBarangays]    = useState([]);
 
+  // Pagination
+  const [currentPage,  setCurrentPage]  = useState(1);
+
   // Encode panel
   const [selectedFarmer, setSelectedFarmer] = useState(null);
   const [editRecord,     setEditRecord]     = useState(null);
   const [showPanel,      setShowPanel]      = useState(false);
   const [saving,         setSaving]         = useState(false);
 
-  // History panel
+  // History view — UI placeholder, walang API call pa
   const [showHistory,    setShowHistory]    = useState(false);
-  const [historyData,    setHistoryData]    = useState(null);
-  const [historyLoading, setHistoryLoading] = useState(false);
+  const [histSeasonFilter, setHistSeasonFilter] = useState('');
+  const [histYearFilter,   setHistYearFilter]   = useState('');
+  const [histSearchTerm,   setHistSearchTerm]   = useState('');
 
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+  const searchTimer = useRef(null);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
@@ -413,21 +403,33 @@ const CropMonitoring = () => {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // ── LOAD ──
+  // ── LOAD DATA ──
   const loadData = useCallback(async (searchTerm, barangay, mode = 'load') => {
     try {
       if (mode === 'refresh') setRefreshing(true);
       else if (mode === 'search') setSearching(true);
       else setLoading(true);
 
-      const [farmersRes, statsRes] = await Promise.all([
+      const [farmersRes, statsRes, seedRes] = await Promise.all([
         getATFarmers({ search: searchTerm, barangay }),
         getATDashboardStats(),
+        getFinalSeeds().catch(() => ({ data: [] })),
       ]);
-      const farmersData = farmersRes.data?.farmers || [];
-      setFarmers(farmersData);
+
+      setFarmers(farmersRes.data?.farmers || []);
       setBarangays(farmersRes.data?.barangays || []);
       setStats(statsRes.data);
+
+      const seeds = seedRes.data || [];
+      if (seeds.length > 0) {
+        setActiveSeason({
+          season: seeds[0].season,
+          season_display: seeds[0].season_display,
+          year: seeds[0].year,
+        });
+      }
+      // Reset to page 1 on any data reload
+      setCurrentPage(1);
     } catch {
       showToast('error', 'Failed to load data. Please try again.');
     } finally {
@@ -437,19 +439,10 @@ const CropMonitoring = () => {
     }
   }, [showToast]);
 
-  // Debounced search
-  const searchTimer = useRef(null);
-
   useEffect(() => {
     loadData(search, brgyFilter, 'load');
     return () => { clearTimeout(searchTimer.current); };
   }, [brgyFilter, loadData]);
-
-  const handleSearch = (q) => {
-    setSearch(q);
-    clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => loadData(q, brgyFilter, 'search'), 400);
-  };
 
   useEffect(() => {
     return () => {
@@ -458,39 +451,36 @@ const CropMonitoring = () => {
     };
   }, []);
 
+  const handleSearch = (q) => {
+    setSearch(q);
+    setCurrentPage(1);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => loadData(q, brgyFilter, 'search'), 400);
+  };
 
-  // ── FILTERED FARMERS ──
+  // ── FILTERED + PAGINATED FARMERS ──
   const filteredFarmers = farmers.filter(f => {
     if (!phaseFilter) return true;
     if (phaseFilter === 'NONE') return !f.latest_phase;
     return f.latest_phase === phaseFilter;
   });
 
-  // ── OPEN ENCODE FORM ──
+  const totalPages  = Math.ceil(filteredFarmers.length / ITEMS_PER_PAGE);
+  const pageStart   = (currentPage - 1) * ITEMS_PER_PAGE;
+  const pageEnd     = pageStart + ITEMS_PER_PAGE;
+  const pageFarmers = filteredFarmers.slice(pageStart, pageEnd);
+
+  // Reset page when phase filter changes
+  const handlePhaseFilter = (val) => { setPhaseFilter(val); setCurrentPage(1); };
+  const handleBrgyFilter  = (val) => { setBrgyFilter(val);  setCurrentPage(1); };
+
+  // ── ENCODE ──
   const openEncode = (farmer, record = null) => {
     setSelectedFarmer(farmer);
     setEditRecord(record);
     setShowPanel(true);
-    setShowHistory(false);
   };
 
-  // ── OPEN HISTORY ──
-  const openHistory = async (farmer) => {
-    setSelectedFarmer(farmer);
-    setShowHistory(true);
-    setShowPanel(false);
-    setHistoryLoading(true);
-    try {
-      const res = await getFarmerCropHistory(farmer.id);
-      setHistoryData(res.data);
-    } catch {
-      showToast('error', 'Failed to load history.');
-    } finally {
-      setHistoryLoading(false);
-    }
-  };
-
-  // ── SAVE RECORD ──
   const handleSave = async (formData) => {
     setSaving(true);
     try {
@@ -533,79 +523,17 @@ const CropMonitoring = () => {
     return acc;
   }, {});
 
-  const FarmerRow = ({ farmer, idx, openEncode, openHistory }) => {
-    const seedRecords = farmer.seed_records || {};
-    const avatarCfg = getPhaseCfg(farmer.latest_phase || 'NONE');
+  // ── SEASON BADGE ──
+  const seasonLabel = activeSeason
+    ? `${activeSeason.season_display} ${activeSeason.year}`
+    : stats?.assigned_barangays
+    ? 'Active Season'
+    : null;
 
-    return (
-      <div key={farmer.id} className="farmer-row"
-        style={{ padding: '0.875rem 1.25rem', borderBottom: idx < filteredFarmers.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', backgroundColor: 'white', transition: 'background 0.15s', cursor: 'pointer' }}
-        onClick={() => openEncode(farmer)}>
-        <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
-          <div style={{ width: 42, height: 42, borderRadius: '50%', backgroundColor: avatarCfg.color, color: 'white', display: 'grid', placeItems: 'center', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0 }}>
-            {farmer.last_name?.[0]?.toUpperCase()}{farmer.first_name?.[0]?.toUpperCase()}
-          </div>
-
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-              <p style={{ fontWeight: 800, fontSize: '0.92rem', color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {farmer.full_name}
-              </p>
-              {farmer.latest_observed && (
-                <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
-                  {new Date(farmer.latest_observed).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginTop: '0.45rem' }}>
-              {[
-                { key: 'HYBRID', label: 'HY' },
-                { key: 'INBRED', label: 'IN' },
-                { key: 'OWN_SEED', label: 'OW' },
-              ].map(({ key, label }) => {
-                const rec = seedRecords[key];
-                if (!rec) {
-                  return (
-                    <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.22rem 0.45rem', borderRadius: '999px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', color: '#6b7280', fontSize: '0.68rem', fontWeight: 700 }}>
-                      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'inline-block' }} />
-                      {label} · No data
-                    </span>
-                  );
-                }
-
-                const cfg = getPhaseCfg(rec.phase || rec.crop_phase);
-                return (
-                  <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.22rem 0.45rem', borderRadius: '999px', backgroundColor: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color, fontSize: '0.68rem', fontWeight: 700 }}>
-                    <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: cfg.color, display: 'inline-block' }} />
-                    {label} · {rec.phase_display || rec.phase || 'Unknown'}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', flexShrink: 0 }}>
-          <button
-            onClick={e => { e.stopPropagation(); openEncode(farmer); }}
-            style={{ padding: '0.375rem 0.75rem', backgroundColor: GREEN.primary, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-            <Plus size={11} /> Encode
-          </button>
-          {farmer.latest_record_id && (
-            <button
-              onClick={e => { e.stopPropagation(); openHistory(farmer); }}
-              style={{ padding: '0.3rem 0.625rem', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.68rem', fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-              <Clock size={11} /> History
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  };
+  const seasonIsWet = activeSeason?.season === 'WET';
 
   // ─────────────────────────────────────────
-  // LOADING
+  // LOADING STATE
   // ─────────────────────────────────────────
   if (loading) {
     return (
@@ -615,11 +543,7 @@ const CropMonitoring = () => {
           @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
           @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
           @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-          @keyframes slideInBottom {
-            0% { transform: translateX(-50%) translateY(120%); opacity: 0; }
-            70% { transform: translateX(-50%) translateY(-8px); opacity: 1; }
-            100% { transform: translateX(-50%) translateY(0); opacity: 1; }
-          }
+          @keyframes slideInBottom { 0% { transform: translateY(120%); opacity: 0; } 70% { transform: translateY(-8px); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
         `}</style>
         <div style={{ width: 36, height: 36, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
         <p style={{ margin: 0, fontSize: '0.875rem' }}>Loading crop monitoring...</p>
@@ -628,7 +552,156 @@ const CropMonitoring = () => {
   }
 
   // ─────────────────────────────────────────
-  // RENDER
+  // HISTORY VIEW — UI placeholder
+  // ─────────────────────────────────────────
+  if (showHistory) {
+    // Sample year options derived from active season year
+    const currentYear = activeSeason?.year || new Date().getFullYear();
+    const yearOptions = [currentYear, currentYear - 1, currentYear - 2];
+
+    return (
+      <div style={{ paddingBottom: '5rem' }}>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
+          @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+          @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        `}</style>
+        <Toast toast={toast} />
+
+        <div style={{ padding: '1.25rem', animation: 'fadeIn 0.2s ease' }}>
+          {/* Back nav */}
+          <button onClick={() => setShowHistory(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN.primary, fontWeight: 700, fontSize: '0.8rem', padding: '0 0 1.25rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+            <ChevronLeft size={15} /> Back to Monitoring
+          </button>
+
+          {/* Header */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Monitoring History</h1>
+            <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
+              View past crop monitoring records by season and year
+            </p>
+          </div>
+
+          {/* Filter bar */}
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem 1.25rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 0.875rem' }}>
+              Filter records
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+              {/* Season dropdown */}
+              <div style={{ flex: '1 1 140px', minWidth: 140 }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Season
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <select value={histSeasonFilter} onChange={e => setHistSeasonFilter(e.target.value)}
+                    style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
+                    <option value="">All seasons</option>
+                    <option value="WET"> Wet Season</option>
+                    <option value="DRY"> Dry Season</option>
+                  </select>
+                  <ChevronDown size={14} color="#9ca3af" style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                </div>
+              </div>
+
+              {/* Year dropdown */}
+              <div style={{ flex: '1 1 110px', minWidth: 110 }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Year
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <select value={histYearFilter} onChange={e => setHistYearFilter(e.target.value)}
+                    style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
+                    <option value="">All years</option>
+                    {yearOptions.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} color="#9ca3af" style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                </div>
+              </div>
+
+              {/* Search */}
+              <div style={{ flex: '2 1 200px', minWidth: 200 }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Search farmer
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} color="#9ca3af" style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <input value={histSearchTerm} onChange={e => setHistSearchTerm(e.target.value)}
+                    placeholder="Name or RSBSA..."
+                    style={{ width: '100%', padding: '0.625rem 0.875rem 0.625rem 2.25rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }} />
+                </div>
+              </div>
+
+              {/* Clear filters */}
+              {(histSeasonFilter || histYearFilter || histSearchTerm) && (
+                <button onClick={() => { setHistSeasonFilter(''); setHistYearFilter(''); setHistSearchTerm(''); }}
+                  style={{ padding: '0.625rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', backgroundColor: 'white', color: '#6b7280', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}>
+                  <X size={13} /> Clear
+                </button>
+              )}
+            </div>
+
+            {/* Active filter summary */}
+            {(histSeasonFilter || histYearFilter) && (
+              <div style={{ marginTop: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.72rem', color: '#9ca3af', fontWeight: 600 }}>Showing:</span>
+                {histSeasonFilter && (
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: histSeasonFilter === 'WET' ? '#0369a1' : '#92400e', backgroundColor: histSeasonFilter === 'WET' ? '#e0f2fe' : '#fef3c7', border: `1px solid ${histSeasonFilter === 'WET' ? '#bae6fd' : '#fde68a'}`, borderRadius: '999px', padding: '0.15rem 0.5rem' }}>
+                    {histSeasonFilter === 'WET' ? ' Wet Season' : ' Dry Season'}
+                  </span>
+                )}
+                {histYearFilter && (
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: GREEN.accent, backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '999px', padding: '0.15rem 0.5rem' }}>
+                    {histYearFilter}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Table area — placeholder, lalakahan ng data kapag connected na ang API */}
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+            {/* Table header */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr', gap: 0, padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #f3f4f6' }}>
+              {['Farmer', 'Seed Type', 'Phase', 'Date', 'Area', 'Status'].map(col => (
+                <span key={col} style={{ fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{col}</span>
+              ))}
+            </div>
+
+            {/* Empty state — placeholder until API connected */}
+            <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.light, border: `2px solid ${GREEN.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <History size={22} color={GREEN.accent} />
+              </div>
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem', fontSize: '0.95rem' }}>
+                {histSeasonFilter || histYearFilter
+                  ? `No records found for ${histSeasonFilter === 'WET' ? 'Wet' : histSeasonFilter === 'DRY' ? 'Dry' : ''} Season${histYearFilter ? ` ${histYearFilter}` : ''}`
+                  : 'Select a season and year to view records'}
+              </p>
+              <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>
+                {histSeasonFilter || histYearFilter
+                  ? 'Try adjusting your filters.'
+                  : 'Use the filters above to browse monitoring history.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Legend note */}
+          <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.75rem', color: '#92400e' }}>
+            <strong>Note:</strong> History data will load here once the season/year filter logic is connected to the API. The filter UI is ready — no changes needed to the save logic or modal.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────
+  // MAIN MONITORING VIEW
   // ─────────────────────────────────────────
   return (
     <div style={{ paddingBottom: '5rem', position: 'relative', overflowX: 'hidden' }}>
@@ -637,46 +710,59 @@ const CropMonitoring = () => {
         @keyframes toastIn { from { transform: translateX(-50%) translateY(20px); opacity: 0; } to { transform: translateX(-50%) translateY(0); opacity: 1; } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        @keyframes slideInBottom {
-          0% { transform: translateY(120%); opacity: 0; }
-          70% { transform: translateY(-8px); opacity: 1; }
-          100% { transform: translateY(0); opacity: 1; }
-        }
+        @keyframes slideInBottom { 0% { transform: translateY(120%); opacity: 0; } 70% { transform: translateY(-8px); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
         .farmer-row:hover { background-color: ${GREEN.light} !important; }
       `}</style>
 
       <Toast toast={toast} />
 
-      {/* ── HEADER ── */}
       <div style={{ padding: '1.25rem', paddingBottom: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+
+        {/* ── HEADER ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Crop Monitoring</h1>
             <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
               Record field observations for your assigned barangays
             </p>
           </div>
+
+          {/* Active season badge — readonly */}
+          {seasonLabel && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: seasonIsWet ? '#e0f2fe' : '#fef3c7', border: `1px solid ${seasonIsWet ? '#bae6fd' : '#fde68a'}`, borderRadius: '999px', padding: '0.4rem 0.875rem' }}>
+              {seasonIsWet
+                ? <span style={{ fontSize: '0.78rem' }}></span>
+                : <span style={{ fontSize: '0.78rem' }}></span>}
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: seasonIsWet ? '#0369a1' : '#92400e' }}>
+                {seasonLabel}
+              </span>
+              <span style={{ fontSize: '0.65rem', fontWeight: 600, color: seasonIsWet ? '#0284c7' : '#b45309', backgroundColor: seasonIsWet ? '#bae6fd' : '#fde68a', borderRadius: '999px', padding: '0.1rem 0.4rem' }}>
+                Active
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Stats cards */}
+        {/* ── STATS CARDS ── */}
         {stats && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
             {[
-              { label: 'Assigned Barangays', value: stats.total_barangays, color: GREEN.primary },
-              { label: 'Total Farmers', value: stats.total_farmers, color: '#374151' },
-              { label: 'Monitored', value: stats.monitored_farmers, color: '#16a34a' },
-              { label: 'Not Yet Monitored', value: stats.unmonitored_farmers, color: '#dc2626' },
+              { label: 'Assigned Barangays', value: stats.total_barangays,     color: GREEN.primary },
+              { label: 'Total Farmers',      value: stats.total_farmers,       color: '#374151'     },
+              { label: 'Monitored',          value: stats.monitored_farmers,   color: '#16a34a'     },
+              { label: 'Not Yet Monitored',  value: stats.unmonitored_farmers, color: '#dc2626'     },
             ].map(({ label, value, color }, i) => (
               <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                 <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
-                <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase', lineHeight: 1.3 }}>{label}</p>
+                <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase', lineHeight: 1.3 }}>{label}</p>
               </div>
             ))}
           </div>
         )}
 
-        {/* Search + Filters */}
+        {/* ── SEARCH + FILTERS ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem', border: '1px solid #f3f4f6' }}>
+          {/* Search bar */}
           <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
             <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
             <input value={search} onChange={e => handleSearch(e.target.value)}
@@ -684,43 +770,54 @@ const CropMonitoring = () => {
               style={{ padding: '0.625rem 0.875rem 0.625rem 2.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.875rem', width: '100%', outline: 'none', boxSizing: 'border-box' }} />
           </div>
 
-          {/* Barangay filter */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <button onClick={() => setBrgyFilter('')}
+          {/* Brgy filter + Phase filter + View History */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+            {/* Brgy pills */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', flex: 1 }}>
+              <button onClick={() => handleBrgyFilter('')}
                 style={{ padding: '0.3rem 0.75rem', border: `1.5px solid ${!brgyFilter ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: !brgyFilter ? GREEN.light : 'white', color: !brgyFilter ? GREEN.primary : '#6b7280', fontWeight: !brgyFilter ? 700 : 400, fontSize: '0.75rem', cursor: 'pointer' }}>
                 All
               </button>
               {barangays.map(b => (
-                <button key={b} onClick={() => setBrgyFilter(b)}
+                <button key={b} onClick={() => handleBrgyFilter(b)}
                   style={{ padding: '0.3rem 0.75rem', border: `1.5px solid ${brgyFilter === b ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: brgyFilter === b ? GREEN.light : 'white', color: brgyFilter === b ? GREEN.primary : '#6b7280', fontWeight: brgyFilter === b ? 700 : 400, fontSize: '0.75rem', cursor: 'pointer' }}>
                   {b}
                 </button>
               ))}
             </div>
 
-            <div style={{ minWidth: 220, flex: '0 0 auto' }}>
-              <label style={{ fontSize: '0.72rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.45rem' }}>
-                Phase filter
-              </label>
-              <select value={phaseFilter} onChange={e => setPhaseFilter(e.target.value)}
-                style={{ width: '100%', padding: '0.75rem 0.9rem', borderRadius: '0.85rem', border: '1px solid #d1d5db', backgroundColor: 'white', color: '#111827', fontSize: '0.875rem', outline: 'none' }}>
-                <option value="">All ({farmers.length})</option>
-                <option value="NONE">Not Monitored ({phaseCounts.NONE || 0})</option>
-                {PHASES.map(p => {
-                  const count = phaseCounts[p.key] || 0;
-                  if (count === 0) return null;
-                  return (
-                    <option key={p.key} value={p.key}>{p.label} ({count})</option>
-                  );
-                })}
-              </select>
+            {/* Phase filter + View History button */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 180 }}>
+                <label style={{ fontSize: '0.68rem', color: '#6b7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: '0.35rem' }}>
+                  Phase filter
+                </label>
+                <select value={phaseFilter} onChange={e => handlePhaseFilter(e.target.value)}
+                  style={{ width: '100%', padding: '0.625rem 0.875rem', borderRadius: '0.625rem', border: '1.5px solid #e5e7eb', backgroundColor: 'white', color: '#111827', fontSize: '0.82rem', outline: 'none', cursor: 'pointer' }}>
+                  <option value="">All ({farmers.length})</option>
+                  <option value="NONE">Not Monitored ({phaseCounts.NONE || 0})</option>
+                  {PHASES.map(p => {
+                    const count = phaseCounts[p.key] || 0;
+                    if (count === 0) return null;
+                    return <option key={p.key} value={p.key}>{p.label} ({count})</option>;
+                  })}
+                </select>
+              </div>
+
+              {/* View History button */}
+              <div>
+                <label style={{ fontSize: '0.68rem', color: 'transparent', fontWeight: 700, display: 'block', marginBottom: '0.35rem' }}>·</label>
+                <button onClick={() => setShowHistory(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.625rem 1rem', backgroundColor: 'white', border: `1.5px solid ${GREEN.border}`, borderRadius: '0.625rem', color: GREEN.accent, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  <History size={14} /> View History
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* ── FARMER LIST ── */}
+      {/* ── FARMER LIST WITH PAGINATION ── */}
       <div style={{ padding: '0 1.25rem' }}>
         {filteredFarmers.length === 0 ? (
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
@@ -734,158 +831,149 @@ const CropMonitoring = () => {
           </div>
         ) : (
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden', border: '1px solid #f3f4f6' }}>
+
+            {/* List header */}
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0 }}>
+              <h3 style={{ fontWeight: 700, fontSize: '0.875rem', margin: 0, color: '#374151' }}>
                 Farmers ({filteredFarmers.length})
               </h3>
               <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                Tap a farmer to encode
+                Showing {pageStart + 1}–{Math.min(pageEnd, filteredFarmers.length)} of {filteredFarmers.length}
               </span>
             </div>
 
-            {filteredFarmers.map((farmer, idx) => (
-              <FarmerRow
-                key={farmer.id}
-                farmer={farmer}
-                idx={idx}
-                openEncode={openEncode}
-                openHistory={openHistory}
-              />
-            ))}
+            {/* Farmer rows — paginated */}
+            {pageFarmers.map((farmer, idx) => {
+              const seedRecords = farmer.seed_records || {};
+              const avatarCfg  = getPhaseCfg(farmer.latest_phase || 'NONE');
+              return (
+                <div key={farmer.id} className="farmer-row"
+                  style={{ padding: '0.875rem 1.25rem', borderBottom: idx < pageFarmers.length - 1 ? '1px solid #f3f4f6' : 'none', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', backgroundColor: 'white', transition: 'background 0.15s', cursor: 'pointer' }}
+                  onClick={() => openEncode(farmer)}>
+
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                    {/* Avatar */}
+                    <div style={{ width: 42, height: 42, borderRadius: '50%', backgroundColor: avatarCfg.color, color: 'white', display: 'grid', placeItems: 'center', fontSize: '0.82rem', fontWeight: 800, flexShrink: 0 }}>
+                      {farmer.last_name?.[0]?.toUpperCase()}{farmer.first_name?.[0]?.toUpperCase()}
+                    </div>
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
+                        <p style={{ fontWeight: 800, fontSize: '0.92rem', color: '#111827', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {farmer.full_name}
+                        </p>
+                        {farmer.latest_observed && (
+                          <span style={{ fontSize: '0.68rem', color: '#9ca3af' }}>
+                            {new Date(farmer.latest_observed).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.1rem 0 0.45rem' }}>
+                        {farmer.barangay}
+                      </p>
+
+                      {/* Seed source phase pills */}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                        {SEED_SOURCES.map(({ key, short }) => {
+                          const rec = seedRecords[key];
+                          if (!rec) {
+                            return (
+                              <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.22rem 0.45rem', borderRadius: '999px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb', color: '#9ca3af', fontSize: '0.68rem', fontWeight: 700 }}>
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: '#cbd5e1', display: 'inline-block' }} />
+                                {short}: —
+                              </span>
+                            );
+                          }
+                          const cfg = getPhaseCfg(rec.phase || rec.crop_phase);
+                          return (
+                            <span key={key} style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.22rem 0.45rem', borderRadius: '999px', backgroundColor: cfg.bg, border: `1px solid ${cfg.border}`, color: cfg.color, fontSize: '0.68rem', fontWeight: 700 }}>
+                              <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: cfg.color, display: 'inline-block' }} />
+                              {short}: {rec.phase_display || rec.phase || '—'}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Encode button */}
+                  <button onClick={e => { e.stopPropagation(); openEncode(farmer); }}
+                    style={{ padding: '0.375rem 0.75rem', backgroundColor: GREEN.primary, border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0, marginTop: '0.25rem' }}>
+                    <Plus size={11} /> Encode
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* ── PAGINATION CONTROLS ── */}
+            {totalPages > 1 && (
+              <div style={{ padding: '0.875rem 1.25rem', borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <div style={{ display: 'flex', gap: '0.375rem' }}>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.375rem 0.75rem', border: `1.5px solid ${currentPage === 1 ? '#e5e7eb' : GREEN.border}`, borderRadius: '0.5rem', backgroundColor: currentPage === 1 ? '#f9fafb' : GREEN.light, color: currentPage === 1 ? '#d1d5db' : GREEN.accent, fontSize: '0.78rem', fontWeight: 700, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>
+                    <ChevronLeft size={14} /> Prev
+                  </button>
+
+                  {/* Page number pills */}
+                  {Array.from({ length: totalPages }, (_, i) => i + 1)
+                    .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                    .reduce((acc, p, idx, arr) => {
+                      if (idx > 0 && p - arr[idx - 1] > 1) acc.push('...');
+                      acc.push(p);
+                      return acc;
+                    }, [])
+                    .map((p, idx) =>
+                      p === '...'
+                        ? <span key={`ellipsis-${idx}`} style={{ padding: '0.375rem 0.25rem', fontSize: '0.78rem', color: '#9ca3af' }}>…</span>
+                        : <button key={p} onClick={() => setCurrentPage(p)}
+                            style={{ padding: '0.375rem 0.625rem', border: `1.5px solid ${currentPage === p ? GREEN.primary : '#e5e7eb'}`, borderRadius: '0.5rem', backgroundColor: currentPage === p ? GREEN.primary : 'white', color: currentPage === p ? 'white' : '#374151', fontSize: '0.78rem', fontWeight: currentPage === p ? 700 : 400, cursor: 'pointer', minWidth: 34 }}>
+                            {p}
+                          </button>
+                    )}
+
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', padding: '0.375rem 0.75rem', border: `1.5px solid ${currentPage === totalPages ? '#e5e7eb' : GREEN.border}`, borderRadius: '0.5rem', backgroundColor: currentPage === totalPages ? '#f9fafb' : GREEN.light, color: currentPage === totalPages ? '#d1d5db' : GREEN.accent, fontSize: '0.78rem', fontWeight: 700, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>
+                    Next <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* ── ENCODE BOTTOM SHEET ── */}
+      {/* ── ENCODE BOTTOM SHEET — HINDI BINAGO ── */}
       {showPanel && selectedFarmer && (
         <>
-          {/* Backdrop */}
           <div onClick={() => { setShowPanel(false); setSelectedFarmer(null); setEditRecord(null); }}
             style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 700, animation: 'fadeIn 0.2s ease' }} />
-          {/* Sheet */}
-          <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0,
-            backgroundColor: 'white', borderRadius: '1.5rem 1.5rem 0 0',
-            padding: '1.5rem', zIndex: 800,
-            maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto',
-            paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
-            animation: 'slideInBottom 0.3s cubic-bezier(0.34,1.1,0.64,1)',
-            width: 'min(100%, 720px)', margin: '0 auto',
-            boxShadow: '0 32px 80px rgba(15,23,42,0.14)',
-          }}>
-            {/* Handle */}
+          <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, backgroundColor: 'white', borderRadius: '1.5rem 1.5rem 0 0', padding: '1.5rem', zIndex: 800, maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))', animation: 'slideInBottom 0.3s cubic-bezier(0.34,1.1,0.64,1)', width: 'min(100%, 720px)', margin: '0 auto', boxShadow: '0 32px 80px rgba(15,23,42,0.14)' }}>
             <div style={{ width: 44, height: 4, backgroundColor: '#e5e7eb', borderRadius: '999px', margin: '0 auto 1.25rem' }} />
-
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
-              <div>
-                <h2 style={{ fontWeight: 800, fontSize: '1.6rem', margin: '0.35rem 0 0', color: '#111827', lineHeight: 1.05 }}>
-                  {editRecord ? 'Update observation details' : 'Record Crop Phase'}
-                </h2>
-              </div>
+              <h2 style={{ fontWeight: 800, fontSize: '1.6rem', margin: 0, color: '#111827', lineHeight: 1.05 }}>
+                {editRecord ? 'Update observation details' : 'Record Crop Phase'}
+              </h2>
               <button onClick={() => { setShowPanel(false); setSelectedFarmer(null); setEditRecord(null); }}
                 style={{ background: '#f3f4f6', border: 'none', borderRadius: '999px', width: 38, height: 38, cursor: 'pointer', color: '#374151', display: 'grid', placeItems: 'center' }}>
                 <X size={18} />
               </button>
             </div>
-
             <EncodeForm
               farmer={selectedFarmer}
               editRecord={editRecord}
               onSave={handleSave}
               onClose={() => { setShowPanel(false); setSelectedFarmer(null); setEditRecord(null); }}
               saving={saving}
+              showToast={showToast}
             />
-          </div>
-        </>
-      )}
-
-      {/* ── HISTORY BOTTOM SHEET ── */}
-      {showHistory && selectedFarmer && (
-        <>
-          <div onClick={() => { setShowHistory(false); setSelectedFarmer(null); setHistoryData(null); }}
-            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 700, animation: 'fadeIn 0.2s ease' }} />
-          <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0,
-            backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0',
-            padding: '1.5rem', zIndex: 800,
-            maxHeight: '85vh', overflowY: 'auto',
-            paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))',
-            animation: 'slideInBottom 0.3s cubic-bezier(0.34,1.1,0.64,1)',
-            maxWidth: '640px', margin: '0 auto',
-          }}>
-            <div style={{ width: 40, height: 4, backgroundColor: '#e5e7eb', borderRadius: '999px', margin: '0 auto 1.25rem' }} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div>
-                <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>Monitoring History</h2>
-                {historyData && (
-                  <p style={{ fontSize: '0.78rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>
-                    {historyData.farmer_name} · Brgy. {historyData.barangay}
-                  </p>
-                )}
-              </div>
-              <button onClick={() => { setShowHistory(false); setSelectedFarmer(null); setHistoryData(null); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>
-                <X size={20} />
-              </button>
-            </div>
-
-            {historyLoading ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#9ca3af' }}>
-                <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
-                Loading history...
-              </div>
-            ) : historyData?.records?.length === 0 ? (
-              <p style={{ textAlign: 'center', color: '#9ca3af', padding: '2rem' }}>No monitoring records yet.</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {historyData?.records?.map((rec, idx) => {
-                  const cfg = getPhaseCfg(rec.crop_phase);
-                  return (
-                    <div key={rec.id} style={{ backgroundColor: cfg.bg, borderRadius: '0.875rem', padding: '0.875rem 1rem', border: `1px solid ${cfg.border}`, animation: `slideUp ${0.2 + idx * 0.04}s ease` }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                        <PhaseBadge phase={rec.crop_phase} />
-                        <span style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                          {new Date(rec.date_observed).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </span>
-                      </div>
-                      {rec.seed_source && (
-                        <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 0.25rem' }}>
-                          Seed source: {rec.seed_source.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())}
-                        </p>
-                      )}
-                      {rec.area_monitored_ha && (
-                        <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 0.25rem' }}>
-                          Area: {rec.area_monitored_ha} ha
-                          {rec.crop_establishment && ` · ${rec.crop_establishment === 'DS' ? 'Direct Seeding' : 'Transplanting'}`}
-                        </p>
-                      )}
-                      {rec.sowing_date && (
-                        <p style={{ fontSize: '0.78rem', color: '#374151', margin: '0 0 0.25rem' }}>
-                          Sowing Date: {new Date(rec.sowing_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </p>
-                      )}
-                      {rec.remarks && (
-                        <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '0.375rem 0 0', fontStyle: 'italic' }}>
-                          "{rec.remarks}"
-                        </p>
-                      )}
-                      <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.5rem 0 0' }}>
-                        Reported by {rec.encoded_by_name}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            <button onClick={() => { setShowHistory(false); openEncode(selectedFarmer); }}
-              style={{ width: '100%', marginTop: '1rem', padding: '0.75rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.875rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-              <Plus size={16} /> Encode New Observation
-            </button>
           </div>
         </>
       )}
     </div>
   );
 };
+
 export default CropMonitoring;

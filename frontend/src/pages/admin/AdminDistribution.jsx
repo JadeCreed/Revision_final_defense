@@ -142,6 +142,7 @@ const AdminDistribution = () => {
   const [rejectReason, setRejectReason]   = useState('');
   const [unlockModal, setUnlockModal]     = useState(null);
   const [unlockReason, setUnlockReason]   = useState('');
+  const [rejectType, setRejectType]       = useState('beneficiary');
   const [confirmAction, setConfirmAction] = useState(null);
   const [actionLoading, setActionLoading] = useState({});
   const [viewSig, setViewSig]             = useState(null);

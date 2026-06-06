@@ -531,6 +531,20 @@ const BrgyDistribution = () => {
           authorized_representative: inbredForm.authorized_representative,
         });
         showToast('success', 'Inbred distribution data saved.');
+        // ── Notify AT na nag-start na ng distribution ──
+        try {
+          const atPayload = {
+            barangay: myBarangay,
+            season_display: finalSeeds[0]?.season_display || '',
+            year: finalSeeds[0]?.year || new Date().getFullYear(),
+          };
+          localStorage.setItem('at_masterlist_notif', JSON.stringify(atPayload));
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'at_masterlist_notif',
+            newValue: JSON.stringify(atPayload),
+            storageArea: localStorage,
+          }));
+        } catch {}
         await openFarmerDetail(selectedFarmer);
         await loadAll();
       } catch (err) {
@@ -545,6 +559,20 @@ const BrgyDistribution = () => {
       try {
         await updateEntry(entry.entry_id, { qty_bags: Math.round(Number(hybridForm.qty_bags)) });
         showToast('success', 'Hybrid distribution data saved.');
+        // ── Notify AT na nag-start na ng distribution ──
+        try {
+          const atPayload = {
+            barangay: myBarangay,
+            season_display: finalSeeds[0]?.season_display || '',
+            year: finalSeeds[0]?.year || new Date().getFullYear(),
+          };
+          localStorage.setItem('at_masterlist_notif', JSON.stringify(atPayload));
+          window.dispatchEvent(new StorageEvent('storage', {
+            key: 'at_masterlist_notif',
+            newValue: JSON.stringify(atPayload),
+            storageArea: localStorage,
+          }));
+        } catch {}
         await openFarmerDetail(selectedFarmer);
         await loadAll();
       } catch (err) {

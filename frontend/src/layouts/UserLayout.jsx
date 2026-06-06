@@ -86,17 +86,233 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
   }, []);
 
   useEffect(() => {
-    syncSeedNotif();
+    const syncBRGYSeedNotif = () => {
+      if (role !== 'BRGY') return;
+      try {
+        const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
+        if (!seeds) return;
+
+        const season = seeds.season || 'WET';
+        const year = seeds.year || new Date().getFullYear();
+        const notifId = `seed_${season}_${year}`;
+        const dismissKey = `brgy_seed_dismissed_${season}_${year}`;
+        const isDismissed = localStorage.getItem(dismissKey) === 'true';
+
+        const existing = readNotifs();
+        const alreadyExists = existing.find(n => n.id === notifId);
+
+        if (alreadyExists) {
+          if (isDismissed && !alreadyExists.read) {
+            const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            setNotifs(updated);
+          } else {
+            setNotifs([...existing]);
+          }
+          return;
+        }
+
+        const infoText = Array.isArray(seeds.varieties)
+          ? seeds.varieties.map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`).filter(Boolean).join(' · ')
+          : 'New seed varieties have been confirmed.';
+
+        const newNotif = {
+          id: notifId,
+          title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
+          info: infoText,
+          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+          read: isDismissed,
+          route: '/brgy',
+        };
+
+        const next = [newNotif, ...existing];
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+        setNotifs(next);
+      } catch {}
+    };
+
+    const syncATSeedNotif = () => {
+      if (role !== 'AT') return;
+      try {
+        const seeds = JSON.parse(localStorage.getItem('at_final_seeds_notif') || 'null');
+        if (!seeds) return;
+
+        const season = seeds.season || 'WET';
+        const year = seeds.year || new Date().getFullYear();
+        const notifId = `at_seed_${season}_${year}`;
+        const dismissKey = `at_seed_dismissed_${season}_${year}`;
+        const isDismissed = localStorage.getItem(dismissKey) === 'true';
+
+        const existing = readNotifs();
+        if (existing.find(n => n.id === notifId)) {
+          if (isDismissed) {
+            const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            setNotifs(updated);
+          } else {
+            setNotifs([...existing]);
+          }
+          return;
+        }
+
+        const infoText = Array.isArray(seeds.varieties)
+          ? seeds.varieties.map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`).filter(Boolean).join(' · ')
+          : 'New seed varieties have been confirmed.';
+
+        const newNotif = {
+          id: notifId,
+          title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
+          info: infoText,
+          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+          read: isDismissed,
+          route: '/at',
+        };
+        const next = [newNotif, ...existing];
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+        setNotifs(next);
+      } catch {}
+    };
+
+    const syncATMasterlistNotif = () => {
+      if (role !== 'AT') return;
+      try {
+        const raw = localStorage.getItem('at_masterlist_notif');
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (!data) return;
+
+        const notifId = `at_masterlist_${data.barangay}`;
+        const dismissKey = `at_masterlist_dismissed_${data.barangay}`;
+        const isDismissed = localStorage.getItem(dismissKey) === 'true';
+
+        const existing = readNotifs();
+        if (existing.find(n => n.id === notifId)) {
+          if (isDismissed) {
+            const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            setNotifs(updated);
+          } else {
+            setNotifs([...existing]);
+          }
+          return;
+        }
+
+        const newNotif = {
+          id: notifId,
+          title: `Seed Distribution Started — Brgy. ${data.barangay}`,
+          info: `Brgy. ${data.barangay} has started encoding seed distribution for ${data.season_display} ${data.year}.`,
+          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+          read: isDismissed,
+          route: '/at',
+        };
+        const next = [newNotif, ...existing];
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+        setNotifs(next);
+      } catch {}
+    };
+
+    const syncFARMERNotifs = () => {
+      if (role !== 'FARMER') return;
+
+      try {
+        const seeds = JSON.parse(localStorage.getItem('farmer_final_seeds_notif') || 'null');
+        if (!seeds) {
+          setNotifs(readNotifs());
+          return;
+        }
+
+        const season = seeds.season || 'WET';
+        const year = seeds.year || new Date().getFullYear();
+        const notifId = `farmer_seed_${season}_${year}`;
+        const dismissKey = `farmer_seed_dismissed_${season}_${year}`;
+        const isDismissed = localStorage.getItem(dismissKey) === 'true';
+        const existing = readNotifs();
+
+        if (existing.find(n => n.id === notifId)) {
+          if (isDismissed) {
+            const updated = existing.map(n =>
+              n.id === notifId ? { ...n, read: true } : n
+            );
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+            setNotifs(updated);
+          } else {
+            setNotifs([...existing]);
+          }
+          return;
+        }
+
+        const infoText = Array.isArray(seeds.varieties)
+          ? seeds.varieties
+              .map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`)
+              .filter(Boolean)
+              .join(' · ')
+          : 'New seed varieties have been confirmed.';
+
+        const newNotif = {
+          id: notifId,
+          title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
+          info: infoText,
+          date: new Date().toLocaleDateString('en-PH', {
+            month: 'short', day: 'numeric', year: 'numeric',
+          }),
+          read: isDismissed,
+          route: '/farmer',
+        };
+
+        const next = [newNotif, ...existing];
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+        setNotifs(next);
+      } catch {
+        setNotifs(readNotifs());
+      }
+    };
+
+    if (role === 'BRGY') syncBRGYSeedNotif();
+    if (role === 'AT') {
+      syncATSeedNotif();
+      syncATMasterlistNotif();
+    }
+    if (role === 'FARMER') {
+      syncFARMERNotifs();
+    }
 
     const onStorage = (e) => {
       if (!e || !e.key) return;
+
       if (e.key === NOTIF_KEY) {
         setNotifs(readNotifs());
         return;
       }
-      if (e.key === 'brgy_final_seeds_notif' || e.key.startsWith('brgy_seed_dismissed_')) {
-        setNotifs(readNotifs());
-        syncSeedNotif();
+
+      if (role === 'BRGY') {
+        if (e.key === 'brgy_final_seeds_notif' || e.key.startsWith('brgy_seed_dismissed_')) {
+          setNotifs(readNotifs());
+          syncBRGYSeedNotif();
+        }
+      }
+
+      if (role === 'AT') {
+        if (
+          e.key === 'at_final_seeds_notif' ||
+          e.key.startsWith('at_seed_dismissed_') ||
+          e.key === 'at_masterlist_notif' ||
+          e.key.startsWith('at_masterlist_dismissed_')
+        ) {
+          setNotifs(readNotifs());
+          syncATSeedNotif();
+          syncATMasterlistNotif();
+        }
+      }
+
+      if (role === 'FARMER') {
+        if (
+          e.key === NOTIF_KEY ||
+          e.key === 'farmer_final_seeds_notif' ||
+          e.key.startsWith('farmer_seed_dismissed_')
+        ) {
+          setNotifs(readNotifs());
+          syncFARMERNotifs();
+        }
       }
     };
 
