@@ -27,48 +27,50 @@ const fmtDate = v => v
   ? new Date(v).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })
   : '—';
 
-// ── Season dropdown ───────────────────────────────────────────
-const SeasonDropdown = ({ polls, activePollId, onChange }) => {
+// ── Simple dropdown ──────────────────────────────────────────
+const SimpleDropdown = ({ options, value, onChange, placeholder }) => {
   const [open, setOpen] = useState(false);
-  const ref     = useRef(null);
-  const current = polls.find(p => p.id === activePollId);
+  const ref = useRef(null);
+  const current = options.find(o => o.value === value);
+
   useEffect(() => {
     const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button onClick={() => setOpen(v => !v)} style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        padding: '7px 14px', borderRadius: 10,
+        display: 'flex', alignItems: 'center', gap: 7,
+        padding: '7px 13px', borderRadius: 10,
         border: '1px solid #e2e8f0', background: 'white',
         fontSize: 13, fontWeight: 600, color: '#374151',
-        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+        whiteSpace: 'nowrap',
       }}>
-        {current?.label || 'Select season'}
+        {current?.label || placeholder}
         <ChevronDown size={13} style={{ transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
+
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 6px)', left: 0,
           background: 'white', border: '1px solid #e2e8f0',
           borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.12)',
-          zIndex: 50, minWidth: 180, overflow: 'hidden',
+          zIndex: 50, minWidth: 170, overflow: 'hidden',
         }}>
-          {polls.map(p => (
-            <button key={p.id} onClick={() => { onChange(p.id); setOpen(false); }} style={{
+          {options.map(o => (
+            <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); }} style={{
               width: '100%', textAlign: 'left', padding: '9px 14px',
-              border: 'none', background: p.id === activePollId ? '#f0fdf4' : 'white',
-              color: p.id === activePollId ? '#166534' : '#374151',
-              fontWeight: p.id === activePollId ? 700 : 400,
-              fontSize: 13, cursor: 'pointer',
+              border: 'none', fontSize: 13, cursor: 'pointer',
+              background: o.value === value ? '#f0fdf4' : 'white',
+              color: o.value === value ? '#166534' : '#374151',
+              fontWeight: o.value === value ? 700 : 400,
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
-              {p.label}
-              {p.status === 'OPEN' && (
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>active</span>
-              )}
+              {o.label}
+              {o.active && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>active</span>}
             </button>
           ))}
         </div>
@@ -198,7 +200,7 @@ const CropPhase = () => {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
+    <div style={{ minHeight: '100vh'}}>
       <style>{`
         @keyframes cp-spin   { to { transform: rotate(360deg); } }
         @keyframes cp-pulse  { 0%,100%{opacity:1} 50%{opacity:.4} }
@@ -208,7 +210,7 @@ const CropPhase = () => {
         @media(max-width:600px)  { .cp-ins { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* ── Hero ── */}
         <div style={{
@@ -239,44 +241,80 @@ const CropPhase = () => {
           </div>
         </div>
 
-        {/* ── Filters — Season dropdown + Seed pills SEPARATE ── */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-          {/* Season selector */}
-          {polls.length > 0 && (
-            <SeasonDropdown
-              polls={polls}
-              activePollId={pollId ?? poll?.id}
-              onChange={id => setPollId(id)}
-            />
-          )}
+        {/* ── Filters ── */}
+        {(() => {
+          const seasonOptions = [...new Map(
+            polls.map(p => [p.season, { value: p.season, label: p.season === 'WET' ? 'Wet Season' : 'Dry Season' }])
+          ).values()];
 
-          {/* Divider */}
-          <div style={{ width: 1, height: 28, background: '#e2e8f0', flexShrink: 0 }} />
+          const activePoll   = polls.find(p => p.id === (pollId ?? poll?.id));
+          const activeSeason = activePoll?.season || poll?.season || 'WET';
+          const activeYear   = activePoll?.year || poll?.year || new Date().getFullYear();
 
-          {/* Seed type pills */}
-          <div style={{ display: 'flex', gap: 5, background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: 4, flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-            {[
-              { key: 'ALL',      label: 'All seeds' },
-              { key: 'HYBRID',   label: 'Hybrid'    },
-              { key: 'INBRED',   label: 'Inbred'    },
-              { key: 'OWN_SEED', label: 'Own Seed'  },
-            ].map(s => {
-              const cfg    = SEED_CFG[s.key];
-              const active = seedFilter === s.key;
-              return (
-                <button key={s.key} onClick={() => setSeedFilter(s.key)} style={{
-                  padding: '5px 13px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-                  background: active ? (cfg?.light || '#f0fdf4') : 'transparent',
-                  color:      active ? (cfg?.color || '#166534') : '#64748b',
-                  border:     active ? `1px solid ${cfg?.border || '#bbf7d0'}` : '1px solid transparent',
-                  cursor: 'pointer', transition: 'all .12s',
-                }}>
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          const yearOptions = polls
+            .filter(p => p.season === activeSeason)
+            .map(p => ({
+              value: p.id,
+              label: String(p.year),
+              active: p.status === 'OPEN',
+            }))
+            .filter((v, i, a) => a.findIndex(x => x.value === v.value) === i);
+
+          const handleSeasonChange = newSeason => {
+            const match = polls.find(p => p.season === newSeason && p.status === 'OPEN')
+              || polls.find(p => p.season === newSeason);
+            if (match) setPollId(match.id);
+          };
+
+          const handleYearChange = newPollId => setPollId(newPollId);
+
+          return (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+              {seasonOptions.length > 0 && (
+                <SimpleDropdown
+                  options={seasonOptions}
+                  value={activeSeason}
+                  onChange={handleSeasonChange}
+                  placeholder="Select season"
+                />
+              )}
+
+              {yearOptions.length > 0 && (
+                <SimpleDropdown
+                  options={yearOptions}
+                  value={pollId ?? activePoll?.id}
+                  onChange={handleYearChange}
+                  placeholder={String(activeYear)}
+                />
+              )}
+
+              <div style={{ width: 1, height: 28, background: '#e2e8f0', flexShrink: 0 }} />
+
+              <div style={{ display: 'flex', gap: 5, background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: 4, flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+                {[
+                  { key: 'ALL',      label: 'All seeds' },
+                  { key: 'HYBRID',   label: 'Hybrid'    },
+                  { key: 'INBRED',   label: 'Inbred'    },
+                  { key: 'OWN_SEED', label: 'Own Seed'  },
+                ].map(s => {
+                  const cfg    = SEED_CFG[s.key];
+                  const active = seedFilter === s.key;
+                  return (
+                    <button key={s.key} onClick={() => setSeedFilter(s.key)} style={{
+                      padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+                      background: active ? (cfg?.light || '#f0fdf4') : 'transparent',
+                      color:      active ? (cfg?.color || '#166534') : '#64748b',
+                      border:     active ? `1px solid ${cfg?.border || '#bbf7d0'}` : '1px solid transparent',
+                      cursor: 'pointer', transition: 'all .12s',
+                    }}>
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── KPI cards ── */}
         <KpiCards kpi={kpi} />
@@ -289,6 +327,7 @@ const CropPhase = () => {
           year={year}
           stdDays={data?.std_days}
           ganttAlert={ins?.gantt_alert}
+          timelineMonths={data?.timeline_months}
         />
 
         {/* ── Insights ── */}

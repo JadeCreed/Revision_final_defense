@@ -210,8 +210,8 @@ export const updateGisPlot  = (id, d)  => API.patch(`/gis/plots/${id}/`, d);
 export const deleteGisPlot  = (id)     => API.delete(`/gis/plots/${id}/`);
 export const getMapSummary  = (params = {}) => API.get('/gis/summary/', { params });
 export const getGisBarangays= ()       => API.get('/gis/barangays/');
-export const getGisAllPolls = ()       => API.get('/seed-poll/gis-all-polls/');
-
+export const getGisAllPolls = ()       => API.get('/seed-poll/gis-all-polls/');export const getATMonitoringHistory = (params = {}) =>
+  API.get('/crop-monitoring/at/history/', { params });
 // ── CROP PHASE ──
 export const getCropPhaseAnalytics = (params = {}) => {
   const query = new URLSearchParams();

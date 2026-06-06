@@ -71,11 +71,18 @@ class ATFarmerListView(APIView):
         qs = qs.order_by('barangay', 'last_name', 'first_name')
         phase_filter = request.query_params.get('phase', '')
 
+        from apps.seed_poll.models import Poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
         # For each farmer, get their latest monitoring record
         results = []
         for farmer in qs:
             latest = CropMonitoringRecord.objects.filter(
-                farmer=farmer
+                farmer=farmer,
+                poll=active_poll,
             ).order_by('-date_observed', '-encoded_at').first()
 
             # Get one record per seed source for this farmer
@@ -84,6 +91,7 @@ class ATFarmerListView(APIView):
                 rec = CropMonitoringRecord.objects.filter(
                     farmer=farmer,
                     seed_source=seed_key,
+                    poll=active_poll,
                 ).order_by('-date_observed', '-encoded_at').first()
                 if rec:
                     seed_records[seed_key] = {
@@ -353,6 +361,53 @@ class ATCropMonitoringCreateView(APIView):
 # AT — History for a specific farmer
 # ─────────────────────────────────────────────────────────────
 
+class ATMonitoringHistoryView(APIView):
+    """
+    GET /api/crop-monitoring/at/history/
+    Returns all monitoring records for AT's assigned barangays.
+    Supports: ?season=WET&year=2026&search=
+    """
+    permission_classes = [IsAuthenticated, IsATUser]
+
+    def get(self, request):
+        at_profile = get_at_profile(request.user)
+        if not at_profile:
+            return Response({'records': [], 'total': 0})
+
+        assigned_barangays = at_profile.get_assigned_barangays()
+        if not assigned_barangays:
+            return Response({'records': [], 'total': 0})
+
+        qs = CropMonitoringRecord.objects.filter(
+            barangay__in=assigned_barangays
+        ).select_related('farmer', 'encoded_by').order_by('-date_observed', '-encoded_at')
+
+        season = request.query_params.get('season', '').upper()
+        year = request.query_params.get('year', '')
+        search = request.query_params.get('search', '')
+
+        if year:
+            try:
+                qs = qs.filter(date_observed__year=int(year))
+            except ValueError:
+                pass
+
+        if season == 'WET':
+            qs = qs.filter(date_observed__month__in=[6, 7, 8, 9, 10])
+        elif season == 'DRY':
+            qs = qs.filter(date_observed__month__in=[11, 12, 1, 2, 3, 4, 5])
+
+        if search:
+            qs = qs.filter(
+                Q(farmer__first_name__icontains=search) |
+                Q(farmer__last_name__icontains=search) |
+                Q(farmer__rsbsa_number__icontains=search)
+            )
+
+        serializer = CropMonitoringRecordSerializer(qs[:200], many=True)
+        return Response({'records': serializer.data, 'total': qs.count()})
+
+
 class ATFarmerHistoryView(APIView):
     """
     GET /api/crop-monitoring/farmers/<farmer_id>/history/
@@ -544,18 +599,27 @@ class ATDashboardStatsView(APIView):
             barangay__in=assigned_barangays
         ).count()
 
+        from apps.seed_poll.models import Poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
         monitored_farmers = CropMonitoringRecord.objects.filter(
-            barangay__in=assigned_barangays
+            barangay__in=assigned_barangays,
+            poll=active_poll,
         ).values('farmer').distinct().count()
 
         # Records encoded by this AT
         my_records = CropMonitoringRecord.objects.filter(
-            encoded_by=request.user
+            encoded_by=request.user,
+            poll=active_poll,
         ).count()
 
         # Phase distribution across assigned barangays
         summaries = BarangayCropSummary.objects.filter(
-            barangay__in=assigned_barangays
+            barangay__in=assigned_barangays,
+            poll=active_poll,
         )
 
         phase_counts = {

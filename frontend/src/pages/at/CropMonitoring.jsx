@@ -13,6 +13,7 @@ import {
   updateCropRecord,
   getFarmerCropHistory,
   getFinalSeeds,
+  getATMonitoringHistory,
 } from '../../api/axios';
 
 // ─────────────────────────────────────────
@@ -254,7 +255,16 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
               <button key={phaseKey} type="button"
                 onClick={() => {
                   if (!isClickable) { handleLockedClick(); return; }
-                  setForm(p => ({ ...p, crop_phase: phaseKey, sowing_date: phaseKey === 'ESTABLISHMENT' ? p.sowing_date : '', crop_establishment: phaseKey === 'ESTABLISHMENT' ? p.crop_establishment : '' }));
+                  setForm(p => {
+                    const existingArea = farmer.seed_records?.[p.seed_source]?.area_monitored_ha || '';
+                    return {
+                      ...p,
+                      crop_phase: phaseKey,
+                      sowing_date: phaseKey === 'ESTABLISHMENT' ? p.sowing_date : '',
+                      crop_establishment: phaseKey === 'ESTABLISHMENT' ? p.crop_establishment : '',
+                      area_monitored_ha: p.area_monitored_ha || (phaseKey !== 'ESTABLISHMENT' ? existingArea : ''),
+                    };
+                  });
                   setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
                 }}
                 style={{ minHeight: 68, border: `2px solid ${sel ? phase.color : isCurrent ? phase.color : isCompleted ? '#e5e7eb' : isNext ? '#16a34a' : '#e5e7eb'}`, borderRadius: '1rem', backgroundColor: sel ? phase.bg : isCurrent ? phase.bg : isCompleted ? '#f9fafb' : isNext ? '#f0fdf4' : '#f9fafb', cursor: isClickable ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.9rem', transition: 'all 0.2s', opacity: isFuture ? 0.45 : 1, boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none' }}>
@@ -336,8 +346,22 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
           {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
         </div>
         <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Area Monitored (ha)</label>
-          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha} onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))} placeholder="e.g. 0.50" style={inp(false)} />
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Area Monitored (ha)
+            {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 600, color: '#16a34a', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                auto-filled
+              </span>
+            )}
+          </label>
+          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
+            onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
+            placeholder="e.g. 0.50" style={inp(false)} />
+          {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
+            <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>
+              Carried over from Crop Establishment. You can still edit if needed.
+            </p>
+          )}
         </div>
       </div>
 
@@ -387,11 +411,13 @@ const CropMonitoring = () => {
   const [showPanel,      setShowPanel]      = useState(false);
   const [saving,         setSaving]         = useState(false);
 
-  // History view — UI placeholder, walang API call pa
-  const [showHistory,    setShowHistory]    = useState(false);
+  // History view
+  const [showHistory,      setShowHistory]      = useState(false);
   const [histSeasonFilter, setHistSeasonFilter] = useState('');
   const [histYearFilter,   setHistYearFilter]   = useState('');
   const [histSearchTerm,   setHistSearchTerm]   = useState('');
+  const [histRecords,      setHistRecords]      = useState([]);
+  const [histLoading,      setHistLoading]      = useState(false);
 
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
@@ -402,6 +428,29 @@ const CropMonitoring = () => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
+
+  const loadHistory = useCallback(async (season, year, search) => {
+    if (!season && !year) {
+      setHistRecords([]);
+      return;
+    }
+    setHistLoading(true);
+    try {
+      const res = await getATMonitoringHistory({ season, year, search });
+      setHistRecords(res.data?.records || []);
+    } catch {
+      showToast('error', 'Failed to load history.');
+      setHistRecords([]);
+    } finally {
+      setHistLoading(false);
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    if (showHistory) {
+      loadHistory(histSeasonFilter, histYearFilter, histSearchTerm);
+    }
+  }, [showHistory, histSeasonFilter, histYearFilter, histSearchTerm, loadHistory]);
 
   // ── LOAD DATA ──
   const loadData = useCallback(async (searchTerm, barangay, mode = 'load') => {
@@ -664,36 +713,52 @@ const CropMonitoring = () => {
             )}
           </div>
 
-          {/* Table area — placeholder, lalakahan ng data kapag connected na ang API */}
+          {/* Table area */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
-            {/* Table header */}
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr', gap: 0, padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #f3f4f6' }}>
               {['Farmer', 'Seed Type', 'Phase', 'Date', 'Area', 'Status'].map(col => (
                 <span key={col} style={{ fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{col}</span>
               ))}
             </div>
 
-            {/* Empty state — placeholder until API connected */}
-            <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.light, border: `2px solid ${GREEN.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                <History size={22} color={GREEN.accent} />
+            {histLoading ? (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
+                <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Loading records...</p>
               </div>
-              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem', fontSize: '0.95rem' }}>
-                {histSeasonFilter || histYearFilter
-                  ? `No records found for ${histSeasonFilter === 'WET' ? 'Wet' : histSeasonFilter === 'DRY' ? 'Dry' : ''} Season${histYearFilter ? ` ${histYearFilter}` : ''}`
-                  : 'Select a season and year to view records'}
-              </p>
-              <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>
-                {histSeasonFilter || histYearFilter
-                  ? 'Try adjusting your filters.'
-                  : 'Use the filters above to browse monitoring history.'}
-              </p>
-            </div>
-          </div>
-
-          {/* Legend note */}
-          <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: '0.75rem', fontSize: '0.75rem', color: '#92400e' }}>
-            <strong>Note:</strong> History data will load here once the season/year filter logic is connected to the API. The filter UI is ready — no changes needed to the save logic or modal.
+            ) : !histSeasonFilter && !histYearFilter ? (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.light, border: `2px solid ${GREEN.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                  <History size={22} color={GREEN.accent} />
+                </div>
+                <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Select a season and year to view records</p>
+                <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Use the filters above to browse monitoring history.</p>
+              </div>
+            ) : histRecords.length === 0 ? (
+              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+                <History size={28} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+                <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No records found</p>
+                <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Try adjusting your filters.</p>
+              </div>
+            ) : (
+              histRecords.map((rec, idx) => {
+                const phaseCfg = getPhaseCfg(rec.crop_phase);
+                const seedLabel = rec.seed_source === 'HYBRID' ? 'Hybrid' : rec.seed_source === 'INBRED' ? 'Inbred' : 'Own Seed';
+                return (
+                  <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr', gap: 0, padding: '0.75rem 1.25rem', borderBottom: idx < histRecords.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#111827' }}>{rec.farmer_name || 'Unknown Farmer'}</p>
+                      <p style={{ margin: '0.1rem 0 0', fontSize: '0.68rem', color: '#9ca3af' }}>{rec.barangay || ''}</p>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#374151', fontWeight: 600 }}>{seedLabel}</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: phaseCfg.color, backgroundColor: phaseCfg.bg, padding: '0.15rem 0.5rem', borderRadius: '999px', border: `1px solid ${phaseCfg.border}`, display: 'inline-block' }}>{phaseCfg.label}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>{rec.date_observed ? new Date(rec.date_observed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                    <span style={{ fontSize: '0.72rem', color: '#374151' }}>{rec.area_monitored_ha ? `${rec.area_monitored_ha} ha` : '—'}</span>
+                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: rec.phase_status === 'NORMAL' ? '#16a34a' : rec.phase_status === 'DELAYED' ? '#ca8a04' : '#dc2626' }}>{rec.phase_status || '—'}</span>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>

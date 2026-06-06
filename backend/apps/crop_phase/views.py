@@ -104,83 +104,132 @@ class CropPhaseAnalyticsView(APIView):
         damaged_records = [r for r in latest_records if r.phase_status == 'DAMAGED']
         damaged_farmers = len(set(r.farmer_id for r in damaged_records))
 
-        # ── GANTT ─────────────────────────────────────────────
+        # ── GANTT — phase + date validation ───────────────────
         gantt_data = {}
         seeds_to_process = (
             [seed_filter] if seed_filter and seed_filter in SEED_LABELS
-            else ['HYBRID','INBRED','OWN_SEED']
+            else ['HYBRID', 'INBRED', 'OWN_SEED']
         )
+
+        if season == 'WET':
+            season_start = datetime.date(yr, 6, 1)
+        else:
+            season_start = datetime.date(yr, 11, 1)
+
+        def build_std_windows(seed_key):
+            phases = SEED_PHASES.get(seed_key, [])
+            windows = {}
+            cursor = 0
+            for ph in phases:
+                d = std.get(ph, 0)
+                ph_start = season_start + datetime.timedelta(days=cursor)
+                ph_end = season_start + datetime.timedelta(days=cursor + d - 1)
+                windows[ph] = {
+                    'start': ph_start,
+                    'end': ph_end,
+                    'days': d,
+                    'start_day': cursor + 1,
+                    'end_day': cursor + d,
+                }
+                cursor += d
+            return windows
 
         for seed_key in seeds_to_process:
             gantt_data[seed_key] = {}
             seed_all = base.filter(seed_source=seed_key)
             seed_latest_map = get_latest_per_farmer(seed_all)
-            seed_latest     = list(seed_latest_map.values())
+            seed_latest = list(seed_latest_map.values())
             total_seed_farmers = len(set(r.farmer_id for r in seed_latest))
             if total_seed_farmers == 0:
                 continue
 
+            std_windows = build_std_windows(seed_key)
+
             for phase_key in SEED_PHASES.get(seed_key, []):
-                phase_idx      = PHASE_ORDER.index(phase_key)
-                phases_reached = [ph for ph in PHASE_ORDER if PHASE_ORDER.index(ph) >= phase_idx]
-                farmers_at_or_beyond = sum(
-                    1 for r in seed_latest if r.crop_phase in phases_reached
-                )
-                if farmers_at_or_beyond == 0:
+                win = std_windows.get(phase_key)
+                if not win:
                     continue
 
-                completion_pct = round((farmers_at_or_beyond / total_seed_farmers) * 100)
-
-                # Mode date
                 phase_records = seed_all.filter(crop_phase=phase_key)
-                date_groups   = (
+                total_in_phase = phase_records.count()
+                if total_in_phase == 0:
+                    continue
+
+                valid_count = 0
+                delayed_count = 0
+                early_count = 0
+
+                for rec in phase_records.values('date_observed'):
+                    d = rec['date_observed']
+                    if d < win['start']:
+                        early_count += 1
+                    elif d <= win['end']:
+                        valid_count += 1
+                    else:
+                        delayed_count += 1
+
+                all_delayed = (valid_count == 0 and delayed_count > 0)
+                completion_pct = round((valid_count / total_in_phase) * 100) if total_in_phase > 0 else 0
+
+                date_groups = (
                     phase_records
+                    .filter(date_observed__gte=win['start'], date_observed__lte=win['end'])
                     .values('date_observed')
                     .annotate(cnt=Count('id'))
-                    .order_by('-cnt','date_observed')
+                    .order_by('-cnt', 'date_observed')
                 )
 
-                mode_date   = None
-                mode_count  = 0
-                all_delayed = False
-
+                mode_date = None
+                mode_count = 0
                 if date_groups.exists():
-                    s_start = (
-                        datetime.date(yr, 6, 1)
-                        if season == 'WET'
-                        else datetime.date(yr, 11, 1)
+                    first = date_groups.first()
+                    mode_date = first['date_observed']
+                    mode_count = first['cnt']
+                elif all_delayed:
+                    delayed_groups = (
+                        phase_records
+                        .filter(date_observed__gt=win['end'])
+                        .values('date_observed')
+                        .annotate(cnt=Count('id'))
+                        .order_by('-cnt', 'date_observed')
                     )
-                    seed_phase_list = SEED_PHASES[seed_key]
-                    cum_days = sum(
-                        std.get(ph, 0)
-                        for ph in seed_phase_list
-                        if seed_phase_list.index(ph) < seed_phase_list.index(phase_key)
-                    )
-                    phase_std_end_day = cum_days + std.get(phase_key, 20)
-
-                    all_delayed = True
-                    for dg in date_groups:
-                        d = dg['date_observed']
-                        day_offset = (d - s_start).days + 1
-                        if day_offset <= phase_std_end_day:
-                            mode_date   = d
-                            mode_count  = dg['cnt']
-                            all_delayed = False
-                            break
-
-                    if all_delayed:
-                        first = date_groups.first()
-                        mode_date  = None
-                        mode_count = first['cnt'] if first else 0
+                    if delayed_groups.exists():
+                        first = delayed_groups.first()
+                        mode_date = first['date_observed']
+                        mode_count = first['cnt']
 
                 gantt_data[seed_key][phase_key] = {
-                    'farmers':        farmers_at_or_beyond,
-                    'total_farmers':  total_seed_farmers,
+                    'farmers': total_in_phase,
+                    'valid_farmers': valid_count,
+                    'delayed_farmers': delayed_count,
+                    'early_farmers': early_count,
+                    'total_farmers': total_seed_farmers,
                     'completion_pct': completion_pct,
-                    'mode_date':      mode_date.isoformat() if mode_date else None,
-                    'mode_count':     mode_count,
-                    'all_delayed':    all_delayed,
+                    'mode_date': mode_date.isoformat() if mode_date else None,
+                    'mode_count': mode_count,
+                    'all_delayed': all_delayed,
+                    'std_start': win['start'].isoformat(),
+                    'std_end': win['end'].isoformat(),
+                    'std_days': win['days'],
                 }
+
+        if season == 'WET':
+            timeline_months = [
+                {'month': 6, 'label': 'Jun', 'year': yr},
+                {'month': 7, 'label': 'Jul', 'year': yr},
+                {'month': 8, 'label': 'Aug', 'year': yr},
+                {'month': 9, 'label': 'Sep', 'year': yr},
+                {'month': 10, 'label': 'Oct', 'year': yr},
+            ]
+        else:
+            timeline_months = [
+                {'month': 11, 'label': 'Nov', 'year': yr},
+                {'month': 12, 'label': 'Dec', 'year': yr},
+                {'month': 1, 'label': 'Jan', 'year': yr + 1},
+                {'month': 2, 'label': 'Feb', 'year': yr + 1},
+                {'month': 3, 'label': 'Mar', 'year': yr + 1},
+                {'month': 4, 'label': 'Apr', 'year': yr + 1},
+            ]
 
         # ── DISTRIBUTION DATES ────────────────────────────────
         dist_dates = {}
@@ -271,33 +320,80 @@ class CropPhaseAnalyticsView(APIView):
             'met':     False,
         }
 
-        # ── COMPLIANCE — FIX: filter by poll ──────────────────
-        farmer_planned = defaultdict(float)
-        farmer_actual  = defaultdict(float)
+        # ── COMPLIANCE — per seed type level (not just total area) ──
+        farmer_seed_planned = defaultdict(float)
+        farmer_seed_actual = defaultdict(float)
 
         dist_compliance = DistributionEntry.objects.filter(
             batch__status='APPROVED',
             farm_area_ha__isnull=False,
-        )
-        # FIX: filter compliance by poll season/year
+        ).select_related('batch__event__seed_type')
         if poll:
             dist_compliance = dist_compliance.filter(
                 batch__event__season=poll.season,
                 batch__event__year=poll.year,
             )
         for entry in dist_compliance:
-            farmer_planned[entry.farmer_id] += float(entry.farm_area_ha or 0)
+            stype = entry.batch.event.seed_type
+            if not stype:
+                continue
+            sname = stype.name.upper()
+            if 'HYBRID' in sname:
+                sk = 'HYBRID'
+            elif 'INBRED' in sname:
+                sk = 'INBRED'
+            else:
+                continue
+            farmer_seed_planned[(entry.farmer_id, sk)] += float(entry.farm_area_ha or 0)
 
         for rec in latest_records:
+            if rec.seed_source not in ('HYBRID', 'INBRED'):
+                continue
             if rec.area_monitored_ha:
-                farmer_actual[rec.farmer_id] += float(rec.area_monitored_ha or 0)
+                farmer_seed_actual[(rec.farmer_id, rec.seed_source)] += float(rec.area_monitored_ha or 0)
 
-        met       = sum(1 for fid, p in farmer_planned.items() if p > 0 and farmer_actual.get(fid, 0) >= p)
-        not_met   = sum(1 for fid, p in farmer_planned.items() if p > 0 and farmer_actual.get(fid, 0) < p)
+        farmer_ids_with_plan = set(fid for (fid, _) in farmer_seed_planned)
+        met = 0
+        not_met = 0
+        partial = 0
+
+        for fid in farmer_ids_with_plan:
+            seed_results = {}
+            farmer_fully_met = True
+            farmer_any_met = False
+            for (f, sk), planned_ha in farmer_seed_planned.items():
+                if f != fid or planned_ha <= 0:
+                    continue
+                actual_ha = farmer_seed_actual.get((fid, sk), 0)
+                is_met = actual_ha >= planned_ha
+                seed_results[sk] = {
+                    'planned': planned_ha,
+                    'actual': actual_ha,
+                    'met': is_met,
+                }
+                if is_met:
+                    farmer_any_met = True
+                else:
+                    farmer_fully_met = False
+
+            if farmer_fully_met and seed_results:
+                met += 1
+            elif farmer_any_met:
+                partial += 1
+                not_met += 1
+            else:
+                not_met += 1
+
         comp_total = met + not_met
-        comp_pct   = round((met / comp_total * 100), 1) if comp_total > 0 else 0
+        comp_pct = round((met / comp_total * 100), 1) if comp_total > 0 else 0
 
-        compliance = {'met': met, 'not_met': not_met, 'total': comp_total, 'pct': comp_pct}
+        compliance = {
+            'met': met,
+            'not_met': not_met,
+            'partial': partial,
+            'total': comp_total,
+            'pct': comp_pct,
+        }
 
         # ── DELAY ANALYTICS ───────────────────────────────────
         delay_by_seed = {}
@@ -425,4 +521,5 @@ class CropPhaseAnalyticsView(APIView):
             'insights':         insights,
             'poll_list':        poll_list,
             'std_days':         STD_DAYS,
+            'timeline_months':  timeline_months,
         })

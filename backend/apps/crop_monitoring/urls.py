@@ -5,6 +5,7 @@ from .views import (
     ATFarmerListView,
     ATFarmerDetailView,
     ATCropMonitoringCreateView,
+    ATMonitoringHistoryView,
     ATFarmerHistoryView,
     ATCropMonitoringUpdateView,
     ATDashboardStatsView,
@@ -21,7 +22,8 @@ urlpatterns = [
     path('records/',             ATCropMonitoringCreateView.as_view(), name='record-create'),
     path('records/<int:pk>/',    ATCropMonitoringUpdateView.as_view(), name='record-update'),
 
-    # AT — farmer history
+    # AT — history views
+    path('at/history/', ATMonitoringHistoryView.as_view(), name='at-monitoring-history'),
     path('farmers/<int:farmer_id>/history/', ATFarmerHistoryView.as_view(), name='farmer-history'),
     path('at/farmers/<int:farmer_id>/detail/', ATFarmerDetailView.as_view(), name='at-farmer-detail'),
 

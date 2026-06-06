@@ -316,13 +316,36 @@ class HarvestRecordListCreateView(ListCreateAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        qs = HarvestRecord.objects.none()
+
         if user.role == 'BRGY':
-            # BRGY can only see their own barangay's records
-            return HarvestRecord.objects.filter(barangay=user.barangay).select_related('farmer', 'encoded_by')
+            qs = HarvestRecord.objects.filter(barangay=user.barangay).select_related('farmer', 'encoded_by')
         elif user.role == 'ADMIN':
-            # Admin can see all
-            return HarvestRecord.objects.all().select_related('farmer', 'encoded_by')
-        return HarvestRecord.objects.none()
+            qs = HarvestRecord.objects.all().select_related('farmer', 'encoded_by')
+        else:
+            return qs
+
+        poll_id = self.request.query_params.get('poll_id')
+        if poll_id:
+            try:
+                from apps.seed_poll.models import Poll
+                poll = Poll.objects.get(id=poll_id)
+                if poll.season == 'WET':
+                    qs = qs.filter(
+                        harvest_date__year=poll.year,
+                        harvest_date__month__gte=6,
+                        harvest_date__month__lte=10,
+                    )
+                elif poll.season == 'DRY':
+                    from django.db.models import Q
+                    qs = qs.filter(
+                        Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
+                        Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
+                    )
+            except Poll.DoesNotExist:
+                pass
+
+        return qs
 
     def perform_create(self, serializer):
         user = self.request.user

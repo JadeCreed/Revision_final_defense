@@ -593,11 +593,12 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
   const seedBreakdown   = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);
   const allPhaseCounts  = useMemo(() => {
     const combined = {};
-    Object.values(seedBreakdown).forEach(sd => {
-      Object.entries(sd.phases).forEach(([phase, count]) => { combined[phase] = (combined[phase] || 0) + count; });
+    brgyPlots.forEach(p => {
+      const phase = normalizePhase(p.land_type);
+      combined[phase] = (combined[phase] || 0) + 1;
     });
     return combined;
-  }, [seedBreakdown]);
+  }, [brgyPlots]);
   const dominantPhase   = useMemo(() => {
     const sorted = Object.entries(allPhaseCounts).sort((a, b) => b[1] - a[1]);
     return sorted[0]?.[0] || null;
@@ -844,7 +845,7 @@ const GisMap = () => {
         getGisPlots({ poll_id: pollId }),
         getMapSummary({ poll_id: pollId }),
         getGisBarangays(),
-        getHarvestRecords(),
+        getHarvestRecords({ poll_id: pollId }),
       ]);
       if (plotsRes.status === 'fulfilled') {
         const d = plotsRes.value.data;
@@ -895,7 +896,7 @@ const GisMap = () => {
         getGisPlots({ poll_id: pollId }),
         getMapSummary({ poll_id: pollId }),
         getGisBarangays(),
-        getHarvestRecords(),
+        getHarvestRecords({ poll_id: pollId }),
       ]);
       if (plotsRes.status === 'fulfilled') {
         const d = plotsRes.value.data;
@@ -1167,8 +1168,34 @@ const GisMap = () => {
               <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.4rem', alignItems: 'center', flexShrink: 0 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#475569', fontSize: '0.72rem', fontWeight: 600 }}>
                   <span className='gis-season-label' style={{ color: '#16a34a' }}>Season</span>
-                  <select value={selectedPoll?.poll_id || ''} onChange={e => setSelectedPollId(Number(e.target.value) || null)} style={{ padding: '0.3rem 0.55rem', border: '1px solid #dbe3ec', borderRadius: '0.5rem', backgroundColor: 'white', color: '#111827', fontSize: '0.73rem', fontWeight: 600, minWidth: 120, maxWidth: 130 }}>
-                    {polls.length > 0 ? polls.map(item => <option key={item.poll_id} value={item.poll_id}>{item.label}</option>) : <option value=''>Latest season</option>}
+                  <select
+                    value={selectedPoll?.season || ''}
+                    onChange={e => {
+                      const matched = polls.find(p => p.season === e.target.value);
+                      if (matched) setSelectedPollId(matched.poll_id);
+                    }}
+                    style={{ padding: '0.3rem 0.55rem', border: '1px solid #dbe3ec', borderRadius: '0.5rem', backgroundColor: 'white', color: '#111827', fontSize: '0.73rem', fontWeight: 600, minWidth: 90, maxWidth: 115 }}
+                  >
+                    {[...new Set(polls.map(p => p.season))].map(s => (
+                      <option key={s} value={s}>{s === 'WET' ? 'Wet Season' : 'Dry Season'}</option>
+                    ))}
+                    {polls.length === 0 && <option value=''>Season</option>}
+                  </select>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', color: '#475569', fontSize: '0.72rem', fontWeight: 600 }}>
+                  <span className='gis-season-label' style={{ color: '#16a34a' }}>Year</span>
+                  <select
+                    value={selectedPoll?.year || ''}
+                    onChange={e => {
+                      const matched = polls.find(p => p.season === selectedPoll?.season && p.year === Number(e.target.value));
+                      if (matched) setSelectedPollId(matched.poll_id);
+                    }}
+                    style={{ padding: '0.3rem 0.55rem', border: '1px solid #dbe3ec', borderRadius: '0.5rem', backgroundColor: 'white', color: '#111827', fontSize: '0.73rem', fontWeight: 600, minWidth: 70, maxWidth: 85 }}
+                  >
+                    {[...new Set(polls.filter(p => p.season === selectedPoll?.season).map(p => p.year))].sort((a, b) => b - a).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                    {polls.length === 0 && <option value=''>Year</option>}
                   </select>
                 </label>
                 <select value={filterBrgy} onChange={e => {
