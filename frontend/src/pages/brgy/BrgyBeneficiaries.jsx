@@ -1247,7 +1247,7 @@ const BrgyBeneficiaries = () => {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                           <div style={{ backgroundColor: badgeColor, color: '#444', padding: '0.2rem 0.6rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 700 }}>
-                            {remaining > 0 ? `${Number(remaining).toFixed(2)} ha` : 'Exhausted'}
+                            {remaining > 0 ? `${Number(remaining).toFixed(2)} ha` : 'No Available Area'}
                           </div>
                           <ChevronRight size={14} color="#9ca3af" />
                         </div>

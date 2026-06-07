@@ -161,18 +161,19 @@ class CropPhaseAnalyticsView(APIView):
                 # so frontend can still render the gray standard bar
                 if total_in_phase == 0:
                     gantt_data[seed_key][phase_key] = {
-                        'farmers':         0,
-                        'valid_farmers':   0,
-                        'delayed_farmers': 0,
-                        'early_farmers':   0,
-                        'total_farmers':   total_seed_farmers,
-                        'completion_pct':  None,
-                        'mode_date':       None,
-                        'mode_count':      0,
-                        'all_delayed':     False,
-                        'std_start':       std_start_iso,
-                        'std_end':         std_end_iso,
-                        'std_days':        std_days_val,
+                        'farmers':            0,
+                        'valid_farmers':      0,
+                        'delayed_farmers':    0,
+                        'early_farmers':      0,
+                        'total_farmers':      total_seed_farmers,
+                        'completion_pct':     None,
+                        'timeline_progress':  None,
+                        'mode_date':          None,
+                        'mode_count':         0,
+                        'all_delayed':        False,
+                        'std_start':          std_start_iso,
+                        'std_end':            std_end_iso,
+                        'std_days':           std_days_val,
                     }
                     continue
 
@@ -186,11 +187,12 @@ class CropPhaseAnalyticsView(APIView):
                 early_count   = len(early_recs)
                 all_delayed   = (valid_count == 0 and delayed_count > 0)
 
-                # completion_pct = valid farmers / total in this phase
-                completion_pct = (
+                # ontime_rate = how many farmers are valid (compliance)
+                ontime_rate = (
                     round((valid_count / total_in_phase) * 100)
                     if total_in_phase > 0 else None
                 )
+                completion_pct = ontime_rate
 
                 # Mode date — from VALID records first
                 mode_date  = None
@@ -206,19 +208,27 @@ class CropPhaseAnalyticsView(APIView):
                     if date_counter:
                         mode_date, mode_count = date_counter.most_common(1)[0]
 
+                # Calculate timeline_progress from mode_date position in the standard window
+                timeline_progress = None
+                if mode_date and win['start'] and win['end']:
+                    std_total_days = (win['end'] - win['start']).days or 1
+                    elapsed = max(0, (mode_date - win['start']).days)
+                    timeline_progress = min(100, round((elapsed / std_total_days) * 100))
+
                 gantt_data[seed_key][phase_key] = {
-                    'farmers':         total_in_phase,
-                    'valid_farmers':   valid_count,
-                    'delayed_farmers': delayed_count,
-                    'early_farmers':   early_count,
-                    'total_farmers':   total_seed_farmers,
-                    'completion_pct':  completion_pct,
-                    'mode_date':       mode_date.isoformat() if mode_date else None,
-                    'mode_count':      mode_count,
-                    'all_delayed':     all_delayed,
-                    'std_start':       std_start_iso,
-                    'std_end':         std_end_iso,
-                    'std_days':        std_days_val,
+                    'farmers':            total_in_phase,
+                    'valid_farmers':      valid_count,
+                    'delayed_farmers':    delayed_count,
+                    'early_farmers':      early_count,
+                    'total_farmers':      total_seed_farmers,
+                    'completion_pct':     completion_pct,
+                    'timeline_progress':  timeline_progress,
+                    'mode_date':          mode_date.isoformat() if mode_date else None,
+                    'mode_count':         mode_count,
+                    'all_delayed':        all_delayed,
+                    'std_start':          std_start_iso,
+                    'std_end':            std_end_iso,
+                    'std_days':           std_days_val,
                 }
 
         if season == 'WET':

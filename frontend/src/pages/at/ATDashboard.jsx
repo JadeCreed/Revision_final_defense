@@ -200,7 +200,7 @@ const ATDashboard = () => {
           {firstName || 'AT'}
         </h1>
         <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: 0 }}>
-          Agricultural Technician — AGRICE Lucban
+          AGRICE Lucban
         </p>
       </div>
 

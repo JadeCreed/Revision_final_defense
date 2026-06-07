@@ -4,6 +4,7 @@ import {
   Search, Plus, Edit3, Trash2, BarChart3,
   Users, Layers, ShieldCheck, CheckCircle2,
   AlertTriangle, Sun, X, Trophy, ChevronRight,
+  History, ChevronLeft, ChevronDown,
 } from 'lucide-react';
 import API from '../../api/axios';
 
@@ -16,7 +17,6 @@ const GREEN = {
   soft:    '#dcfce7',
 };
 
-// Updated seed config with correct yield targets per your spec
 const SEED_SOURCES = [
   {
     key: 'HYBRID',
@@ -26,8 +26,8 @@ const SEED_SOURCES = [
     bg: '#f0fdf4',
     border: '#bbf7d0',
     density_kg_ha: 15,
-    target_yield_kg_ha: 5000,   // 5,000 kg/ha target
-    bags_per_ha: 1,              // 1 bag (15kg) per ha
+    target_yield_kg_ha: 5000,
+    bags_per_ha: 1,
   },
   {
     key: 'INBRED',
@@ -37,8 +37,8 @@ const SEED_SOURCES = [
     bg: '#eff6ff',
     border: '#bfdbfe',
     density_kg_ha: 40,
-    target_yield_kg_ha: 4000,   // 4,000 kg/ha target
-    bags_per_ha: 2,              // 2 bags (40kg) per ha
+    target_yield_kg_ha: 4000,
+    bags_per_ha: 2,
   },
   {
     key: 'OWN_SEED',
@@ -48,8 +48,8 @@ const SEED_SOURCES = [
     bg: '#fefce8',
     border: '#fde68a',
     density_kg_ha: 50,
-    target_yield_kg_ha: 3000,   // 3,000 kg/ha target
-    bags_per_ha: null,           // no distribution
+    target_yield_kg_ha: 3000,
+    bags_per_ha: null,
   },
 ];
 
@@ -61,7 +61,6 @@ const getSeedIcon = (key) => {
   return Sun;
 };
 
-// Yield performance tiers based on % of target yield
 const getUtilTier = (pct) => {
   if (pct === null || pct === undefined)
     return { label: 'N/A', color: '#94a3b8', bg: '#f9fafb', border: '#e5e7eb', icon: null };
@@ -75,23 +74,17 @@ const getUtilTier = (pct) => {
     return { label: 'Good', color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: <AlertTriangle size={12} /> };
   if (pct >= 50)
     return { label: 'Below target', color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', icon: <AlertTriangle size={12} /> };
-  if (pct >= 10)
-    return { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={12} /> };
   return { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={12} /> };
 };
 
-// Harvest kg computation — all paddy bags are 50kg fixed
-const computeHarvestKg = (bags) => (parseFloat(bags) || 0) * 50;
-
-// Core metrics from a harvest record
 const computeMetrics = (rec) => {
-  const bags           = parseFloat(rec.harvest_bags) || 0;
-  const area           = parseFloat(rec.harvest_area_ha) || 0;
-  const harvest_kg     = bags * 50;
-  const harvest_mt     = harvest_kg / 1000;
-  const yield_t_ha     = area > 0 ? harvest_mt / area : 0;
-  const cfg            = getSeedCfg(rec.seed_source);
-  const expected_kg    = area * cfg.target_yield_kg_ha;
+  const bags        = parseFloat(rec.harvest_bags) || 0;
+  const area        = parseFloat(rec.harvest_area_ha) || 0;
+  const harvest_kg  = bags * 50;
+  const harvest_mt  = harvest_kg / 1000;
+  const yield_t_ha  = area > 0 ? harvest_mt / area : 0;
+  const cfg         = getSeedCfg(rec.seed_source);
+  const expected_kg = area * cfg.target_yield_kg_ha;
   const utilization_pct = expected_kg > 0 ? (harvest_kg / expected_kg) * 100 : null;
   return { harvest_kg, harvest_mt, yield_t_ha, expected_kg, utilization_pct };
 };
@@ -166,25 +159,19 @@ const EMPTY_TAB_FORM = () => ({
 });
 
 const HarvestForm = ({
-  farmers,
+  harvestingFarmers,   // array from new API — farmers with HARVESTING phase
   onSave,
   onClose,
   saving,
   editData,
-  finalSeeds,           // array of FinalSeed objects from API
-  beneficiaryData,      // { HYBRID: { area_ha, seed_bags }, INBRED: { area_ha, seed_bags } }
+  finalSeeds,
+  beneficiaryData,
 }) => {
-  // ── Farmer selection ──
-  const [farmerId, setFarmerId]         = useState(editData?.farmer_id || '');
-  const [farmerSearch, setFarmerSearch] = useState('');
+  const [farmerId, setFarmerId]             = useState(editData?.farmer_id || '');
+  const [farmerSearch, setFarmerSearch]     = useState('');
   const [showFarmerList, setShowFarmerList] = useState(false);
+  const [activeTab, setActiveTab]           = useState(editData?.seed_source || 'HYBRID');
 
-  // ── Active seed type tab ──
-  const [activeTab, setActiveTab] = useState(
-    editData?.seed_source || 'HYBRID'
-  );
-
-  // ── Per-tab form data (persists when switching tabs) ──
   const [tabForms, setTabForms] = useState(() => {
     const base = {
       HYBRID:   EMPTY_TAB_FORM(),
@@ -204,22 +191,21 @@ const HarvestForm = ({
     return base;
   });
 
-  // ── Track which tabs have been saved (have a record ID) ──
-  // encodedTabs: { HYBRID: recordId | null, INBRED: recordId | null, OWN_SEED: recordId | null }
   const [encodedTabs, setEncodedTabs] = useState(
     editData ? { [editData.seed_source]: editData.id } : {}
   );
-
-  // ── Per-tab errors ──
   const [tabErrors, setTabErrors] = useState({ HYBRID: {}, INBRED: {}, OWN_SEED: {} });
-
-  // ── High utilization confirm ──
   const [showHighUtilConfirm, setShowHighUtilConfirm] = useState(false);
-  const [pendingSubmit, setPendingSubmit] = useState(null);
+  const [pendingSubmit, setPendingSubmit]             = useState(null);
 
-  const selectedFarmer = farmers.find(f => String(f.id) === String(farmerId));
+  // Selected farmer object from harvestingFarmers
+  const selectedFarmer = harvestingFarmers.find(f => String(f.id) === String(farmerId));
 
-  // ── Auto-fill farmer search text when farmer selected ──
+  // Which seed types are in HARVESTING for selected farmer
+  const harvestingSeedTypes = selectedFarmer?.harvesting_seed_types || [];
+  const areaBySeeedType     = selectedFarmer?.area_by_seed_type || {};
+
+  // Auto-fill farmer search text
   useEffect(() => {
     if (selectedFarmer) {
       setFarmerSearch(
@@ -228,38 +214,48 @@ const HarvestForm = ({
     }
   }, [selectedFarmer]);
 
-  // ── Auto-fill area + seed bags from beneficiary data when farmer or tab changes ──
+  // Auto-fill area from AT's area_monitored_ha when farmer or tab changes
+  useEffect(() => {
+    if (!farmerId || !selectedFarmer) return;
+
+    SEED_SOURCES.forEach(s => {
+      const atArea = areaBySeeedType[s.key];
+      if (!atArea) return;
+      setTabForms(prev => {
+        const current = prev[s.key];
+        if (current.harvest_area_ha) return prev; // don't overwrite if already typed
+        return {
+          ...prev,
+          [s.key]: { ...current, harvest_area_ha: String(atArea) },
+        };
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [farmerId]);
+
+  // Also auto-fill seed_bags_received from beneficiary data
   useEffect(() => {
     if (!farmerId || !beneficiaryData) return;
     const farmerBenefData = beneficiaryData[farmerId];
     if (!farmerBenefData) return;
-
     SEED_SOURCES.forEach(s => {
-      if (s.key === 'OWN_SEED') return; // no beneficiary data for own seed
-      const dataKey = s.key; // HYBRID or INBRED
-      const entry = farmerBenefData[dataKey];
+      if (s.key === 'OWN_SEED') return;
+      const entry = farmerBenefData[s.key];
       if (!entry) return;
-
       setTabForms(prev => {
-        // Only auto-fill if the tab form is still empty (user hasn't typed yet)
         const current = prev[s.key];
-        const updated = { ...current };
-        if (!current.harvest_area_ha && entry.area_ha) {
-          updated.harvest_area_ha = String(entry.area_ha);
-        }
-        if (!current.seed_bags_received && entry.seed_bags != null) {
-          updated.seed_bags_received = String(entry.seed_bags);
-        }
-        return { ...prev, [s.key]: updated };
+        if (current.seed_bags_received) return prev;
+        return {
+          ...prev,
+          [s.key]: { ...current, seed_bags_received: entry.seed_bags != null ? String(entry.seed_bags) : '' },
+        };
       });
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [farmerId, beneficiaryData]);
 
-  // ── Get finalized varieties for a seed type ──
   const getVarietiesForTab = (tabKey) => {
     if (tabKey === 'OWN_SEED') return [];
-    // Match by seed type name
     const typeNameMap = { HYBRID: 'hybrid', INBRED: 'inbred' };
     const needle = typeNameMap[tabKey];
     const found = finalSeeds.find(fs =>
@@ -270,19 +266,22 @@ const HarvestForm = ({
 
   const filteredFarmers = useMemo(() => {
     const q = farmerSearch.trim().toLowerCase();
-    return farmers.filter(f =>
+    return harvestingFarmers.filter(f =>
       !q || [f.first_name, f.last_name, f.rsbsa_number]
         .join(' ').toLowerCase().includes(q)
     );
-  }, [farmers, farmerSearch]);
+  }, [harvestingFarmers, farmerSearch]);
 
   const selectFarmer = (farmer) => {
     setFarmerId(farmer.id);
     setFarmerSearch(`${farmer.last_name}, ${farmer.first_name} · ${farmer.rsbsa_number || 'No RSBSA'}`);
     setShowFarmerList(false);
+    // Auto-switch to first available harvesting seed type
+    if (farmer.harvesting_seed_types?.length > 0) {
+      setActiveTab(farmer.harvesting_seed_types[0]);
+    }
   };
 
-  // ── Update current tab form field ──
   const setField = (field, val) => {
     setTabForms(prev => ({
       ...prev,
@@ -294,20 +293,25 @@ const HarvestForm = ({
     }));
   };
 
-  const form    = tabForms[activeTab];
-  const errors  = tabErrors[activeTab];
-  const cfg     = getSeedCfg(activeTab);
+  const form      = tabForms[activeTab];
+  const errors    = tabErrors[activeTab];
+  const cfg       = getSeedCfg(activeTab);
   const varieties = getVarietiesForTab(activeTab);
 
-  // ── Live computation for current tab ──
-  const bags         = parseFloat(form.harvest_bags) || 0;
-  const area         = parseFloat(form.harvest_area_ha) || 0;
-  const harvest_kg   = bags * 50;
-  const harvest_mt   = harvest_kg / 1000;
-  const yield_t_ha   = area > 0 ? harvest_mt / area : 0;
-  const expected_kg  = area > 0 ? area * cfg.target_yield_kg_ha : 0;
-  const util_pct     = expected_kg > 0 ? (harvest_kg / expected_kg) * 100 : null;
-  const tier         = getUtilTier(util_pct);
+  const bags        = parseFloat(form.harvest_bags) || 0;
+  const area        = parseFloat(form.harvest_area_ha) || 0;
+  const harvest_kg  = bags * 50;
+  const harvest_mt  = harvest_kg / 1000;
+  const yield_t_ha  = area > 0 ? harvest_mt / area : 0;
+  const expected_kg = area > 0 ? area * cfg.target_yield_kg_ha : 0;
+  const util_pct    = expected_kg > 0 ? (harvest_kg / expected_kg) * 100 : null;
+  const tier        = getUtilTier(util_pct);
+
+  // Check if a seed type tab is allowed (farmer has HARVESTING for it)
+  const isTabAllowed = (tabKey) => {
+    if (!farmerId) return true; // before farmer selected, all tabs are visually accessible
+    return harvestingSeedTypes.includes(tabKey);
+  };
 
   const inp = (err) => ({
     padding: '0.625rem 0.875rem',
@@ -321,8 +325,9 @@ const HarvestForm = ({
   const validateTab = (tabKey) => {
     const f = tabForms[tabKey];
     const e = {};
-    if (!farmerId)          e.farmer_id = 'Please select a farmer';
-    if (!f.variety?.trim()) e.variety   = 'Variety name is required';
+    if (!farmerId) e.farmer_id = 'Please select a farmer';
+    if (!isTabAllowed(tabKey)) e.seed_source = 'Farmer has no HARVESTING phase for this seed type';
+    if (!f.variety?.trim()) e.variety = 'Variety name is required';
     if (!f.harvest_area_ha || parseFloat(f.harvest_area_ha) <= 0)
       e.harvest_area_ha = 'Area harvested must be greater than 0';
     if (parseFloat(f.harvest_area_ha) > 50)
@@ -331,14 +336,10 @@ const HarvestForm = ({
       e.harvest_bags = 'Number of bags must be greater than 0';
     if (parseFloat(f.harvest_bags) > 5000)
       e.harvest_bags = 'Bag count seems too large';
-    if (!f.harvest_date)
-      e.harvest_date = 'Harvest date is required';
-    if (f.harvest_date > today())
-      e.harvest_date = 'Harvest date cannot be in the future';
+    if (!f.harvest_date) e.harvest_date = 'Harvest date is required';
     return e;
   };
 
-  // Check if the current tab form has any data filled
   const tabHasData = (tabKey) => {
     const f = tabForms[tabKey];
     return !!(f.harvest_bags || f.variety || f.harvest_area_ha);
@@ -350,13 +351,12 @@ const HarvestForm = ({
       setTabErrors(prev => ({ ...prev, [activeTab]: e }));
       return;
     }
-    const f   = tabForms[activeTab];
+    const f      = tabForms[activeTab];
     const bags_n = parseFloat(f.harvest_bags) || 0;
     const area_n = parseFloat(f.harvest_area_ha) || 0;
     const hkg    = bags_n * 50;
     const expKg  = area_n * cfg.target_yield_kg_ha;
     const upct   = expKg > 0 ? (hkg / expKg) * 100 : null;
-
     if (upct !== null && upct > 300) {
       setPendingSubmit({ tabKey: activeTab, form: f });
       setShowHighUtilConfirm(true);
@@ -375,11 +375,10 @@ const HarvestForm = ({
       harvest_date:       f.harvest_date,
       seed_bags_received: tabKey === 'OWN_SEED' ? '' : f.seed_bags_received,
       notes:              f.notes,
-      _tab:               tabKey,          // passed to parent so it knows which tab
+      _tab:               tabKey,
       _existing_id:       encodedTabs[tabKey] || null,
     };
     onSave(payload, (savedId) => {
-      // callback: mark this tab as encoded
       setEncodedTabs(prev => ({ ...prev, [tabKey]: savedId }));
     });
   };
@@ -392,11 +391,16 @@ const HarvestForm = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingBottom: '1rem' }}>
 
-      {/* ── SECTION 1: Farmer Search ── */}
+      {/* ── FARMER SEARCH ── */}
       <div style={{ position: 'relative' }}>
         <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
           Farmer <span style={{ color: '#dc2626' }}>*</span>
         </label>
+        {/* Helper note */}
+        <p style={{ fontSize: '0.68rem', color: '#64748b', margin: '0 0 0.5rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <AlertTriangle size={11} color='#f59e0b' />
+          Only farmers with <strong style={{ color: GREEN.accent }}>Harvesting</strong> phase (encoded by AT) appear here.
+        </p>
         <div style={{ position: 'relative' }}>
           <Search size={15} color='#9ca3af'
             style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -410,6 +414,8 @@ const HarvestForm = ({
             style={{ ...inp(!!tabErrors.HYBRID?.farmer_id), paddingLeft: '2.5rem' }}
           />
         </div>
+
+        {/* Farmer dropdown */}
         {showFarmerList && filteredFarmers.length > 0 && (
           <div style={{
             position: 'absolute', zIndex: 50, width: '100%', maxHeight: 210,
@@ -427,13 +433,44 @@ const HarvestForm = ({
                 <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>
                   {farmer.last_name}, {farmer.first_name}
                 </p>
-                <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b' }}>
+                <p style={{ margin: '0.1rem 0 0', fontSize: '0.72rem', color: '#64748b' }}>
                   {farmer.rsbsa_number || 'No RSBSA'} · {farmer.barangay}
                 </p>
+                {/* Show which seed types are in HARVESTING */}
+                <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                  {farmer.harvesting_seed_types.map(key => {
+                    const s = getSeedCfg(key);
+                    return (
+                      <span key={key} style={{
+                        fontSize: '0.6rem', fontWeight: 700,
+                        backgroundColor: s.bg, color: s.color,
+                        border: `1px solid ${s.border}`,
+                        borderRadius: '999px', padding: '0.1rem 0.4rem',
+                      }}>
+                        {s.label}
+                      </span>
+                    );
+                  })}
+                </div>
               </button>
             ))}
           </div>
         )}
+
+        {/* Empty state — no harvesting farmers */}
+        {showFarmerList && farmerSearch.trim() && filteredFarmers.length === 0 && (
+          <div style={{
+            position: 'absolute', zIndex: 50, width: '100%', marginTop: 6,
+            backgroundColor: 'white', border: '1px solid #e5e7eb',
+            borderRadius: '0.875rem', padding: '1rem',
+            boxShadow: '0 12px 28px rgba(15,23,42,0.1)',
+          }}>
+            <p style={{ margin: 0, fontSize: '0.8rem', color: '#9ca3af', textAlign: 'center' }}>
+              No farmer found with HARVESTING phase.
+            </p>
+          </div>
+        )}
+
         {tabErrors.HYBRID?.farmer_id && (
           <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.375rem 0 0', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
             <AlertTriangle size={12} /> {tabErrors.HYBRID.farmer_id}
@@ -441,27 +478,49 @@ const HarvestForm = ({
         )}
       </div>
 
-      {/* ── SECTION 2: Seed Source Tabs ── */}
+      {/* ── SEED SOURCE TABS ── */}
       <div>
         <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.625rem' }}>
           Seed source / program <span style={{ color: '#dc2626' }}>*</span>
         </label>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
           {SEED_SOURCES.map(s => {
-            const isActive  = activeTab === s.key;
-            const isEncoded = !!encodedTabs[s.key];
-            const hasData   = tabHasData(s.key);
+            const isActive   = activeTab === s.key;
+            const isEncoded  = !!encodedTabs[s.key];
+            const hasData    = tabHasData(s.key);
+            const isAllowed  = isTabAllowed(s.key);
+            const isDisabled = farmerId && !isAllowed; // disabled only after farmer is selected
+
             return (
-              <button key={s.key} type='button' onClick={() => setActiveTab(s.key)}
+              <button key={s.key} type='button'
+                onClick={() => {
+                  if (isDisabled) return;
+                  setActiveTab(s.key);
+                }}
+                disabled={isDisabled}
+                title={isDisabled ? `${selectedFarmer?.first_name} has no HARVESTING phase for ${s.label}` : ''}
                 style={{
-                  border: `2px solid ${isActive ? s.color : isEncoded ? s.color + '80' : '#e2e8f0'}`,
+                  border: `2px solid ${
+                    isDisabled  ? '#e2e8f0'
+                    : isActive  ? s.color
+                    : isEncoded ? s.color + '80'
+                    : '#e2e8f0'
+                  }`,
                   borderRadius: '0.875rem',
-                  backgroundColor: isActive ? s.bg : isEncoded ? s.bg + '60' : 'white',
-                  cursor: 'pointer', padding: '0.75rem 0.4rem',
-                  textAlign: 'center', transition: 'all 0.18s',
+                  backgroundColor: isDisabled
+                    ? '#f9fafb'
+                    : isActive
+                    ? s.bg
+                    : isEncoded
+                    ? s.bg + '60'
+                    : 'white',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  padding: '0.75rem 0.4rem',
+                  textAlign: 'center',
+                  transition: 'all 0.18s',
                   position: 'relative',
+                  opacity: isDisabled ? 0.45 : 1,
                 }}>
-                {/* Encoded badge */}
                 {isEncoded && (
                   <div style={{
                     position: 'absolute', top: -8, right: -8,
@@ -472,20 +531,18 @@ const HarvestForm = ({
                     <CheckCircle2 size={10} color='white' />
                   </div>
                 )}
-                {/* Has unsaved data indicator */}
-                {!isEncoded && hasData && (
+                {!isEncoded && hasData && !isDisabled && (
                   <div style={{
                     position: 'absolute', top: -6, right: -6,
                     backgroundColor: '#f59e0b', borderRadius: '999px',
-                    width: 12, height: 12,
-                    border: '2px solid white',
+                    width: 12, height: 12, border: '2px solid white',
                   }} />
                 )}
-                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: isActive ? s.color : '#374151' }}>
+                <p style={{ margin: 0, fontSize: '0.72rem', fontWeight: 700, color: isDisabled ? '#9ca3af' : isActive ? s.color : '#374151' }}>
                   {s.label}
                 </p>
-                <p style={{ margin: '0.15rem 0 0', fontSize: '0.6rem', color: isActive ? s.color : '#94a3b8', fontWeight: 600 }}>
-                  {s.sublabel}
+                <p style={{ margin: '0.15rem 0 0', fontSize: '0.6rem', color: isDisabled ? '#d1d5db' : isActive ? s.color : '#94a3b8', fontWeight: 600 }}>
+                  {isDisabled ? 'Not harvesting' : s.sublabel}
                 </p>
                 {isEncoded && (
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.58rem', color: s.color, fontWeight: 700 }}>
@@ -498,14 +555,12 @@ const HarvestForm = ({
         </div>
       </div>
 
-      {/* ── Tab content panel ── */}
+      {/* ── TAB CONTENT PANEL ── */}
       <div style={{
         border: `1.5px solid ${cfg.border}`,
-        borderRadius: '1rem',
-        padding: '1rem',
+        borderRadius: '1rem', padding: '1rem',
         backgroundColor: cfg.bg + '40',
       }}>
-        {/* Tab label */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
           {(() => { const Icon = getSeedIcon(activeTab); return <Icon size={16} color={cfg.color} />; })()}
           <span style={{ fontSize: '0.8rem', fontWeight: 700, color: cfg.color }}>
@@ -522,7 +577,7 @@ const HarvestForm = ({
           )}
         </div>
 
-        {/* ── SECTION 3: Rice Variety ── */}
+        {/* Rice Variety */}
         <div style={{ marginBottom: '0.875rem' }}>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
             Rice variety <span style={{ color: '#dc2626' }}>*</span>
@@ -564,7 +619,7 @@ const HarvestForm = ({
           )}
         </div>
 
-        {/* ── SECTION 4: Area Harvested ── */}
+        {/* Area Harvested */}
         <div style={{ marginBottom: '0.875rem' }}>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
             Area harvested (ha) <span style={{ color: '#dc2626' }}>*</span>
@@ -574,12 +629,11 @@ const HarvestForm = ({
             value={form.harvest_area_ha}
             onChange={e => setField('harvest_area_ha', e.target.value)}
             style={inp(!!errors.harvest_area_ha)} />
-          {/* Show auto-fill hint if value came from beneficiaries */}
-          {farmerId && beneficiaryData?.[farmerId]?.[activeTab]?.area_ha &&
-            activeTab !== 'OWN_SEED' && (
+          {/* Auto-fill hint from AT monitoring */}
+          {farmerId && areaBySeeedType[activeTab] && (
             <p style={{ margin: '0.25rem 0 0', fontSize: '0.68rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <ChevronRight size={11} color='#64748b' />
-              Auto-filled from beneficiaries ({beneficiaryData[farmerId][activeTab].area_ha} ha)
+              Auto-filled from AT monitoring ({areaBySeeedType[activeTab]} ha)
             </p>
           )}
           {errors.harvest_area_ha && (
@@ -589,7 +643,7 @@ const HarvestForm = ({
           )}
         </div>
 
-        {/* ── SECTION 5: Harvest Bags + Live Preview ── */}
+        {/* Harvest Bags */}
         <div style={{ marginBottom: '0.875rem' }}>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
             Harvest bags <span style={{ fontSize: '0.65rem', fontWeight: 400, color: '#94a3b8' }}>(50 kg/bag)</span>{' '}
@@ -600,21 +654,12 @@ const HarvestForm = ({
             value={form.harvest_bags}
             onChange={e => setField('harvest_bags', e.target.value)}
             style={inp(!!errors.harvest_bags)} />
-
-          {/* Computed kg shown below input as soon as bags > 0 */}
           {bags > 0 && (
             <div style={{
-              marginTop: '0.5rem',
-              padding: '0.5rem 0.75rem',
-              backgroundColor: 'white',
-              border: `1px solid ${cfg.border}`,
-              borderRadius: '0.625rem',
-              fontSize: '0.78rem',
-              color: '#475569',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.375rem',
-              flexWrap: 'wrap',
+              marginTop: '0.5rem', padding: '0.5rem 0.75rem',
+              backgroundColor: 'white', border: `1px solid ${cfg.border}`,
+              borderRadius: '0.625rem', fontSize: '0.78rem', color: '#475569',
+              display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap',
             }}>
               <span style={{ fontWeight: 700, color: cfg.color }}>{fmtNum(harvest_kg, 0)} kg</span>
               <span style={{ color: '#94a3b8' }}>= {bags} bags × 50 kg/bag</span>
@@ -622,7 +667,6 @@ const HarvestForm = ({
               <span style={{ fontWeight: 600, color: '#0f172a' }}>{fmtNum(harvest_mt)} MT</span>
             </div>
           )}
-
           {errors.harvest_bags && (
             <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
               <AlertTriangle size={12} /> {errors.harvest_bags}
@@ -630,7 +674,7 @@ const HarvestForm = ({
           )}
         </div>
 
-        {/* ── Live Metrics Preview (shows when harvest_bags has a value) ── */}
+        {/* Live Metrics Preview */}
         {bags > 0 && (
           <div style={{
             backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`,
@@ -655,68 +699,59 @@ const HarvestForm = ({
                 </div>
               ))}
             </div>
-
-            {/* Utilization breakdown — only when area also filled */}
-            {area > 0 && (
-              <div style={{
-                backgroundColor: 'white', borderRadius: '0.625rem',
-                padding: '0.75rem 0.875rem', border: `1px solid ${tier.border}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.6 }}>
-                    <p style={{ margin: 0 }}>
-                      Target yield: <strong style={{ color: '#0f172a' }}>{fmtNum(cfg.target_yield_kg_ha, 0)} kg/ha</strong>
-                    </p>
-                    <p style={{ margin: 0 }}>
-                      Expected: <strong style={{ color: '#0f172a' }}>{fmtNum(expected_kg, 0)} kg</strong>
-                      <span style={{ color: '#94a3b8' }}> ({fmtNum(area)} ha × {fmtNum(cfg.target_yield_kg_ha, 0)} kg/ha)</span>
-                    </p>
-                    <p style={{ margin: 0 }}>
-                      Actual: <strong style={{ color: '#0f172a' }}>{fmtNum(harvest_kg, 0)} kg</strong>
-                    </p>
+            {area > 0 && (() => {
+              const tierLocal = getUtilTier(util_pct);
+              return (
+                <div style={{
+                  backgroundColor: 'white', borderRadius: '0.625rem',
+                  padding: '0.75rem 0.875rem', border: `1px solid ${tierLocal.border}`,
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', lineHeight: 1.6 }}>
+                      <p style={{ margin: 0 }}>Target yield: <strong style={{ color: '#0f172a' }}>{fmtNum(cfg.target_yield_kg_ha, 0)} kg/ha</strong></p>
+                      <p style={{ margin: 0 }}>Expected: <strong style={{ color: '#0f172a' }}>{fmtNum(expected_kg, 0)} kg</strong></p>
+                      <p style={{ margin: 0 }}>Actual: <strong style={{ color: '#0f172a' }}>{fmtNum(harvest_kg, 0)} kg</strong></p>
+                    </div>
+                    {util_pct !== null && (
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: tierLocal.color, lineHeight: 1 }}>
+                          {fmtNum(util_pct, 1)}%
+                        </p>
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                          marginTop: '0.25rem', backgroundColor: tierLocal.bg, color: tierLocal.color,
+                          border: `1px solid ${tierLocal.border}`, borderRadius: '999px',
+                          padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700,
+                        }}>
+                          {tierLocal.icon} {tierLocal.label}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {util_pct !== null && (
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: tier.color, lineHeight: 1 }}>
-                        {fmtNum(util_pct, 1)}%
-                      </p>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                        marginTop: '0.25rem', backgroundColor: tier.bg, color: tier.color,
-                        border: `1px solid ${tier.border}`, borderRadius: '999px',
-                        padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700,
-                      }}>
-                        {tier.icon} {tier.label}
-                      </span>
+                    <div>
+                      <div style={{ height: 7, backgroundColor: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.min(100, util_pct)}%`, backgroundColor: tierLocal.color, borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#94a3b8', marginTop: '0.2rem' }}>
+                        <span>0%</span><span>Target (100%)</span>
+                      </div>
                     </div>
                   )}
                 </div>
-                {util_pct !== null && (
-                  <div>
-                    <div style={{ height: 7, backgroundColor: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', width: `${Math.min(100, util_pct)}%`,
-                        backgroundColor: tier.color, borderRadius: '999px', transition: 'width 0.4s ease',
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.6rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                      <span>0%</span>
-                      <span>Target (100%)</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
-        {/* ── SECTION 6: Harvest Date + Seed Bags Received ── */}
+        {/* Harvest Date + Seed Bags Received */}
         <div style={{ display: 'grid', gridTemplateColumns: activeTab === 'OWN_SEED' ? '1fr' : '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
           <div>
             <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
               Harvest date <span style={{ color: '#dc2626' }}>*</span>
             </label>
-            <input type='date' value={form.harvest_date} max={today()}
+            {/* NO max= restriction — para sa demo */}
+            <input type='date' value={form.harvest_date}
               onChange={e => setField('harvest_date', e.target.value)}
               style={inp(!!errors.harvest_date)} />
             {errors.harvest_date && (
@@ -725,8 +760,6 @@ const HarvestForm = ({
               </p>
             )}
           </div>
-
-          {/* Seed bags received — hidden for OWN_SEED */}
           {activeTab !== 'OWN_SEED' && (
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
@@ -738,16 +771,11 @@ const HarvestForm = ({
                 value={form.seed_bags_received}
                 onChange={e => setField('seed_bags_received', e.target.value)}
                 style={inp(false)} />
-              {farmerId && beneficiaryData?.[farmerId]?.[activeTab]?.seed_bags != null && (
-                <p style={{ margin: '0.2rem 0 0', fontSize: '0.62rem', color: '#64748b' }}>
-                  Auto-filled from distribution records
-                </p>
-              )}
             </div>
           )}
         </div>
 
-        {/* ── SECTION 7: Notes ── */}
+        {/* Notes */}
         <div>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
             Notes / remarks{' '}
@@ -760,7 +788,7 @@ const HarvestForm = ({
         </div>
       </div>
 
-      {/* ── Save Button ── */}
+      {/* Save Button */}
       <button onClick={handleSaveCurrentTab} disabled={saving}
         style={{
           width: '100%', padding: '1rem',
@@ -773,19 +801,12 @@ const HarvestForm = ({
           transition: 'all 0.2s',
         }}>
         <CheckCircle2 size={18} />
-        {saving
-          ? 'Saving...'
-          : encodedTabs[activeTab]
-          ? `Update ${cfg.label} record`
-          : `Save ${cfg.label} record`}
+        {saving ? 'Saving...' : encodedTabs[activeTab] ? `Update ${cfg.label} record` : `Save ${cfg.label} record`}
       </button>
 
-      {/* Summary of saved tabs */}
+      {/* Saved tabs summary */}
       {Object.keys(encodedTabs).length > 0 && (
-        <div style={{
-          backgroundColor: '#f8fafc', border: '1px solid #e2e8f0',
-          borderRadius: '0.875rem', padding: '0.875rem',
-        }}>
+        <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.875rem', padding: '0.875rem' }}>
           <p style={{ margin: '0 0 0.5rem', fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             Saved records this session
           </p>
@@ -807,7 +828,7 @@ const HarvestForm = ({
         </div>
       )}
 
-      {/* High utilization confirm dialog */}
+      {/* High util confirm dialog */}
       {showHighUtilConfirm && pendingSubmit && (() => {
         const f      = pendingSubmit.form;
         const pCfg   = getSeedCfg(pendingSubmit.tabKey);
@@ -817,15 +838,8 @@ const HarvestForm = ({
         const pExpKg = pArea * pCfg.target_yield_kg_ha;
         const pUpct  = pExpKg > 0 ? (pHkg / pExpKg) * 100 : null;
         return (
-          <div style={{
-            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)',
-            zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem',
-          }}>
-            <div style={{
-              backgroundColor: 'white', borderRadius: '1.25rem',
-              padding: '1.5rem', maxWidth: 360, width: '100%',
-              boxShadow: '0 24px 80px rgba(0,0,0,0.2)',
-            }}>
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+            <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.5rem', maxWidth: 360, width: '100%', boxShadow: '0 24px 80px rgba(0,0,0,0.2)' }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#fef9c3', display: 'grid', placeItems: 'center', margin: '0 auto 0.875rem' }}>
                 <AlertTriangle size={26} color='#b45309' />
               </div>
@@ -833,7 +847,7 @@ const HarvestForm = ({
                 Very high yield detected
               </h3>
               <p style={{ margin: '0 0 1.25rem', fontSize: '0.82rem', color: '#64748b', textAlign: 'center', lineHeight: 1.6 }}>
-                This harvest shows <strong>{fmtNum(pUpct, 1)}%</strong> of target — significantly above the expected yield. Please confirm the data is correct.
+                This harvest shows <strong>{fmtNum(pUpct, 1)}%</strong> of target — significantly above expected yield. Please confirm data is correct.
               </p>
               <div style={{ display: 'flex', gap: '0.75rem' }}>
                 <button onClick={() => setShowHighUtilConfirm(false)}
@@ -859,7 +873,6 @@ const HarvestRow = ({ rec, idx, total, onEdit, onDelete }) => {
   const seedCfg = getSeedCfg(rec.seed_source);
   const tier    = getUtilTier(m.utilization_pct);
   const SeedIcon = getSeedIcon(rec.seed_source);
-
   return (
     <div style={{
       padding: '0.875rem 1.25rem',
@@ -868,66 +881,38 @@ const HarvestRow = ({ rec, idx, total, onEdit, onDelete }) => {
     }}>
       <div style={{
         width: 38, height: 38, borderRadius: '50%', flexShrink: 0,
-        backgroundColor: `${seedCfg.color}15`,
-        border: `1.5px solid ${seedCfg.color}`,
+        backgroundColor: `${seedCfg.color}15`, border: `1.5px solid ${seedCfg.color}`,
         display: 'grid', placeItems: 'center', color: seedCfg.color,
       }}>
         <SeedIcon size={18} />
       </div>
-
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
-          <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>
-            {rec.farmer_name}
-          </p>
-          <span style={{
-            backgroundColor: seedCfg.bg, color: seedCfg.color,
-            border: `1px solid ${seedCfg.border}`,
-            borderRadius: '999px', padding: '0.1rem 0.5rem',
-            fontSize: '0.62rem', fontWeight: 700,
-          }}>
+          <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>{rec.farmer_name}</p>
+          <span style={{ backgroundColor: seedCfg.bg, color: seedCfg.color, border: `1px solid ${seedCfg.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700 }}>
             {seedCfg.label}
           </span>
           {m.utilization_pct !== null && (
-            <span style={{
-              backgroundColor: tier.bg, color: tier.color,
-              border: `1px solid ${tier.border}`,
-              borderRadius: '999px', padding: '0.1rem 0.5rem',
-              fontSize: '0.62rem', fontWeight: 700,
-              display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
-            }}>
+            <span style={{ backgroundColor: tier.bg, color: tier.color, border: `1px solid ${tier.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
               {tier.icon} {fmtNum(m.utilization_pct, 1)}% · {tier.label}
             </span>
           )}
         </div>
-
-        <p style={{ margin: 0, fontSize: '0.75rem', color: '#475569' }}>
-          {rec.variety} · {rec.harvest_date}
-        </p>
-
+        <p style={{ margin: 0, fontSize: '0.75rem', color: '#475569' }}>{rec.variety} · {rec.harvest_date}</p>
         <div style={{ display: 'flex', gap: '0.875rem', marginTop: '0.4rem', flexWrap: 'wrap' }}>
           {[
-            { label: 'Area', value: `${fmtNum(rec.harvest_area_ha)} ha` },
-            { label: 'Bags', value: fmtNum(rec.harvest_bags, 0)        },
-            { label: 'Weight', value: `${fmtNum(m.harvest_kg, 0)} kg`  },
-            { label: 'MT',   value: fmtNum(m.harvest_mt)               },
-            { label: 't/ha', value: fmtNum(m.yield_t_ha)               },
+            { label: 'Area',   value: `${fmtNum(rec.harvest_area_ha)} ha` },
+            { label: 'Bags',   value: fmtNum(rec.harvest_bags, 0)         },
+            { label: 'Weight', value: `${fmtNum(m.harvest_kg, 0)} kg`     },
+            { label: 'MT',     value: fmtNum(m.harvest_mt)                },
+            { label: 't/ha',   value: fmtNum(m.yield_t_ha)                },
           ].map(s => (
             <span key={s.label} style={{ fontSize: '0.72rem', color: '#64748b' }}>
               <span style={{ fontWeight: 700, color: '#0f172a' }}>{s.value}</span> {s.label}
             </span>
           ))}
         </div>
-
-        {rec.seed_source && parseFloat(rec.harvest_area_ha) > 0 && (
-          <div style={{ marginTop: '0.4rem', fontSize: '0.68rem', color: '#64748b', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span>Target: <strong style={{ color: '#0f172a' }}>{fmtNum(getSeedCfg(rec.seed_source).target_yield_kg_ha, 0)} kg/ha</strong></span>
-            <span>·</span>
-            <span>Expected: <strong style={{ color: '#0f172a' }}>{fmtNum(m.expected_kg, 0)} kg</strong></span>
-          </div>
-        )}
       </div>
-
       <div style={{ display: 'flex', gap: '0.375rem', flexShrink: 0 }}>
         <button onClick={() => onEdit(rec)}
           style={{ padding: '0.5rem', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '0.625rem', cursor: 'pointer', color: '#475569' }}>
@@ -942,24 +927,250 @@ const HarvestRow = ({ rec, idx, total, onEdit, onDelete }) => {
   );
 };
 
+// ─── HISTORY VIEW ──────────────────────────────────────────────
+const HarvestHistory = ({ onBack, pushToast }) => {
+  const [polls,        setPolls]        = useState([]);
+  const [selectedPoll, setSelectedPoll] = useState('');
+  const [records,      setRecords]      = useState([]);
+  const [pollInfo,     setPollInfo]     = useState(null);
+  const [loading,      setLoading]      = useState(true);
+  const [histLoading,  setHistLoading]  = useState(false);
+  const [search,       setSearch]       = useState('');
+  const [filterSeed,   setFilterSeed]   = useState('');
+
+  // Load polls list on mount
+  useEffect(() => {
+    const fetchPolls = async () => {
+      try {
+        const res = await API.get('/production/harvest-history/');
+        setPolls(res.data.polls || []);
+      } catch {
+        pushToast('Failed to load season list.', 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPolls();
+  }, [pushToast]);
+
+  // Load records when poll selected
+  useEffect(() => {
+    if (!selectedPoll) { setRecords([]); setPollInfo(null); return; }
+    const fetchRecords = async () => {
+      setHistLoading(true);
+      try {
+        const params = { poll_id: selectedPoll };
+        if (search)     params.search      = search;
+        if (filterSeed) params.seed_source = filterSeed;
+        const res = await API.get('/production/harvest-history/', { params });
+        setRecords(res.data.records || []);
+        setPollInfo(res.data.poll_info || null);
+      } catch {
+        pushToast('Failed to load history records.', 'error');
+      } finally {
+        setHistLoading(false);
+      }
+    };
+    fetchRecords();
+  }, [selectedPoll, search, filterSeed, pushToast]);
+
+  const activePoll = polls.find(p => p.is_active);
+
+  // Summary metrics for history
+  const total_area = records.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
+  const total_mt   = records.reduce((s, r) => s + computeMetrics(r).harvest_mt, 0);
+  const avg_yield  = total_area > 0 ? total_mt / total_area : 0;
+
+  return (
+    <div style={{ paddingBottom: '6rem' }}>
+      {/* Back nav */}
+      <div style={{ padding: '1.25rem 1.25rem 0' }}>
+        <button onClick={onBack}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN.primary, fontWeight: 700, fontSize: '0.8rem', padding: '0 0 1.25rem', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+          <ChevronLeft size={15} /> Back to Harvest Records
+        </button>
+
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 0.25rem' }}>
+          Harvest History
+        </h1>
+        <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0 0 1.25rem' }}>
+          View past harvest records by season and year
+        </p>
+
+        {/* Filter bar */}
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem 1.25rem', border: '1px solid #f3f4f6', marginBottom: '1rem' }}>
+          <p style={{ fontSize: '0.7rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 0.875rem' }}>
+            Filter records
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+
+            {/* Season/Poll dropdown */}
+            <div style={{ flex: '2 1 200px', minWidth: 200 }}>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Season
+              </label>
+              <div style={{ position: 'relative' }}>
+                <select value={selectedPoll} onChange={e => setSelectedPoll(e.target.value)}
+                  disabled={loading}
+                  style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
+                  <option value=''>Select season...</option>
+                  {polls.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.season_display} {p.year}{p.is_active ? ' (Active)' : ''}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown size={14} color='#9ca3af' style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              </div>
+            </div>
+
+            {/* Seed type filter */}
+            <div style={{ flex: '1 1 160px', minWidth: 160 }}>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Seed type
+              </label>
+              <div style={{ position: 'relative' }}>
+                <select value={filterSeed} onChange={e => setFilterSeed(e.target.value)}
+                  style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
+                  <option value=''>All types</option>
+                  {SEED_SOURCES.map(s => (
+                    <option key={s.key} value={s.key}>{s.label}</option>
+                  ))}
+                </select>
+                <ChevronDown size={14} color='#9ca3af' style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              </div>
+            </div>
+
+            {/* Search */}
+            <div style={{ flex: '2 1 200px', minWidth: 200 }}>
+              <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Search farmer
+              </label>
+              <div style={{ position: 'relative' }}>
+                <Search size={14} color='#9ca3af' style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder='Name, RSBSA, or variety...'
+                  style={{ width: '100%', padding: '0.625rem 0.875rem 0.625rem 2.25rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', outline: 'none', boxSizing: 'border-box', backgroundColor: 'white' }} />
+              </div>
+            </div>
+
+            {/* Clear */}
+            {(selectedPoll || filterSeed || search) && (
+              <button onClick={() => { setSelectedPoll(''); setFilterSeed(''); setSearch(''); }}
+                style={{ padding: '0.625rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', backgroundColor: 'white', color: '#6b7280', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}>
+                <X size={13} /> Clear
+              </button>
+            )}
+          </div>
+
+          {/* Active season notice */}
+          {selectedPoll && activePoll && String(selectedPoll) === String(activePoll.id) && (
+            <div style={{ marginTop: '0.875rem', padding: '0.5rem 0.75rem', backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', fontSize: '0.72rem', color: GREEN.accent, fontWeight: 600 }}>
+              ⚡ You are viewing the <strong>current active season</strong>. These are your live harvest records.
+            </div>
+          )}
+        </div>
+
+        {/* Summary cards — shown when poll selected and has records */}
+        {selectedPoll && records.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+            {[
+              { label: 'Records',       value: records.length,          color: '#0f172a'    },
+              { label: 'Total area',    value: `${fmtNum(total_area)} ha`, color: GREEN.accent },
+              { label: 'Production',    value: `${fmtNum(total_mt)} MT`,   color: '#2563eb'    },
+              { label: 'Avg yield',     value: `${fmtNum(avg_yield)} t/ha`, color: '#7c3aed'   },
+            ].map(m => (
+              <div key={m.label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: m.color }}>{m.value}</p>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.62rem', color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{m.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Records table */}
+      <div style={{ padding: '0 1.25rem' }}>
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
+
+          {/* Table header */}
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.7fr', gap: 0, padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #f3f4f6' }}>
+            {['Farmer', 'Seed Type', 'Variety', 'Date', 'Area', 'MT', 'Util %'].map(col => (
+              <span key={col} style={{ fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{col}</span>
+            ))}
+          </div>
+
+          {/* States */}
+          {histLoading ? (
+            <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+              <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
+              <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Loading records...</p>
+            </div>
+          ) : !selectedPoll ? (
+            <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: GREEN.light, border: `2px solid ${GREEN.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <History size={24} color={GREEN.accent} />
+              </div>
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>Select a season to view records</p>
+              <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Use the season dropdown above to browse harvest history.</p>
+            </div>
+          ) : records.length === 0 ? (
+            <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
+              <History size={28} color='#d1d5db' style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No records found</p>
+              <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>No harvest records for this season and filter combination.</p>
+            </div>
+          ) : (
+            records.map((rec, idx) => {
+              const m    = computeMetrics(rec);
+              const s    = getSeedCfg(rec.seed_source);
+              const tier = getUtilTier(m.utilization_pct);
+              return (
+                <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.7fr', gap: 0, padding: '0.75rem 1.25rem', borderBottom: idx < records.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#111827' }}>{rec.farmer_name}</p>
+                    <p style={{ margin: '0.1rem 0 0', fontSize: '0.68rem', color: '#9ca3af' }}>{rec.barangay || ''}</p>
+                  </div>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: s.color, backgroundColor: s.bg, padding: '0.15rem 0.5rem', borderRadius: '999px', border: `1px solid ${s.border}`, display: 'inline-block' }}>
+                    {s.label}
+                  </span>
+                  <span style={{ fontSize: '0.75rem', color: '#374151' }}>{rec.variety || '—'}</span>
+                  <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                    {rec.harvest_date ? new Date(rec.harvest_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', color: '#374151' }}>{fmtNum(rec.harvest_area_ha)} ha</span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#2563eb' }}>{fmtNum(m.harvest_mt)} MT</span>
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: tier.color }}>
+                    {m.utilization_pct !== null ? `${fmtNum(m.utilization_pct, 1)}%` : '—'}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── MAIN COMPONENT ────────────────────────────────────────────
 const BrgyHarvest = () => {
-  const [records,     setRecords]     = useState([]);
-  const [farmers,     setFarmers]     = useState([]);
-  const [finalSeeds,  setFinalSeeds]  = useState([]);
-  // beneficiaryData: { [farmerId]: { HYBRID: { area_ha, seed_bags }, INBRED: { area_ha, seed_bags } } }
-  const [beneficiaryData, setBeneficiaryData] = useState({});
-  const [loading,     setLoading]     = useState(true);
-  const [saving,      setSaving]      = useState(false);
-  const [deleting,    setDeleting]    = useState(null);
+  const [records,          setRecords]          = useState([]);
+  const [harvestingFarmers, setHarvestingFarmers] = useState([]); // farmers with HARVESTING phase
+  const [finalSeeds,       setFinalSeeds]       = useState([]);
+  const [beneficiaryData,  setBeneficiaryData]  = useState({});
+  const [loading,          setLoading]          = useState(true);
+  const [saving,           setSaving]           = useState(false);
+  const [deleting,         setDeleting]         = useState(null);
 
   const [showForm,    setShowForm]    = useState(false);
   const [editData,    setEditData]    = useState(null);
   const [confirmDel,  setConfirmDel]  = useState(null);
+  const [showHistory, setShowHistory] = useState(false); // View History page
 
-  const [search,      setSearch]      = useState('');
-  const [filterSeed,  setFilterSeed]  = useState('');
-  const [activeTab,   setActiveTab]   = useState('records');
+  const [search,     setSearch]     = useState('');
+  const [filterSeed, setFilterSeed] = useState('');
+  const [activeTab,  setActiveTab]  = useState('records');
 
   const [toasts, setToasts] = useState([]);
   const toastId = useRef(0);
@@ -970,38 +1181,28 @@ const BrgyHarvest = () => {
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
   }, []);
 
-  // ── LOAD DATA ──
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const [farmersRes, recordsRes, finalSeedsRes] = await Promise.allSettled([
-        API.get('/distribution/farmers/search/?barangay=&search='),
+      const [recordsRes, harvestingRes, finalSeedsRes, benefRes] = await Promise.allSettled([
         API.get('/production/harvest/'),
+        API.get('/production/harvesting-farmers/'),      // NEW
         API.get('/seed-poll/final-seeds/'),
+        API.get('/distribution/entries/farmer-harvest-context/'),
       ]);
 
-      let farmerList = [];
-      if (farmersRes.status === 'fulfilled') {
-        farmerList = farmersRes.value.data || [];
-        setFarmers(farmerList);
-      }
       if (recordsRes.status === 'fulfilled') {
         const d = recordsRes.value.data;
         setRecords(Array.isArray(d) ? d : (d?.results || []));
       }
+      if (harvestingRes.status === 'fulfilled') {
+        setHarvestingFarmers(harvestingRes.value.data?.farmers || []);
+      }
       if (finalSeedsRes.status === 'fulfilled') {
         setFinalSeeds(finalSeedsRes.value.data || []);
       }
-
-      // Load beneficiary data for all farmers
-      if (farmerList.length > 0) {
-        try {
-          const benfRes = await API.get('/distribution/entries/farmer-harvest-context/');
-          setBeneficiaryData(benfRes.data || {});
-        } catch {
-          // Non-critical — area auto-fill won't work but harvest encoding still works
-          setBeneficiaryData({});
-        }
+      if (benefRes.status === 'fulfilled') {
+        setBeneficiaryData(benefRes.value.data || {});
       }
     } catch {
       pushToast('Failed to load data. Please refresh.', 'error');
@@ -1012,7 +1213,6 @@ const BrgyHarvest = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── SAVE (called per tab) ──
   const handleSave = async (formData, onSuccessCallback) => {
     setSaving(true);
     try {
@@ -1027,11 +1227,9 @@ const BrgyHarvest = () => {
         weight_type:          'DRIED',
         moisture_content_pct: 12,
       };
-
       if (formData.seed_source !== 'OWN_SEED' && formData.seed_bags_received) {
         payload.seed_bags_received = parseInt(formData.seed_bags_received, 10) || null;
       }
-
       let savedId;
       if (formData._existing_id) {
         const res = await API.patch(`/production/harvest/${formData._existing_id}/`, payload);
@@ -1042,7 +1240,6 @@ const BrgyHarvest = () => {
         savedId = res.data.id;
         pushToast(`${getSeedCfg(formData.seed_source).label} record saved.`);
       }
-
       if (onSuccessCallback) onSuccessCallback(savedId);
       await loadData();
     } catch (err) {
@@ -1058,7 +1255,6 @@ const BrgyHarvest = () => {
     }
   };
 
-  // ── DELETE ──
   const handleDelete = async (id) => {
     setDeleting(id);
     try {
@@ -1073,7 +1269,6 @@ const BrgyHarvest = () => {
     }
   };
 
-  // ── FILTERED RECORDS ──
   const filtered = records.filter(r => {
     const q = search.trim().toLowerCase();
     if (q && !(r.farmer_name?.toLowerCase().includes(q) || r.variety?.toLowerCase().includes(q))) return false;
@@ -1081,7 +1276,6 @@ const BrgyHarvest = () => {
     return true;
   });
 
-  // ── SUMMARY METRICS ──
   const total_area = records.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
   const total_bags = records.reduce((s, r) => s + (parseFloat(r.harvest_bags) || 0), 0);
   const total_mt   = records.reduce((s, r) => s + computeMetrics(r).harvest_mt, 0);
@@ -1111,6 +1305,22 @@ const BrgyHarvest = () => {
     });
     setShowForm(true);
   };
+
+  // ── HISTORY VIEW ──
+  if (showHistory) {
+    return (
+      <div style={{ paddingBottom: '6rem' }}>
+        <style>{`
+          @keyframes spin { to { transform: rotate(360deg); } }
+          @keyframes toastPop { 0%{opacity:0;transform:scale(0.88)} 70%{transform:scale(1.03)} 100%{opacity:1;transform:scale(1)} }
+          @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+          @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        `}</style>
+        <Toast toasts={toasts} />
+        <HarvestHistory onBack={() => setShowHistory(false)} pushToast={pushToast} />
+      </div>
+    );
+  }
 
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: '#64748b' }}>
@@ -1143,61 +1353,56 @@ const BrgyHarvest = () => {
       <div style={{ padding: '1.25rem 1.25rem 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>
-              Harvest records
-            </h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Harvest records</h1>
             <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
               Encode and track barangay harvest data
             </p>
           </div>
           <button onClick={openNew}
-            style={{
-              padding: '0.625rem 1.25rem', backgroundColor: GREEN.primary,
-              color: 'white', border: 'none', borderRadius: '0.875rem',
-              cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem',
-              display: 'flex', alignItems: 'center', gap: '0.45rem',
-              boxShadow: `0 4px 16px ${GREEN.primary}40`,
-            }}>
+            style={{ padding: '0.625rem 1.25rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.875rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.45rem', boxShadow: `0 4px 16px ${GREEN.primary}40` }}>
             <Plus size={16} /> Encode harvest
           </button>
         </div>
 
         {/* Summary metric cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
-          <MetricCard icon={Users}      label='Total farmers'    value={records.length}             sub='harvest records encoded'         color='#0f172a' />
-          <MetricCard icon={Layers}     label='Total area'       value={`${fmtNum(total_area)} ha`}  sub='harvested area'                  color={GREEN.accent} />
-          <MetricCard icon={BarChart3}  label='Total production' value={`${fmtNum(total_mt)} MT`}    sub={`${fmtNum(total_bags, 0)} bags`} color='#2563eb' />
-          <MetricCard icon={ShieldCheck} label='Avg. yield'      value={`${fmtNum(avg_yield)} t/ha`} sub='across all records'              color='#7c3aed' />
+          <MetricCard icon={Users}       label='Total farmers'    value={records.length}             sub='harvest records encoded'         color='#0f172a' />
+          <MetricCard icon={Layers}      label='Total area'       value={`${fmtNum(total_area)} ha`}  sub='harvested area'                  color={GREEN.accent} />
+          <MetricCard icon={BarChart3}   label='Total production' value={`${fmtNum(total_mt)} MT`}    sub={`${fmtNum(total_bags, 0)} bags`} color='#2563eb' />
+          <MetricCard icon={ShieldCheck} label='Avg. yield'       value={`${fmtNum(avg_yield)} t/ha`} sub='across all records'              color='#7c3aed' />
         </div>
 
-        {/* Records / Summary tabs */}
-        <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.75rem', padding: '0.2rem', gap: '0.2rem', marginBottom: '1.25rem', width: 'fit-content' }}>
-          {[{ key: 'records', label: 'Records' }, { key: 'summary', label: 'Summary' }].map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              style={{
-                padding: '0.4rem 1rem', borderRadius: '0.55rem', border: 'none',
-                backgroundColor: activeTab === t.key ? 'white' : 'transparent',
-                color: activeTab === t.key ? GREEN.primary : '#64748b',
-                fontWeight: activeTab === t.key ? 700 : 500,
-                fontSize: '0.82rem', cursor: 'pointer',
-                boxShadow: activeTab === t.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
-                transition: 'all 0.15s',
-              }}>
-              {t.label}
-            </button>
-          ))}
+        {/* Records / Summary tabs + View History button */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.75rem', padding: '0.2rem', gap: '0.2rem', width: 'fit-content' }}>
+            {[{ key: 'records', label: 'Records' }, { key: 'summary', label: 'Summary' }].map(t => (
+              <button key={t.key} onClick={() => setActiveTab(t.key)}
+                style={{
+                  padding: '0.4rem 1rem', borderRadius: '0.55rem', border: 'none',
+                  backgroundColor: activeTab === t.key ? 'white' : 'transparent',
+                  color: activeTab === t.key ? GREEN.primary : '#64748b',
+                  fontWeight: activeTab === t.key ? 700 : 500,
+                  fontSize: '0.82rem', cursor: 'pointer',
+                  boxShadow: activeTab === t.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                  transition: 'all 0.15s',
+                }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* View History button */}
+          <button onClick={() => setShowHistory(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', padding: '0.5rem 1rem', backgroundColor: 'white', border: `1.5px solid ${GREEN.border}`, borderRadius: '0.75rem', color: GREEN.accent, fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <History size={14} /> View History
+          </button>
         </div>
 
         {/* Search + seed filter */}
         {activeTab === 'records' && (
-          <div style={{
-            backgroundColor: 'white', borderRadius: '1rem', padding: '0.875rem 1rem',
-            border: '1px solid #f3f4f6', marginBottom: '1rem',
-            display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center',
-          }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', marginBottom: '1rem', display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <div style={{ position: 'relative', flex: '1 1 200px' }}>
-              <Search size={14} color='#9ca3af'
-                style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+              <Search size={14} color='#9ca3af' style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder='Search farmer or variety...'
                 style={{ padding: '0.5rem 0.875rem 0.5rem 2.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.82rem', width: '100%', outline: 'none', boxSizing: 'border-box' }} />
@@ -1230,9 +1435,7 @@ const BrgyHarvest = () => {
                 {records.length === 0 ? 'No harvest records yet' : 'No matching records'}
               </p>
               <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: '0 0 1.25rem' }}>
-                {records.length === 0
-                  ? 'Start encoding harvest data for farmers in your barangay.'
-                  : 'Try adjusting your search or filters.'}
+                {records.length === 0 ? 'Start encoding harvest data for farmers in your barangay.' : 'Try adjusting your search or filters.'}
               </p>
               {records.length === 0 && (
                 <button onClick={openNew}
@@ -1251,11 +1454,7 @@ const BrgyHarvest = () => {
               </div>
               {filtered.map((rec, idx) => (
                 <div key={rec.id} className='hvrow' style={{ backgroundColor: 'white', transition: 'background 0.15s' }}>
-                  <HarvestRow
-                    rec={rec} idx={idx} total={filtered.length}
-                    onEdit={openEdit}
-                    onDelete={id => setConfirmDel(id)}
-                  />
+                  <HarvestRow rec={rec} idx={idx} total={filtered.length} onEdit={openEdit} onDelete={id => setConfirmDel(id)} />
                 </div>
               ))}
             </div>
@@ -1286,8 +1485,8 @@ const BrgyHarvest = () => {
                     </div>
                     <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'center' }}>
                       {[
-                        { label: 'Farmers', value: s.count },
-                        { label: 'Area', value: `${fmtNum(s.area)} ha` },
+                        { label: 'Farmers',    value: s.count },
+                        { label: 'Area',       value: `${fmtNum(s.area)} ha` },
                         { label: 'Production', value: `${fmtNum(s.mt)} MT` },
                       ].map(m => (
                         <div key={m.label} style={{ textAlign: 'right' }}>
@@ -1312,15 +1511,13 @@ const BrgyHarvest = () => {
 
           {/* Overall totals */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '1.25rem' }}>
-            <p style={{ margin: '0 0 1rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Overall totals
-            </p>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Overall totals</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.75rem' }}>
               {[
-                { label: 'Farmers',      value: records.length,       color: '#0f172a'    },
-                { label: 'Area (ha)',    value: fmtNum(total_area),   color: GREEN.accent  },
-                { label: 'Total (MT)',   value: fmtNum(total_mt),     color: '#2563eb'     },
-                { label: 'Avg (t/ha)',   value: fmtNum(avg_yield),    color: '#7c3aed'     },
+                { label: 'Farmers',   value: records.length,     color: '#0f172a'    },
+                { label: 'Area (ha)', value: fmtNum(total_area), color: GREEN.accent  },
+                { label: 'Total (MT)',value: fmtNum(total_mt),   color: '#2563eb'     },
+                { label: 'Avg (t/ha)',value: fmtNum(avg_yield),  color: '#7c3aed'     },
               ].map(m => (
                 <div key={m.label} style={{ backgroundColor: '#f8fafc', borderRadius: '0.75rem', padding: '0.875rem', border: '1px solid #e2e8f0', textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: m.color }}>{m.value}</p>
@@ -1337,12 +1534,12 @@ const BrgyHarvest = () => {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               {[
-                { range: '> 100%',  label: 'Master Farmer',  icon: <Trophy size={12} />,        color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '= 100%',  label: 'Exceptional',    icon: <CheckCircle2 size={12} />,   color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
-                { range: '80–99%',  label: 'Normal',         icon: <CheckCircle2 size={12} />,   color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '60–79%',  label: 'Good',           icon: <AlertTriangle size={12} />,  color: '#b45309', bg: '#fefce8', border: '#fde68a' },
-                { range: '50–59%',  label: 'Below target',   icon: <AlertTriangle size={12} />,  color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
-                { range: '10–49%',  label: 'Needs attention', icon: <X size={12} />,             color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
+                { range: '> 100%', label: 'Master Farmer',   icon: <Trophy size={12} />,       color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+                { range: '= 100%', label: 'Exceptional',     icon: <CheckCircle2 size={12} />,  color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
+                { range: '80–99%', label: 'Normal',          icon: <CheckCircle2 size={12} />,  color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
+                { range: '60–79%', label: 'Good',            icon: <AlertTriangle size={12} />, color: '#b45309', bg: '#fefce8', border: '#fde68a' },
+                { range: '50–59%', label: 'Below target',    icon: <AlertTriangle size={12} />, color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
+                { range: '10–49%', label: 'Needs attention', icon: <X size={12} />,             color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
               ].map(t => (
                 <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                   <span style={{ backgroundColor: t.bg, color: t.color, border: `1px solid ${t.border}`, borderRadius: '999px', padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700, minWidth: 130, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>
@@ -1390,7 +1587,7 @@ const BrgyHarvest = () => {
               </button>
             </div>
             <HarvestForm
-              farmers={farmers}
+              harvestingFarmers={harvestingFarmers}
               editData={editData}
               onSave={handleSave}
               onClose={() => { setShowForm(false); setEditData(null); }}
@@ -1408,23 +1605,16 @@ const BrgyHarvest = () => {
           <div onClick={() => setConfirmDel(null)}
             style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 800, animation: 'fadeIn 0.2s ease' }} />
           <div style={{
-            position: 'fixed', top: '50%', left: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'white', borderRadius: '1.25rem',
-            padding: '1.5rem', zIndex: 900,
-            width: 'min(92vw, 360px)',
-            boxShadow: '0 24px 80px rgba(15,23,42,0.25)',
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.5rem', zIndex: 900,
+            width: 'min(92vw, 360px)', boxShadow: '0 24px 80px rgba(15,23,42,0.25)',
             animation: 'slideUp 0.25s ease',
           }}>
             <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: '#fef2f2', display: 'grid', placeItems: 'center', margin: '0 auto 0.875rem' }}>
               <AlertTriangle size={26} color='#b91c1c' />
             </div>
-            <h3 style={{ margin: '0 0 0.5rem', fontWeight: 800, fontSize: '1rem', color: '#111827', textAlign: 'center' }}>
-              Delete this harvest record?
-            </h3>
-            <p style={{ margin: '0 0 1.25rem', fontSize: '0.82rem', color: '#64748b', textAlign: 'center', lineHeight: 1.5 }}>
-              This action cannot be undone.
-            </p>
+            <h3 style={{ margin: '0 0 0.5rem', fontWeight: 800, fontSize: '1rem', color: '#111827', textAlign: 'center' }}>Delete this harvest record?</h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.82rem', color: '#64748b', textAlign: 'center', lineHeight: 1.5 }}>This action cannot be undone.</p>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button onClick={() => setConfirmDel(null)}
                 style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #e5e7eb', borderRadius: '0.875rem', backgroundColor: 'white', color: '#374151', fontWeight: 700, cursor: 'pointer', fontSize: '0.875rem' }}>

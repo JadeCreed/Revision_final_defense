@@ -11,7 +11,7 @@ from .serializers import (
     BrgyAllocationSerializer, SeedDeliveryAuditSerializer,
 )
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
-
+from apps.distribution.models import DistributionBatch, DistributionEntry
 
 # ─────────────────────────────────────────
 # ADMIN VIEWS

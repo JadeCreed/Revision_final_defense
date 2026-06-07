@@ -1,248 +1,255 @@
-Agrice-Updated/
-├── backend/
-│   ├── apps/
-│   │   ├── accounts/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── authentication.py
-│   │   │   ├── choices.py
-│   │   │   ├── managers.py
-│   │   │   ├── models.py
-│   │   │   ├── permissions.py
-│   │   │   ├── rate_limit.py
-│   │   │   ├── serializers.py
-│   │   │   ├── signals.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── utils.py
-│   │   │   └── views.py
-│   │   ├── announcements/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── crop_monitoring/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── signals.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── crop_phase/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── distribution/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── gis_map/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── production/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── reports/
-│   │   │   ├── templates_excel/
-│   │   │   │   └── hybrid_masterlist.xlsx
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── seed_inventory/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   └── seed_poll/
-│   │       ├── management/
-│   │       │   ├── commands/
-│   │       │   │   ├── __init__.py
-│   │       │   │   └── seed_seed_types.py
-│   │       │   └── __init__.py
-│   │       ├── __init__.py
-│   │       ├── admin.py
-│   │       ├── apps.py
-│   │       ├── models.py
-│   │       ├── serializers.py
-│   │       ├── tests.py
-│   │       ├── urls.py
-│   │       └── views.py
-│   ├── config/
-│   │   ├── settings/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py
-│   │   │   ├── dev.py
-│   │   │   └── prod.py
-│   │   ├── __init__.py
-│   │   ├── asgi.py
-│   │   ├── urls.py
-│   │   └── wsgi.py
-│   ├── scripts/
-│   │   └── set_hectares.py
-│   ├── templates/
-│   │   ├── login.html
-│   │   └── register.html
-│   ├── venv/  # contents omitted
-│   ├── .env
-│   ├── .env.example
-│   ├── check_gis_data.py
-│   ├── db.sqlite3
-│   ├── db.sqlite3.backup
-│   ├── db.sqlite3.backup_for_migration_fix
-│   ├── manage.py
-│   ├── README_ENV.md
-│   └── requirements.txt
-├── frontend/
-│   ├── node_modules/  # contents omitted
-│   ├── public/
-│   │   ├── favicon.svg
-│   │   └── icons.svg
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── axios.js
-│   │   ├── assets/
-│   │   │   ├── hero.png
-│   │   │   ├── logo.png
-│   │   │   ├── react.svg
-│   │   │   └── vite.svg
-│   │   ├── auth/
-│   │   │   └── AuthContext.jsx
-│   │   ├── components/
-│   │   │   ├── announcements/
-│   │   │   │   ├── AnnouncementCard.jsx
-│   │   │   │   ├── AnnouncementDetail.jsx
-│   │   │   │   └── AnnouncementsListPage.jsx
-│   │   │   ├── navigation/
-│   │   │   │   ├── BottomNav.jsx
-│   │   │   │   ├── MenuConfig.js
-│   │   │   │   ├── Sidebar.jsx
-│   │   │   │   └── UserNavConfig.js
-│   │   │   ├── poll/
-│   │   │   │   ├── PollCard.jsx
-│   │   │   │   └── VoteForm.jsx
-│   │   │   ├── tables/
-│   │   │   │   └── TableBase.jsx
-│   │   │   ├── AuthBox.jsx
-│   │   │   ├── Hero.jsx
-│   │   │   ├── Input.jsx
-│   │   │   └── Navbar.jsx
-│   │   ├── data/
-│   │   │   └── LucbanGIS.json
-│   │   ├── layouts/
-│   │   │   ├── DashboardLayout.jsx
-│   │   │   ├── PublicLayout.jsx
-│   │   │   └── UserLayout.jsx
-│   │   ├── pages/
-│   │   │   ├── admin/
-│   │   │   │   ├── users/
-│   │   │   │   │   ├── Archive.jsx
-│   │   │   │   │   ├── FarmerMasterlist.jsx
-│   │   │   │   │   ├── FarmerRequests.jsx
-│   │   │   │   │   ├── OfficialMasterlist.jsx
-│   │   │   │   │   ├── ResetRequests.jsx
-│   │   │   │   │   └── SystemUsers.jsx
-│   │   │   │   ├── AdminBeneficiaries.jsx
-│   │   │   │   ├── AdminDashboard.jsx
-│   │   │   │   ├── AdminDistribution.jsx
-│   │   │   │   ├── Announcement.jsx
-│   │   │   │   ├── CropPhase.jsx
-│   │   │   │   ├── GisMap.jsx
-│   │   │   │   ├── Production.jsx
-│   │   │   │   ├── Reports.jsx
-│   │   │   │   ├── SeedInventory.jsx
-│   │   │   │   ├── SeedPoll.jsx
-│   │   │   │   ├── Settings.jsx
-│   │   │   │   └── UserManagement.jsx
-│   │   │   ├── at/
-│   │   │   │   ├── ATAnnouncements.jsx
-│   │   │   │   ├── ATDashboard.jsx
-│   │   │   │   ├── ATFarmers.jsx
-│   │   │   │   ├── ATGisMap.jsx
-│   │   │   │   ├── ATReports.jsx
-│   │   │   │   └── CropMonitoring.jsx
-│   │   │   ├── brgy/
-│   │   │   │   ├── BPDashboard.jsx
-│   │   │   │   ├── BrgyAnnouncements.jsx
-│   │   │   │   ├── BrgyBeneficiaries.jsx
-│   │   │   │   ├── BrgyCropPhase.jsx
-│   │   │   │   ├── BrgyDistribution.jsx
-│   │   │   │   ├── BrgyFarmers.jsx
-│   │   │   │   ├── BrgyHarvest.jsx
-│   │   │   │   ├── BrgyPoll.jsx
-│   │   │   │   └── BrgyReports.jsx
-│   │   │   ├── farmer/
-│   │   │   │   ├── FarmerAnnouncements.jsx
-│   │   │   │   ├── FarmerDashboard.jsx
-│   │   │   │   ├── FarmerPoll.jsx
-│   │   │   │   ├── FarmerProfile.jsx
-│   │   │   │   └── YieldEncode.jsx
-│   │   │   ├── AdminReset.jsx
-│   │   │   ├── ForgotPassword.jsx
-│   │   │   ├── Landing.jsx
-│   │   │   ├── Register.jsx
-│   │   │   ├── ResetPassword.jsx
-│   │   │   └── VerifyOTP.jsx
-│   │   ├── routes/
-│   │   │   ├── AppRoutes.jsx
-│   │   │   └── ProtectedRoute.jsx
-│   │   ├── App.css
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── README.md
-│   ├── tailwind.config.js
-│   └── vite.config.js
-├── venv/  # contents omitted
-├── CAPSTONE_SEED_UTILIZATION_PLAN.txt
-├── COMPLETE_UI_UX_SPECIFICATIONS.md
-├── LOGIN_VALIDATION_SUMMARY.md
-├── SEASON_IMPLEMENTATION_SUMMARY.md
-├── SYSTEM_FLOW_ANALYSIS.md
-├── test_gis_api.py
-├── tree.txt
-├── tree_clean.txt
-├── tree_full.txt
-└── try.py
+    Agrice-Updated/
+    ├── backend/
+    │   ├── apps/
+    │   │   ├── accounts/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── authentication.py
+    │   │   │   ├── choices.py
+    │   │   │   ├── managers.py
+    │   │   │   ├── models.py
+    │   │   │   ├── permissions.py
+    │   │   │   ├── rate_limit.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── signals.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   ├── utils.py
+    │   │   │   └── views.py
+    │   │   ├── announcements/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── crop_monitoring/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── signals.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── crop_phase/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── distribution/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── gis_map/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── production/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── reports/
+    │   │   │   ├── templates_excel/
+    │   │   │   │   └── hybrid_masterlist.xlsx
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   ├── seed_inventory/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── apps.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
+    │   │   └── seed_poll/
+    │   │       ├── management/
+    │   │       │   ├── commands/
+    │   │       │   │   ├── __init__.py
+    │   │       │   │   └── seed_seed_types.py
+    │   │       │   └── __init__.py
+    │   │       ├── __init__.py
+    │   │       ├── admin.py
+    │   │       ├── apps.py
+    │   │       ├── models.py
+    │   │       ├── serializers.py
+    │   │       ├── tests.py
+    │   │       ├── urls.py
+    │   │       └── views.py
+    │   ├── config/
+    │   │   ├── settings/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── base.py
+    │   │   │   ├── dev.py
+    │   │   │   └── prod.py
+    │   │   ├── __init__.py
+    │   │   ├── asgi.py
+    │   │   ├── urls.py
+    │   │   └── wsgi.py
+    │   ├── scripts/
+    │   │   └── set_hectares.py
+    │   ├── templates/
+    │   │   ├── login.html
+    │   │   └── register.html
+    │   ├── venv/  # contents omitted
+    │   ├── .env
+    │   ├── .env.example
+    │   ├── check_gis_data.py
+    │   ├── db.sqlite3
+    │   ├── db.sqlite3.backup
+    │   ├── db.sqlite3.backup_for_migration_fix
+    │   ├── manage.py
+    │   ├── README_ENV.md
+    │   └── requirements.txt
+    ├── frontend/
+    │   ├── node_modules/  # contents omitted
+    │   ├── public/
+    │   │   ├── favicon.svg
+    │   │   └── icons.svg
+    │   ├── src/
+    │   │   ├── api/
+    │   │   │   └── axios.js
+    │   │   ├── assets/
+    │   │   │   ├── hero.png
+    │   │   │   ├── logo.png
+    │   │   │   ├── react.svg
+    │   │   │   └── vite.svg
+    │   │   ├── auth/
+    │   │   │   └── AuthContext.jsx
+    │   │   ├── components/
+    │   │   │   ├── announcements/
+    │   │   │   │   ├── AnnouncementCard.jsx
+    │   │   │   │   ├── AnnouncementDetail.jsx
+    │   │   │   │   └── AnnouncementsListPage.jsx
+    │   │   │   ├── navigation/
+    │   │   │   │   ├── BottomNav.jsx
+    │   │   │   │   ├── MenuConfig.js
+    │   │   │   │   ├── Sidebar.jsx
+    │   │   │   │   └── UserNavConfig.js
+    │   │   │   ├── poll/
+    │   │   │   │   ├── PollCard.jsx
+    │   │   │   │   └── VoteForm.jsx
+    │   │   │   ├── tables/
+    │   │   │   │   └── TableBase.jsx
+    |   |   |   ├── KpiCards.jsx
+    |   |   |   ├── GanttChart.jsx
+    |   |   |   ├── PhaseDistribution.jsx
+    |   |   |   ├── AreaMonitoring.jsx
+    |   |   |   ├── ComplianceDonut.jsx
+    |   |   |   ├── DelayChart.jsx
+    |   |   |   ├── DamageChart.jsx
+    │   │   │   ├── AuthBox.jsx
+    │   │   │   ├── Hero.jsx
+    │   │   │   ├── Input.jsx
+    │   │   │   └── Navbar.jsx
+    │   │   ├── data/
+    │   │   │   └── LucbanGIS.json
+    │   │   ├── layouts/
+    │   │   │   ├── DashboardLayout.jsx
+    │   │   │   ├── PublicLayout.jsx
+    │   │   │   └── UserLayout.jsx
+    │   │   ├── pages/
+    │   │   │   ├── admin/
+    │   │   │   │   ├── users/
+    │   │   │   │   │   ├── Archive.jsx
+    │   │   │   │   │   ├── FarmerMasterlist.jsx
+    │   │   │   │   │   ├── FarmerRequests.jsx
+    │   │   │   │   │   ├── OfficialMasterlist.jsx
+    │   │   │   │   │   ├── ResetRequests.jsx
+    │   │   │   │   │   └── SystemUsers.jsx
+    │   │   │   │   ├── AdminBeneficiaries.jsx
+    │   │   │   │   ├── AdminDashboard.jsx
+    │   │   │   │   ├── AdminDistribution.jsx
+    │   │   │   │   ├── Announcement.jsx
+    │   │   │   │   ├── CropPhase.jsx
+    │   │   │   │   ├── GisMap.jsx
+    │   │   │   │   ├── Production.jsx
+    │   │   │   │   ├── Reports.jsx
+    │   │   │   │   ├── SeedInventory.jsx
+    │   │   │   │   ├── SeedPoll.jsx
+    │   │   │   │   ├── Settings.jsx
+    │   │   │   │   └── UserManagement.jsx
+    │   │   │   ├── at/
+    │   │   │   │   ├── ATAnnouncements.jsx
+    │   │   │   │   ├── ATDashboard.jsx
+    │   │   │   │   ├── ATFarmers.jsx
+    │   │   │   │   ├── ATGisMap.jsx
+    │   │   │   │   ├── ATReports.jsx
+    │   │   │   │   └── CropMonitoring.jsx
+    │   │   │   ├── brgy/
+    │   │   │   │   ├── BPDashboard.jsx
+    │   │   │   │   ├── BrgyAnnouncements.jsx
+    │   │   │   │   ├── BrgyBeneficiaries.jsx
+    │   │   │   │   ├── BrgyCropPhase.jsx
+    │   │   │   │   ├── BrgyDistribution.jsx
+    │   │   │   │   ├── BrgyFarmers.jsx
+    │   │   │   │   ├── BrgyHarvest.jsx
+    │   │   │   │   ├── BrgyPoll.jsx
+    │   │   │   │   └── BrgyReports.jsx
+    │   │   │   ├── farmer/
+    │   │   │   │   ├── FarmerAnnouncements.jsx
+    │   │   │   │   ├── FarmerDashboard.jsx
+    │   │   │   │   ├── FarmerPoll.jsx
+    │   │   │   │   ├── FarmerProfile.jsx
+    │   │   │   │   └── YieldEncode.jsx
+    │   │   │   ├── AdminReset.jsx
+    │   │   │   ├── ForgotPassword.jsx
+    │   │   │   ├── Landing.jsx
+    │   │   │   ├── Register.jsx
+    │   │   │   ├── ResetPassword.jsx
+    │   │   │   └── VerifyOTP.jsx
+    │   │   ├── routes/
+    │   │   │   ├── AppRoutes.jsx
+    │   │   │   └── ProtectedRoute.jsx
+    │   │   ├── App.css
+    │   │   ├── App.jsx
+    │   │   ├── index.css
+    │   │   └── main.jsx
+    │   ├── eslint.config.js
+    │   ├── index.html
+    │   ├── package-lock.json
+    │   ├── package.json
+    │   ├── postcss.config.js
+    │   ├── README.md
+    │   ├── tailwind.config.js
+    │   └── vite.config.js
+    ├── venv/  # contents omitted
+    ├── CAPSTONE_SEED_UTILIZATION_PLAN.txt
+    ├── COMPLETE_UI_UX_SPECIFICATIONS.md
+    ├── LOGIN_VALIDATION_SUMMARY.md
+    ├── SEASON_IMPLEMENTATION_SUMMARY.md
+    ├── SYSTEM_FLOW_ANALYSIS.md
+    ├── test_gis_api.py
+    ├── tree.txt
+    ├── tree_clean.txt
+    ├── tree_full.txt
+    └── try.py

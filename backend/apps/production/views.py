@@ -369,3 +369,146 @@ class HarvestRecordDetailView(RetrieveUpdateDestroyAPIView):
         elif user.role == 'ADMIN':
             return HarvestRecord.objects.all().select_related('farmer', 'encoded_by')
         return HarvestRecord.objects.none()
+    
+
+from apps.crop_monitoring.models import CropMonitoringRecord
+from apps.seed_poll.models import Poll, FinalSeed
+
+
+class BrgyHarvestingFarmersView(APIView):
+    """
+    GET /api/production/harvesting-farmers/
+    Returns farmers in the BRGY president's barangay
+    who have at least one HARVESTING crop phase record
+    in the current active poll/season.
+    Groups by farmer with which seed types are in HARVESTING.
+    """
+    permission_classes = [IsAuthenticated, IsBPUser]
+
+    def get(self, request):
+        user = request.user
+        barangay = getattr(user, 'barangay', None)
+        if not barangay:
+            return Response({'farmers': []})
+
+        # Get active poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+        if not active_poll:
+            return Response({'farmers': []})
+
+        # Get all HARVESTING records for this barangay in active poll
+        harvesting_records = CropMonitoringRecord.objects.filter(
+            barangay=barangay,
+            crop_phase='HARVESTING',
+            poll=active_poll,
+        ).select_related('farmer')
+
+        # Group by farmer
+        farmer_map = {}
+        for rec in harvesting_records:
+            fid = rec.farmer_id
+            if fid not in farmer_map:
+                farmer_map[fid] = {
+                    'id': rec.farmer.id,
+                    'first_name': rec.farmer.first_name,
+                    'last_name': rec.farmer.last_name,
+                    'rsbsa_number': rec.farmer.rsbsa_number or '',
+                    'barangay': rec.farmer.barangay or '',
+                    'harvesting_seed_types': [],
+                    'area_by_seed_type': {},
+                }
+            seed_key = rec.seed_source  # HYBRID, INBRED, OWN_SEED
+            if seed_key and seed_key not in farmer_map[fid]['harvesting_seed_types']:
+                farmer_map[fid]['harvesting_seed_types'].append(seed_key)
+            # Store area_monitored_ha per seed type for auto-fill
+            if seed_key and rec.area_monitored_ha:
+                farmer_map[fid]['area_by_seed_type'][seed_key] = float(rec.area_monitored_ha)
+
+        return Response({'farmers': list(farmer_map.values())})
+
+
+class BrgyHarvestHistoryView(APIView):
+    """
+    GET /api/production/harvest-history/
+    Returns past harvest records for the BRGY president's barangay,
+    filtered by poll_id (season + year).
+    Supports: ?poll_id=  ?search=  ?seed_source=
+    """
+    permission_classes = [IsAuthenticated, IsBPUser]
+
+    def get(self, request):
+        user = request.user
+        barangay = getattr(user, 'barangay', None)
+        if not barangay:
+            return Response({'records': [], 'polls': []})
+
+        # All polls for the dropdown (excluding current active)
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+        )
+        all_polls = Poll.objects.order_by('-created_at')
+        polls_data = []
+        for p in all_polls:
+            polls_data.append({
+                'id': p.id,
+                'season': p.season,
+                'season_display': p.get_season_display(),
+                'year': p.year,
+                'status': p.status,
+                'is_active': active_poll and p.id == active_poll.id,
+            })
+
+        poll_id = request.query_params.get('poll_id', '')
+        search = request.query_params.get('search', '')
+        seed_source = request.query_params.get('seed_source', '')
+
+        if not poll_id:
+            return Response({'records': [], 'polls': polls_data})
+
+        try:
+            poll = Poll.objects.get(id=poll_id)
+        except Poll.DoesNotExist:
+            return Response({'records': [], 'polls': polls_data})
+
+        # Filter harvest records by barangay + season/year of poll
+        qs = HarvestRecord.objects.filter(
+            barangay=barangay
+        ).select_related('farmer', 'encoded_by')
+
+        if poll.season == 'WET':
+            qs = qs.filter(
+                harvest_date__year=poll.year,
+                harvest_date__month__range=(6, 10),
+            )
+        elif poll.season == 'DRY':
+            qs = qs.filter(
+                Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
+                Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
+            )
+
+        if search:
+            qs = qs.filter(
+                Q(farmer__first_name__icontains=search) |
+                Q(farmer__last_name__icontains=search) |
+                Q(farmer__rsbsa_number__icontains=search) |
+                Q(variety__icontains=search)
+            )
+
+        if seed_source:
+            qs = qs.filter(seed_source=seed_source)
+
+        serializer = HarvestRecordSerializer(qs.order_by('-harvest_date', '-created_at'), many=True)
+
+        return Response({
+            'records': serializer.data,
+            'polls': polls_data,
+            'poll_info': {
+                'id': poll.id,
+                'season': poll.season,
+                'season_display': poll.get_season_display(),
+                'year': poll.year,
+            }
+        })

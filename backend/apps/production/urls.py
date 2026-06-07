@@ -9,6 +9,8 @@ from .views import (
     ProductionByBarangayView,
     ProductionLowPerformersView,
     ProductionGISSummaryView,
+    BrgyHarvestingFarmersView,
+    BrgyHarvestHistoryView,
 )
 
 urlpatterns = [
@@ -16,6 +18,11 @@ urlpatterns = [
     path('harvest/',      HarvestRecordListCreateView.as_view(),  name='harvest-list-create'),
     path('harvest/<int:pk>/', HarvestRecordDetailView.as_view(),  name='harvest-detail'),
     
+    # ── BRGY SPECIFIC ──
+    path('harvesting-farmers/', BrgyHarvestingFarmersView.as_view(), name='harvesting-farmers'),
+    path('harvest-history/',    BrgyHarvestHistoryView.as_view(),    name='harvest-history'),
+
+
     # ── PRODUCTION ANALYTICS ──
     path('summary/',          ProductionSummaryView.as_view(),        name='production-summary'),
     path('by-seed-type/',     ProductionBySeedTypeView.as_view(),     name='production-by-seed-type'),

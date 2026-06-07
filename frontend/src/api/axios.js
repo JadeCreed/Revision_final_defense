@@ -228,6 +228,11 @@ export const getHarvestRecord         = (id)          => API.get(`/production/ha
 export const updateHarvestRecord      = (id, data)    => API.put(`/production/harvest/${id}/`, data);
 export const deleteHarvestRecord      = (id)          => API.delete(`/production/harvest/${id}/`);
 
+
+// Brgy Harvest — bagong endpoints
+export const getHarvestingFarmers  = ()           => API.get('/production/harvesting-farmers/');
+export const getBrgyHarvestHistory = (params = {}) => API.get('/production/harvest-history/', { params });
+
 // Production analytics (Admin only)
 export const getProductionSummary     = ()            => API.get('/production/summary/');
 export const getProductionBySeedType  = ()            => API.get('/production/by-seed-type/');

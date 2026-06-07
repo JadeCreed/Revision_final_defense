@@ -26,6 +26,14 @@ const PHASES = [
   { key: 'Ripening',           color: '#FACC15', bg: '#FEFCE8', border: '#FDE68A', label: 'Ripening'           },
   { key: 'Harvesting',         color: '#F97316', bg: '#FFF7ED', border: '#FED7AA', label: 'Harvesting'         },
 ];
+const PHASE_ORDER = [
+  'Seed Distribution',
+  'Crop Establishment',
+  'Tillering',
+  'Flowering',
+  'Ripening',
+  'Harvesting',
+];
 const PHASE_MAP = Object.fromEntries(PHASES.map(p => [p.key, p]));
 const phaseColor = (key) => PHASE_MAP[key]?.color || '#64748B';
 
@@ -250,7 +258,10 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers, totalApprov
       percent: denominator > 0 ? Math.round(((phaseCounts[ph.key] || 0) / denominator) * 100) : 0,
     }))
     .filter(ph => ph.count > 0)
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return PHASE_ORDER.indexOf(b.key) - PHASE_ORDER.indexOf(a.key);
+    });
 
   const dominant = phaseList[0] || null;
   const others   = phaseList.slice(1);
@@ -945,8 +956,11 @@ const GisMap = () => {
     const getDominantPhaseColor = (name) => {
       const counts = brgyAllPhaseCounts[name];
       if (!counts) return NO_DATA_COLOR;
-      const dominant = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-      return phaseColor(dominant?.[0]) || NO_DATA_COLOR;
+      const sorted = Object.entries(counts).sort((a, b) => {
+        if (b[1] !== a[1]) return b[1] - a[1];
+        return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+      });
+      return phaseColor(sorted[0]?.[0]) || NO_DATA_COLOR;
     };
 
     // For utilization: color comes from our client-computed brgyUtilData
@@ -977,7 +991,10 @@ const GisMap = () => {
       } else {
         const counts = brgyAllPhaseCounts[name];
         if (!counts) return `<div style="font-size:0.82rem;font-weight:800;color:#0f172a;">${name}</div><div style="font-size:0.72rem;color:#94a3b8;">No data yet</div>`;
-        const sorted   = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+        const sorted = Object.entries(counts).sort((a, b) => {
+          if (b[1] !== a[1]) return b[1] - a[1];
+          return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+        });
         const dominant = sorted[0]?.[0];
         const total    = Object.values(counts).reduce((a, b) => a + b, 0);
         const pct      = Math.round((sorted[0]?.[1] / total) * 100);
