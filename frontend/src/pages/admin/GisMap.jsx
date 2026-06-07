@@ -76,19 +76,17 @@ const computeUtilPct = (rec) => {
 
 // ─── UTILIZATION TIER CONSTANTS — matches BrgyHarvest exactly ─
 const UTIL_TIERS = [
-  { key: 'Master Farmer',   min: 100.01, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', label: 'Master Farmer'   },
-  { key: 'Exceptional',     min: 100,    color: '#1a4d1a', bg: '#dcfce7', border: '#86efac', label: 'Exceptional'     },
-  { key: 'Normal',          min: 80,     color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', label: 'Normal'          },
-  { key: 'Good',            min: 60,     color: '#b45309', bg: '#fefce8', border: '#fde68a', label: 'Good'            },
-  { key: 'Below target',    min: 50,     color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', label: 'Below target'    },
-  { key: 'Needs attention', min: 0,      color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', label: 'Needs attention' },
+  { key: 'Exceeded Target', min: 100.01, color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', label: 'Exceeded Target' },
+  { key: 'Achieved Target', min: 80,     color: '#15803d', bg: '#dcfce7', border: '#86efac', label: 'Achieved Target' },
+  { key: 'Near Target',     min: 70,     color: '#0369a1', bg: '#eff6ff', border: '#bfdbfe', label: 'Near Target'     },
+  { key: 'Below Target',    min: 50,     color: '#b45309', bg: '#fefce8', border: '#fde68a', label: 'Below Target'    },
+  { key: 'Critical',        min: 0,      color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', label: 'Critical'        },
 ];
 const NO_DATA_COLOR = '#1E293B';
 
 const getUtilTier = (pct) => {
   if (pct === null || pct === undefined) return null;
-  if (pct > 100)  return UTIL_TIERS[0]; // Master Farmer
-  if (pct === 100) return UTIL_TIERS[1]; // Exceptional
+  if (pct > 100) return UTIL_TIERS[0];
   return UTIL_TIERS.find(t => pct >= t.min) || UTIL_TIERS[UTIL_TIERS.length - 1];
 };
 const getUtilColor = (pct) => {
@@ -434,7 +432,7 @@ const PanelFooter = ({ activeTab }) => {
   const now = new Date();
   const ts  = `${now.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })} · ${now.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}`;
   return (
-    <div style={{ padding: '1rem 1.25rem', backgroundColor: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', flexShrink: 0 }}>
+    <div style={{ padding: '0.75rem 0.875rem', backgroundColor: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', flexShrink: 0 }}>
       <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '0.875rem', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
           <Clock size={13} color='#64748b' />
@@ -460,7 +458,7 @@ const PanelFooter = ({ activeTab }) => {
 };
 
 // ─── MONITORING OVERVIEW PANEL ────────────────────────────────
-const MonitoringOverviewPanel = ({ plots, summary, animate }) => {
+const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMonitoringTab }) => {
   const currentFarmers = summary?.current_farmers ?? new Set(plots.map(p => p.farmer)).size;
   const totalApproved  = summary?.total_approved_farmers ?? currentFarmers;
   const currentBrgys   = summary?.current_active_barangays ?? new Set(plots.map(p => p.barangay).filter(Boolean)).size;
@@ -488,24 +486,51 @@ const MonitoringOverviewPanel = ({ plots, summary, animate }) => {
           </div>
         </div>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 0.5rem' }} className='gis-panel-scroll'>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed type breakdown</p>
-        {SEED_TYPES.map(st => (
-          <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} totalApprovedFarmers={summary?.total_approved_farmers ?? 0} animate={animate} />
-        ))}
-        {plots.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
-            <MapPin size={28} color='#cbd5e1' style={{ display: 'block', margin: '0 auto 0.5rem' }} />
-            <p style={{ margin: 0, fontSize: '0.82rem' }}>No monitoring data yet.</p>
-          </div>
-        )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', padding: '0 1.25rem', flexShrink: 0 }}>
+          {SEED_TYPES.map((st) => {
+            const isActive = (monitoringTab || 'HYBRID') === st.key;
+            return (
+              <button key={st.key} onClick={() => setMonitoringTab(st.key)} style={{
+                padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: '0.72rem', fontWeight: isActive ? 700 : 500,
+                color: isActive ? st.color : '#94a3b8',
+                borderBottom: isActive ? `2px solid ${st.color}` : '2px solid transparent',
+                marginBottom: '-1px', transition: 'all .15s', whiteSpace: 'nowrap',
+              }}>
+                {st.key === 'OWN_SEED' ? 'Own Seed' : st.key === 'HYBRID' ? 'Hybrid' : 'Inbred'}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem 0.5rem' }} className='gis-panel-scroll'>
+          {(() => {
+            const activeKey = monitoringTab || 'HYBRID';
+            return (
+              <SeedTypeBreakdownCard
+                key={activeKey}
+                seedKey={activeKey}
+                phaseCounts={seedBreakdown[activeKey]?.phases || {}}
+                totalFarmers={seedBreakdown[activeKey]?.total || 0}
+                totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
+                animate={animate}
+              />
+            );
+          })()}
+          {plots.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
+              <MapPin size={28} color='#cbd5e1' style={{ display: 'block', margin: '0 auto 0.5rem' }} />
+              <p style={{ margin: 0, fontSize: '0.82rem' }}>No monitoring data yet.</p>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
 };
 
 // ─── UTILIZATION OVERVIEW PANEL ───────────────────────────────
-const UtilizationOverviewPanel = ({ harvestRecords, summary, animate }) => {
+const UtilizationOverviewPanel = ({ harvestRecords, summary, animate, utilizationTab, setUtilizationTab }) => {
   // Compute everything from harvestRecords using our formula (same as BrgyHarvest)
   const brgyUtil = useMemo(() => buildBrgyUtilFromHarvest(harvestRecords), [harvestRecords]);
   const haData   = harvestRecords.length > 0;
@@ -556,30 +581,47 @@ const UtilizationOverviewPanel = ({ harvestRecords, summary, animate }) => {
         </div>
       </div>
 
-      {/* SCROLLABLE BODY */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 1.25rem 0.5rem' }} className='gis-panel-scroll'>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Harvest breakdown by seed type
-        </p>
-        {!haData ? (
-          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #e2e8f0' }}>
-            <TrendingUp size={28} color='#d1d5db' style={{ display: 'block', margin: '0 auto 0.75rem' }} />
-            <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.375rem', fontSize: '0.875rem' }}>No harvest data yet</p>
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>Utilization data will appear once BRGY presidents encode harvest records.</p>
-          </div>
-        ) : (
-          SEED_TYPES.map(st => (
-            <UtilSeedTypeCard
-              key={st.key}
-              seedKey={st.key}
-              tierCounts={globalSeedTierCounts[st.key]?.tierCounts || {}}
-              total={globalSeedTierCounts[st.key]?.total || 0}
-              animate={animate}
-              encodedFarmers={harvestRecords ? [...new Set(harvestRecords.map(r => r.farmer))].length : 0}
-              totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
-            />
-          ))
-        )}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', padding: '0 1.25rem', flexShrink: 0 }}>
+          {SEED_TYPES.map((st) => {
+            const isActive = (utilizationTab || 'HYBRID') === st.key;
+            return (
+              <button key={st.key} onClick={() => setUtilizationTab(st.key)} style={{
+                padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer',
+                fontSize: '0.72rem', fontWeight: isActive ? 700 : 500,
+                color: isActive ? st.color : '#94a3b8',
+                borderBottom: isActive ? `2px solid ${st.color}` : '2px solid transparent',
+                marginBottom: '-1px', transition: 'all .15s', whiteSpace: 'nowrap',
+              }}>
+                {st.key === 'OWN_SEED' ? 'Own Seed' : st.key === 'HYBRID' ? 'Hybrid' : 'Inbred'}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.25rem 0.5rem' }} className='gis-panel-scroll'>
+          {!haData ? (
+            <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+              <TrendingUp size={28} color='#d1d5db' style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.375rem', fontSize: '0.875rem' }}>No harvest data yet</p>
+              <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>Utilization data will appear once BRGY presidents encode harvest records.</p>
+            </div>
+          ) : (
+            (() => {
+              const activeKey = utilizationTab || 'HYBRID';
+              return (
+                <UtilSeedTypeCard
+                  key={activeKey}
+                  seedKey={activeKey}
+                  tierCounts={globalSeedTierCounts[activeKey]?.tierCounts || {}}
+                  total={globalSeedTierCounts[activeKey]?.total || 0}
+                  animate={animate}
+                  encodedFarmers={harvestRecords ? [...new Set(harvestRecords.map(r => r.farmer))].length : 0}
+                  totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
+                />
+              );
+            })()
+          )}
+        </div>
       </div>
     </>
   );
@@ -587,9 +629,10 @@ const UtilizationOverviewPanel = ({ harvestRecords, summary, animate }) => {
 
 // ─── BARANGAY PANEL ───────────────────────────────────────────
 const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, activeTab, onBack, animate }) => {
+  const [seedTab, setSeedTab] = useState('HYBRID');
+
   const brgyPlots = useMemo(() => plots.filter(p => p.barangay === barangayName), [plots, barangayName]);
 
-  // For monitoring tab
   const uniqueFarmerIds = useMemo(() => [...new Set(brgyPlots.map(p => p.farmer))], [brgyPlots]);
   const farmerCount     = uniqueFarmerIds.length;
   const totalApproved   = approvedCounts?.[barangayName] ?? brgyPlots[0]?.total_approved_in_brgy ?? 0;
@@ -602,31 +645,16 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
     return Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
   }, [brgyPlots]);
   const seedBreakdown   = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);
-  const allPhaseCounts  = useMemo(() => {
-    const combined = {};
-    brgyPlots.forEach(p => {
-      const phase = normalizePhase(p.land_type);
-      combined[phase] = (combined[phase] || 0) + 1;
-    });
-    return combined;
-  }, [brgyPlots]);
-  const dominantPhase   = useMemo(() => {
-    const sorted = Object.entries(allPhaseCounts).sort((a, b) => b[1] - a[1]);
-    return sorted[0]?.[0] || null;
-  }, [allPhaseCounts]);
 
-  // For utilization tab — filter harvest records for this brgy
   const brgyHarvest = useMemo(() => (harvestRecords || []).filter(r => r.barangay === barangayName), [harvestRecords, barangayName]);
   const encodedCount = useMemo(() => [...new Set(brgyHarvest.map(r => r.farmer))].length, [brgyHarvest]);
   const harvestArea  = useMemo(() => brgyHarvest.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0), [brgyHarvest]);
   const harvestMT    = useMemo(() => brgyHarvest.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0), [brgyHarvest]);
 
-  // Overall avg utilization for this brgy (for badge)
   const brgyUtilVals = useMemo(() => brgyHarvest.map(r => computeUtilPct(r)).filter(v => v !== null), [brgyHarvest]);
   const brgyAvgUtil  = brgyUtilVals.length > 0 ? brgyUtilVals.reduce((a, v) => a + v, 0) / brgyUtilVals.length : null;
   const utilTier     = getUtilTier(brgyAvgUtil);
 
-  // Per-seed-type tier breakdown for this brgy
   const brgySeedTierCounts = useMemo(() => {
     const result = {};
     SEED_TYPES.forEach(st => { result[st.key] = { tierCounts: {}, total: 0 }; });
@@ -634,7 +662,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
       const seed = rec.seed_source || 'OWN_SEED';
       const util = computeUtilPct(rec);
       const tier = getUtilTier(util);
-      const key  = tier ? tier.key : 'Needs attention';
+      const key  = tier ? tier.key : 'Critical';
       if (!result[seed]) result[seed] = { tierCounts: {}, total: 0 };
       result[seed].tierCounts[key] = (result[seed].tierCounts[key] || 0) + 1;
       result[seed].total += 1;
@@ -642,20 +670,20 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
     return result;
   }, [brgyHarvest]);
 
+  const totalApprovedInBrgy = approvedCounts?.[barangayName] || 0;
+  const encodingProgressPct = totalApprovedInBrgy > 0 ? Math.round((encodedCount / totalApprovedInBrgy) * 100) : 0;
+
   const headerBadgeColor = activeTab === 'utilization'
     ? (utilTier?.color || '#94a3b8')
-    : (dominantPhase ? phaseColor(dominantPhase) : '#94a3b8');
-
-  const totalApprovedInBrgy = approvedCounts?.[barangayName] || 0;
-  const encodingProgressPct = totalApprovedInBrgy > 0
-    ? Math.round((encodedCount / totalApprovedInBrgy) * 100)
-    : 0;
+    : '#94a3b8';
 
   const headerBadgeLabel = activeTab === 'utilization'
     ? (totalApprovedInBrgy > 0
         ? `${encodedCount}/${totalApprovedInBrgy} farmers · ${encodingProgressPct}% encoded`
         : encodedCount > 0 ? `${encodedCount} farmers encoded` : 'No harvest data')
-    : (dominantPhase ? `Dominant: ${dominantPhase}` : 'No phase data yet');
+    : `${farmerCount}${totalApproved ? `/${totalApproved}` : ''} farmers`;
+
+  const activeSeedKey = seedTab || 'HYBRID';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', animation: animate ? 'gis-fadeSlide 0.35s ease' : 'none' }}>
@@ -680,7 +708,6 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
           </div>
         </div>
 
-        {/* Quick stats — 3 tiles for utilization, 2 for monitoring */}
         <div style={{ display: 'grid', gridTemplateColumns: activeTab === 'monitoring' ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '0.6rem' }}>
           {activeTab === 'monitoring'
             ? [
@@ -693,7 +720,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
                 </div>
               ))
             : [
-                { label: 'Farmers encoded', value: (() => { const total = approvedCounts?.[barangayName] || 0; return total > 0 ? `${encodedCount}/${total}` : `${encodedCount}`; })() },
+                { label: 'Farmers encoded', value: totalApprovedInBrgy > 0 ? `${encodedCount}/${totalApprovedInBrgy}` : `${encodedCount}` },
                 { label: 'Production',      value: harvestMT > 0 ? `${fmtNum(harvestMT)} MT` : '—' },
                 { label: 'Area harvested',  value: harvestArea > 0 ? `${fmtNum(harvestArea)} ha` : '—' },
               ].map(item => (
@@ -704,50 +731,64 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
               ))
           }
         </div>
+      </div>
 
+      {/* SEED TYPE TABS — same style as overview panels */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', padding: '0 1.25rem', flexShrink: 0 }}>
+        {SEED_TYPES.map((st) => {
+          const isActive = activeSeedKey === st.key;
+          return (
+            <button key={st.key} onClick={() => setSeedTab(st.key)} style={{
+              padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: '0.72rem', fontWeight: isActive ? 700 : 500,
+              color: isActive ? st.color : '#94a3b8',
+              borderBottom: isActive ? `2px solid ${st.color}` : '2px solid transparent',
+              marginBottom: '-1px', transition: 'all .15s', whiteSpace: 'nowrap',
+            }}>
+              {st.key === 'OWN_SEED' ? 'Own Seed' : st.key === 'HYBRID' ? 'Hybrid' : 'Inbred'}
+            </button>
+          );
+        })}
       </div>
 
       {/* SCROLLABLE BODY */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '1.15rem 1.25rem 0.5rem' }} className='gis-panel-scroll'>
         {activeTab === 'monitoring' ? (
           <>
-            <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed type breakdown</p>
-            {SEED_TYPES.map(st => (
-              <SeedTypeBreakdownCard key={st.key} seedKey={st.key} phaseCounts={seedBreakdown[st.key]?.phases || {}} totalFarmers={seedBreakdown[st.key]?.total || 0} totalApprovedFarmers={totalApprovedInBrgy} animate={animate} />
-            ))}
             {brgyPlots.length === 0 && (
               <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
                 <MapPin size={26} color='#cbd5e1' style={{ display: 'block', margin: '0 auto 0.5rem' }} />
                 <p style={{ margin: 0, fontSize: '0.82rem' }}>No monitoring data yet.</p>
               </div>
             )}
+
+            {brgyPlots.length > 0 && (
+              <SeedTypeBreakdownCard
+                key={activeSeedKey}
+                seedKey={activeSeedKey}
+                phaseCounts={seedBreakdown[activeSeedKey]?.phases || {}}
+                totalFarmers={seedBreakdown[activeSeedKey]?.total || 0}
+                totalApprovedFarmers={totalApprovedInBrgy}
+                animate={animate}
+              />
+            )}
           </>
+        ) : brgyHarvest.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
+            <TrendingUp size={26} color='#cbd5e1' style={{ display: 'block', margin: '0 auto 0.5rem' }} />
+            <p style={{ margin: 0, fontSize: '0.82rem' }}>No harvest data for this barangay yet.</p>
+            <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem' }}>Data appears once BRGY encodes harvest records.</p>
+          </div>
         ) : (
-          /* UTILIZATION TAB */
-          brgyHarvest.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem 0', color: '#94a3b8' }}>
-              <TrendingUp size={26} color='#cbd5e1' style={{ display: 'block', margin: '0 auto 0.5rem' }} />
-              <p style={{ margin: 0, fontSize: '0.82rem' }}>No harvest data for this barangay yet.</p>
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.72rem' }}>Data appears once BRGY encodes harvest records.</p>
-            </div>
-          ) : (
-            <>
-              <p style={{ margin: '0 0 0.875rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Harvest breakdown by seed type
-              </p>
-              {SEED_TYPES.map(st => (
-                <UtilSeedTypeCard
-                  key={st.key}
-                  seedKey={st.key}
-                  tierCounts={brgySeedTierCounts[st.key]?.tierCounts || {}}
-                  total={brgySeedTierCounts[st.key]?.total || 0}
-                  animate={animate}
-                  encodedFarmers={encodedCount}
-                  totalApprovedFarmers={totalApprovedInBrgy}
-                />
-              ))}
-            </>
-          )
+          <UtilSeedTypeCard
+            key={activeSeedKey}
+            seedKey={activeSeedKey}
+            tierCounts={brgySeedTierCounts[activeSeedKey]?.tierCounts || {}}
+            total={brgySeedTierCounts[activeSeedKey]?.total || 0}
+            animate={animate}
+            encodedFarmers={encodedCount}
+            totalApprovedFarmers={totalApprovedInBrgy}
+          />
         )}
       </div>
     </div>
@@ -818,6 +859,8 @@ const GisMap = () => {
 
   const [filterBrgy, setFilterBrgy] = useState('');
   const [activeTab,  setActiveTab]  = useState('monitoring');
+  const [monitoringTab, setMonitoringTab] = useState('HYBRID');
+  const [utilizationTab, setUtilizationTab] = useState('HYBRID');
 
   const [toast,    setToast]    = useState(null);
   const toastRef                 = useRef(null);
@@ -1125,8 +1168,8 @@ const GisMap = () => {
   const PanelBody = () => {
     if (!activeBarangay) {
       return activeTab === 'utilization'
-        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} summary={summary} animate={panelAnimate} />
-        : <MonitoringOverviewPanel plots={filteredPlots} summary={summary} animate={panelAnimate} />;
+        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} summary={summary} animate={panelAnimate} utilizationTab={utilizationTab} setUtilizationTab={setUtilizationTab} />
+        : <MonitoringOverviewPanel plots={filteredPlots} summary={summary} animate={panelAnimate} monitoringTab={monitoringTab} setMonitoringTab={setMonitoringTab} />;
     }
     return (
       <BarangayPanel
@@ -1142,16 +1185,17 @@ const GisMap = () => {
   };
 
   return (
-    <div style={{ height: 'calc(100vh - 60px)', display: 'flex', flexDirection: 'column', backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
       <style>{`
         @keyframes gis-pop { 0%{opacity:0;transform:translateX(-50%) scale(0.88)} 70%{transform:translateX(-50%) scale(1.03)} 100%{opacity:1;transform:translateX(-50%) scale(1)} }
         @keyframes gis-fadeSlide { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
         @keyframes gis-spin { to{transform:rotate(360deg)} }
         @keyframes gis-sheetUp { from{transform:translateY(100%)} to{transform:translateY(0)} }
+        html, body { overflow: hidden; height: 100%; }
         .leaflet-tooltip { border-radius:0.75rem !important; border:none !important; box-shadow:0 4px 20px rgba(0,0,0,0.18) !important; }
         .gis-panel-scroll::-webkit-scrollbar { width:4px; }
         .gis-panel-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:99px; }
-        .leaflet-container { font-family: inherit !important; }
+        .leaflet-container { font-family: inherit !important; height: 100% !important; }
         .gis-toolbar-row { display:flex; align-items:center; gap:0.5rem; flex-wrap:nowrap; min-width:0; overflow:hidden; }
         @media (max-width: 1100px) { .gis-season-label { display:none !important; } .gis-tab-text { display:none !important; } }
         @media (max-width: 960px) { .gis-panel-side { width:280px !important; } }
@@ -1160,17 +1204,15 @@ const GisMap = () => {
       <Toast toast={toast} />
 
       {!isMobile && (
-        <div style={{ padding: '1rem 1.25rem 0.5rem', flexShrink: 0 }}>
-          <p style={{ margin: '0 0 0.25rem', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#16a34a' }}>GIS map overview</p>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#111827', margin: 0, lineHeight: 1.15 }}>Lucban crop monitoring & utilization</h1>
-          <p style={{ margin: '0.35rem 0 0', color: 'Switch seasons to compare active and historical poll data without leaving the map view.#475569', fontSize: '0.92rem' }}></p>
+        <div style={{ padding: '0.5rem 1rem 0', flexShrink: 0 }}>
+          <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#16a34a' }}>GIS map overview · Lucban crop monitoring & utilization</p>
         </div>
       )}
 
       {!isMobile && (
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', padding: '0.5rem 0.875rem 0.875rem', gap: '0.75rem', minHeight: 0 }}>
+        <div className='gis-map-wrap' style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '0.4rem 0.75rem 1.5rem', gap: '0.65rem', position: 'relative' }}>
           {/* MAP */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0, marginRight: 'clamp(300px, 24vw, 350px)' }}>
             {/* Toolbar */}
             <div style={{ padding: '0.55rem 0.875rem', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '0.35rem', alignItems: 'center', overflowX: 'auto', flexShrink: 0 }} className='gis-toolbar-row'>
               <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.625rem', padding: '0.175rem', gap: '0.175rem', flexShrink: 0 }}>
@@ -1245,7 +1287,7 @@ const GisMap = () => {
                   </div>
                 </div>
               )}
-              <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
+              <div ref={mapRef} style={{ width: '100%', height: '100%', minHeight: 0 }} />
             </div>
 
             <div style={{ padding: '0.6rem 1.1rem', backgroundColor: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -1259,7 +1301,7 @@ const GisMap = () => {
           </div>
 
           {/* PANEL SIDE */}
-          <div className='gis-panel-side' style={{ width: 'clamp(280px, 22vw, 330px)', flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
+          <div className='gis-panel-side' style={{ position: 'absolute', top: 0, right: 0, bottom: '1.5rem', width: 'clamp(280px, 22vw, 330px)', flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
               {activeTab === 'utilization' ? <TrendingUp size={15} color='#1a4d1a' /> : <Activity size={15} color='#1a4d1a' />}
               <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>
@@ -1281,7 +1323,7 @@ const GisMap = () => {
 
       {/* MOBILE */}
       {isMobile && (
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <div className='gis-mobile-map' style={{ flex: 1, minHeight: 0, height: '100dvh', maxHeight: '100dvh', position: 'relative', overflow: 'hidden', borderRadius: '1rem 1rem 0 0', paddingBottom: '0.25rem' }}>
           <div ref={mapRef} style={{ width: '100%', height: '100%' }} />
           {!mobileSheet && (
             <div style={{ position: 'absolute', top: '1rem', left: '50%', transform: 'translateX(-50%)', zIndex: 500, display: 'flex', backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: '999px', padding: '0.2rem', gap: '0.2rem', boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }}>
@@ -1296,7 +1338,7 @@ const GisMap = () => {
           {mobileSheet && (
             <>
               <div onClick={() => setMobileSheet(false)} style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)', zIndex: 700 }} />
-              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 800, backgroundColor: 'white', borderRadius: '1.5rem 1.5rem 0 0', maxHeight: '82vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -8px 40px rgba(0,0,0,0.18)', animation: 'gis-sheetUp 0.35s cubic-bezier(0.34,1.1,0.64,1)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+              <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 800, backgroundColor: 'white', borderRadius: '1.25rem 1.25rem 0 0', maxHeight: '78vh', display: 'flex', flexDirection: 'column', boxShadow: '0 -4px 24px rgba(0,0,0,0.14)', animation: 'gis-sheetUp 0.35s cubic-bezier(0.34,1.1,0.64,1)', paddingBottom: 'env(safe-area-inset-bottom)' }}>
                 <div style={{ width: 44, height: 4, backgroundColor: '#e2e8f0', borderRadius: '999px', margin: '0.875rem auto', flexShrink: 0 }} />
                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', paddingTop: activeBarangay ? 0 : '0.5rem' }} className='gis-panel-scroll'>
                   <PanelBody />

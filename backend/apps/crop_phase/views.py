@@ -135,10 +135,12 @@ class CropPhaseAnalyticsView(APIView):
         for seed_key in seeds_to_process:
             gantt_data[seed_key] = {}
 
-            seed_all        = base.filter(seed_source=seed_key)
-            # Latest record per farmer for this seed type
-            seed_latest_map = get_latest_per_farmer(seed_all)
-            seed_latest     = list(seed_latest_map.values())
+            seed_all = base.filter(seed_source=seed_key)
+
+            # For Gantt: use ALL records (historical), not latest per farmer.
+            # Latest is only used for KPIs/delay/damage/compliance elsewhere.
+            seed_latest_map    = get_latest_per_farmer(seed_all)
+            seed_latest        = list(seed_latest_map.values())
             total_seed_farmers = len(set(r.farmer_id for r in seed_latest))
 
             std_windows = build_std_windows(seed_key)
@@ -152,83 +154,86 @@ class CropPhaseAnalyticsView(APIView):
                 std_end_iso   = win['end'].isoformat()
                 std_days_val  = win['days']
 
-                # Use LATEST record per farmer only (not all historical)
-                # A farmer's current phase = their latest record
-                phase_latest = [r for r in seed_latest if r.crop_phase == phase_key]
-                total_in_phase = len(phase_latest)
+                # Use ALL records for this phase (historical).
+                # Pick the earliest date per farmer for this phase.
+                all_phase_qs = seed_all.filter(crop_phase=phase_key)
+                farmer_phase_dates = {}
+                for rec in all_phase_qs.order_by('date_observed'):
+                    if rec.farmer_id not in farmer_phase_dates:
+                        farmer_phase_dates[rec.farmer_id] = rec.date_observed
 
-                # FIX: always include phase even with 0 farmers
-                # so frontend can still render the gray standard bar
+                total_in_phase = len(farmer_phase_dates)
+
+                # Always include phase even with 0 farmers so the gray standard bar still renders.
                 if total_in_phase == 0:
                     gantt_data[seed_key][phase_key] = {
-                        'farmers':            0,
-                        'valid_farmers':      0,
-                        'delayed_farmers':    0,
-                        'early_farmers':      0,
-                        'total_farmers':      total_seed_farmers,
-                        'completion_pct':     None,
-                        'timeline_progress':  None,
-                        'mode_date':          None,
-                        'mode_count':         0,
-                        'all_delayed':        False,
-                        'std_start':          std_start_iso,
-                        'std_end':            std_end_iso,
-                        'std_days':           std_days_val,
+                        'farmers':           0,
+                        'valid_farmers':     0,
+                        'delayed_farmers':   0,
+                        'early_farmers':     0,
+                        'total_farmers':     total_seed_farmers,
+                        'completion_pct':    None,
+                        'timeline_progress': None,
+                        'mode_date':         None,
+                        'mode_count':        0,
+                        'all_delayed':       False,
+                        'std_start':         std_start_iso,
+                        'std_end':           std_end_iso,
+                        'std_days':          std_days_val,
                     }
                     continue
 
-                # Categorize by date vs standard window
-                valid_recs   = [r for r in phase_latest if win['start'] <= r.date_observed <= win['end']]
-                delayed_recs = [r for r in phase_latest if r.date_observed > win['end']]
-                early_recs   = [r for r in phase_latest if r.date_observed < win['start']]
+                valid_set   = {fid for fid, d in farmer_phase_dates.items() if win['start'] <= d <= win['end']}
+                delayed_set = {fid for fid, d in farmer_phase_dates.items() if d > win['end']}
+                early_set   = {fid for fid, d in farmer_phase_dates.items() if d < win['start']}
 
-                valid_count   = len(valid_recs)
-                delayed_count = len(delayed_recs)
-                early_count   = len(early_recs)
+                valid_count   = len(valid_set)
+                delayed_count = len(delayed_set)
+                early_count   = len(early_set)
                 all_delayed   = (valid_count == 0 and delayed_count > 0)
 
-                # ontime_rate = how many farmers are valid (compliance)
-                ontime_rate = (
+                completion_pct = (
                     round((valid_count / total_in_phase) * 100)
                     if total_in_phase > 0 else None
                 )
-                completion_pct = ontime_rate
 
-                # Mode date — from VALID records first
-                mode_date  = None
+                mode_date = None
                 mode_count = 0
 
-                if valid_recs:
-                    # Most common date within standard window
-                    date_counter = Counter(r.date_observed for r in valid_recs)
-                    mode_date, mode_count = date_counter.most_common(1)[0]
+                if valid_set:
+                    valid_dates = [d for fid, d in farmer_phase_dates.items() if fid in valid_set]
+                    date_counter = Counter(valid_dates)
+                    if date_counter:
+                        mode_date, mode_count = date_counter.most_common(1)[0]
                 elif all_delayed:
-                    # Fallback: most common delayed date
-                    date_counter = Counter(r.date_observed for r in delayed_recs)
+                    delayed_dates = [d for fid, d in farmer_phase_dates.items() if fid in delayed_set]
+                    date_counter = Counter(delayed_dates)
                     if date_counter:
                         mode_date, mode_count = date_counter.most_common(1)[0]
 
-                # Calculate timeline_progress from mode_date position in the standard window
                 timeline_progress = None
-                if mode_date and win['start'] and win['end']:
+                if mode_date:
                     std_total_days = (win['end'] - win['start']).days or 1
-                    elapsed = max(0, (mode_date - win['start']).days)
-                    timeline_progress = min(100, round((elapsed / std_total_days) * 100))
+                    if mode_date > win['end']:
+                        timeline_progress = 100
+                    else:
+                        elapsed = max(0, (mode_date - win['start']).days)
+                        timeline_progress = min(100, round((elapsed / std_total_days) * 100))
 
                 gantt_data[seed_key][phase_key] = {
-                    'farmers':            total_in_phase,
-                    'valid_farmers':      valid_count,
-                    'delayed_farmers':    delayed_count,
-                    'early_farmers':      early_count,
-                    'total_farmers':      total_seed_farmers,
-                    'completion_pct':     completion_pct,
-                    'timeline_progress':  timeline_progress,
-                    'mode_date':          mode_date.isoformat() if mode_date else None,
-                    'mode_count':         mode_count,
-                    'all_delayed':        all_delayed,
-                    'std_start':          std_start_iso,
-                    'std_end':            std_end_iso,
-                    'std_days':           std_days_val,
+                    'farmers':           total_in_phase,
+                    'valid_farmers':     valid_count,
+                    'delayed_farmers':   delayed_count,
+                    'early_farmers':     early_count,
+                    'total_farmers':     total_seed_farmers,
+                    'completion_pct':    completion_pct,
+                    'timeline_progress': timeline_progress,
+                    'mode_date':         mode_date.isoformat() if mode_date else None,
+                    'mode_count':        mode_count,
+                    'all_delayed':       all_delayed,
+                    'std_start':         std_start_iso,
+                    'std_end':           std_end_iso,
+                    'std_days':          std_days_val,
                 }
 
         if season == 'WET':

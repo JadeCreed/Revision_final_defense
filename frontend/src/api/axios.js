@@ -188,6 +188,7 @@ export const getDeliveryAudit         = (id)         => API.get(`/inventory/deli
 export const getBrgyAllocations       = ()           => API.get('/inventory/my-allocations/');
 export const getBrgyPendingCount      = ()           => API.get('/inventory/my-allocations/pending-count/');
 export const confirmPickup            = (id)         => API.post(`/inventory/allocations/${id}/confirm/`);
+export const getBeneficiaryAllocations = (params = {}) => API.get('/inventory/beneficiary-allocations/', { params });
 
 // ── REPORTS ──
 // ── REPORTS ── (replace existing report calls)

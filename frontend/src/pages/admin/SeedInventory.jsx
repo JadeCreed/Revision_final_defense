@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getInventorySummary, getSeedDeliveries, createSeedDelivery,
   updateSeedDelivery, deleteSeedDelivery, createAllocation,
-  getDeliveryAudit, getFinalSeeds,
+  getDeliveryAudit, getFinalSeeds, getBeneficiaryAllocations,
 } from '../../api/axios';
 import {
   Plus, Package, ChevronRight, ChevronLeft, CheckCircle,
@@ -443,6 +443,14 @@ export default function SeedInventory() {
   const [deliveredModal, setDeliveredModal]       = useState(null);
   const [deliveredForm, setDeliveredForm]         = useState({ confirmed: null, actual_bags: '' });
   const [deliveredSaving, setDeliveredSaving]     = useState(false);
+  const [brgyAllocCards, setBrgyAllocCards]       = useState([]);
+  const [brgyAllocLoading, setBrgyAllocLoading]   = useState(false);
+  const [expandedBrgyCard, setExpandedBrgyCard]   = useState(null);
+  const [brgyPages, setBrgyPages]                 = useState({});
+
+  const FARMERS_PER_PAGE = 10;
+  const getPage = useCallback((brgy) => brgyPages[brgy] || 1, [brgyPages]);
+  const setPage = useCallback((brgy, page) => setBrgyPages(prev => ({ ...prev, [brgy]: page })), []);
 
   const showToast = useCallback((type, message) => {
     setToast({ type, message });
@@ -455,6 +463,18 @@ export default function SeedInventory() {
       const [delRes, sumRes] = await Promise.all([getSeedDeliveries(), getInventorySummary()]);
       setDeliveries(delRes.data || []);
       setSummary(sumRes.data);
+      setSelected(prev => {
+        if (!prev || !prev.id) return prev;
+        const updated = (delRes.data || []).find(d => d.id === prev.id);
+        if (!updated) return prev;
+        return {
+          ...updated,
+          _fromSchedule: prev._fromSchedule,
+          _scheduleEntry: prev._scheduleEntry,
+          scheduled_bags: prev.scheduled_bags ?? updated.total_bags,
+          _deliveredBags: updated.total_bags ?? prev._deliveredBags ?? 0,
+        };
+      });
     } catch (err) {
       showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to load inventory data.');
       setDeliveries([]); setSummary(null);
@@ -471,6 +491,31 @@ export default function SeedInventory() {
     }
   }, [showToast]);
 
+  const loadBrgyAllocCards = useCallback(async (scheduleEntry, delivery) => {
+    setBrgyAllocCards([]);
+    setBrgyAllocLoading(true);
+    setExpandedBrgyCard(null);
+    try {
+      const params = {};
+      const seedTypeId = scheduleEntry?.seedTypeDbId || delivery?.seed_type;
+      const varietyId = scheduleEntry?.varietyId || delivery?.variety;
+      const season = scheduleEntry?.season || delivery?.season;
+      const year = scheduleEntry?.year || delivery?.year;
+
+      if (seedTypeId) params.seed_type_id = seedTypeId;
+      if (varietyId) params.variety_id = varietyId;
+      if (season) params.season = season;
+      if (year) params.year = year;
+
+      const res = await getBeneficiaryAllocations(params);
+      setBrgyAllocCards(res.data || []);
+    } catch {
+      setBrgyAllocCards([]);
+    } finally {
+      setBrgyAllocLoading(false);
+    }
+  }, []);
+
   useEffect(() => { loadInventory(); loadFinalSeeds(); }, [loadInventory, loadFinalSeeds]);
 
   const openDetail = (delivery, scheduleEntry) => {
@@ -482,6 +527,7 @@ export default function SeedInventory() {
         scheduled_bags: scheduleEntry.total_bags,
         _scheduleEntry: scheduleEntry,
         _fromSchedule: false,
+        _deliveredBags: delivery.total_bags ?? 0,
       });
     } else if (scheduleEntry) {
       setSelected({
@@ -506,8 +552,15 @@ export default function SeedInventory() {
         allocations: [],
       });
     } else if (delivery) {
-      setSelected(delivery);
+      setSelected({
+        ...delivery,
+        _deliveredBags: delivery.total_bags ?? 0,
+      });
     }
+    // Load brgy allocation cards
+    setBrgyAllocCards([]);
+    setExpandedBrgyCard(null);
+    loadBrgyAllocCards(scheduleEntry, delivery);
     setView('detail');
   };
   const openAudit = async (delivery) => {
@@ -665,6 +718,7 @@ export default function SeedInventory() {
       saveSchedulesToStorage(updatedSchedules);
       showToast('success', `Delivery confirmed — ${actualBags} bags for ${entry.varietyName}.`);
       setDeliveredModal(null);
+      setSelected(prev => prev ? { ...prev, _deliveredBags: actualBags } : prev);
       await loadInventory();
     } catch (err) {
       showToast('error', err.response?.data?.error || err.response?.data?.detail || err.message || 'Failed to confirm delivery.');
@@ -1026,7 +1080,7 @@ export default function SeedInventory() {
               {['WET', 'DRY'].map(s => (
                 <button key={s} onClick={() => setFilterSeason(filterSeason === s ? '' : s)}
                   style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${filterSeason === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: filterSeason === s ? GREEN.light : 'white', color: filterSeason === s ? GREEN.primary : '#6b7280', fontWeight: filterSeason === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
-                  {s === 'WET' ? '💧 Wet Season' : '☀️ Dry Season'}
+                  {s === 'WET' ? ' Wet Season' : ' Dry Season'}
                 </button>
               ))}
               {(search || filterSeason) && (
@@ -1101,33 +1155,16 @@ export default function SeedInventory() {
                 {selected.variety_name && <p style={{ opacity: 0.8, fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{selected.variety_name}</p>}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {selected._fromSchedule ? (
-                  <button onClick={e => { e.stopPropagation(); openHistory(); }}
-                    style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                    <History size={13} /> View History
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={e => { e.stopPropagation(); openEditDelivery(selected); }}
-                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Edit2 size={13} /> Edit
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); openAudit(selected); }}
-                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <History size={13} /> Audit
-                    </button>
-                    <button onClick={e => { e.stopPropagation(); handleDeleteDelivery(selected); }}
-                      style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(220,38,38,0.3)', color: 'white', border: '1px solid rgba(220,38,38,0.5)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 600, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                      <Trash2 size={13} /> Delete
-                    </button>
-                  </>
-                )}
+                <button onClick={e => { e.stopPropagation(); openHistory(); }}
+                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                  <History size={13} /> View History
+                </button>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
               {[
                 { label: 'Expected Bags', value: selected.scheduled_bags ?? selected.total_bags ?? 0 },
-                { label: 'Bags Delivered', value: selected._fromSchedule ? 0 : (selected.status === 'DELIVERED' ? selected.total_bags ?? 0 : 0) },
+                { label: 'Bags Delivered', value: selected._deliveredBags ?? (selected._fromSchedule ? 0 : 0) },
                 { label: 'Allocated', value: selected.allocated_bags ?? 0 },
               ].map(({ label, value }) => (
                 <div key={label} style={{ backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: '0.75rem', padding: '0.75rem', textAlign: 'center' }}>
@@ -1157,45 +1194,134 @@ export default function SeedInventory() {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-            <h2 style={{ fontWeight: 800, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>Barangay Allocations</h2>
-            {selected.remaining_bags > 0 && (
-              <button onClick={() => openAllocModal(selected)}
-                style={{ padding: '0.5rem 1rem', backgroundColor: GREEN.primary, color: 'white', border: 'none', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                <Plus size={14} /> Allocate Bags
-              </button>
-            )}
-          </div>
-          {selected.allocations?.length === 0 ? (
-            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #f3f4f6', color: '#9ca3af' }}>
-              <Users size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
-              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.25rem' }}>No allocations yet</p>
-              <p style={{ fontSize: '0.8rem', margin: 0 }}>Allocate bags to barangays using the button above.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-              {selected.allocations.map((alloc, idx) => (
-                <div key={alloc.id} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1rem 1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${alloc.status === 'CONFIRMED' ? GREEN.border : '#fde68a'}`, animation: `slideUp ${0.3 + idx * 0.05}s ease`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+          {/* ══ BRGY BENEFICIARY ALLOCATION CARDS ══ */}
+          <div style={{ marginTop: '2rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1rem' }}>
+                  <div style={{ width: 4, height: 24, backgroundColor: '#1e40af', borderRadius: '999px' }} />
                   <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-                      <MapPin size={13} color={GREEN.primary} />
-                      <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1a1a1a' }}>Brgy. {alloc.barangay}</span>
-                      <StatusBadge status={alloc.status} />
-                    </div>
-                    <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>
-                      Allocated: {new Date(alloc.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                      {alloc.date_confirmed && ` · Confirmed: ${new Date(alloc.date_confirmed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}`}
-                    </p>
-                    {alloc.confirmed_by_name && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>Confirmed by: {alloc.confirmed_by_name}</p>}
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <p style={{ fontSize: '1.5rem', fontWeight: 800, color: alloc.status === 'CONFIRMED' ? GREEN.primary : '#854d0e', margin: 0, lineHeight: 1 }}>{alloc.allocated_bags}</p>
-                    <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>bags</p>
+                    <h2 style={{ fontWeight: 800, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>Barangay Beneficiary Allocation</h2>
+                    <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>Mga barangay na may approved beneficiary batch para sa seed variety na ito</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+
+                {brgyAllocLoading && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '1.5rem', backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #f3f4f6', color: '#9ca3af', fontSize: '0.875rem' }}>
+                    <div style={{ width: 18, height: 18, border: `2px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+                    Loading barangay beneficiary data...
+                  </div>
+                )}
+
+                {!brgyAllocLoading && brgyAllocCards.length === 0 && (
+                  <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', textAlign: 'center', border: '1px solid #f3f4f6' }}>
+                    <Users size={32} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+                    <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.25rem', fontSize: '0.875rem' }}>Walang approved beneficiary batch</p>
+                    <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: 0 }}>Lalabas dito ang mga barangay kapag may na-approve nang batch sa Beneficiaries menu para sa seed variety na ito.</p>
+                  </div>
+                )}
+
+                {!brgyAllocLoading && brgyAllocCards.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {brgyAllocCards.map((card, idx) => {
+                      const isExpanded = expandedBrgyCard === card.barangay;
+                      const currentPage = getPage(card.barangay);
+                      const totalPages = Math.max(1, Math.ceil(card.farmers.length / FARMERS_PER_PAGE));
+                      const pageStart = (currentPage - 1) * FARMERS_PER_PAGE;
+                      const pageFarmers = card.farmers.slice(pageStart, pageStart + FARMERS_PER_PAGE);
+
+                      return (
+                        <div key={card.barangay} style={{ backgroundColor: 'white', borderRadius: '1rem', border: `1.5px solid ${isExpanded ? '#1e40af' : GREEN.border}`, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', animation: `slideUp ${0.3 + idx * 0.05}s ease` }}>
+                          <div
+                            onClick={() => {
+                              setExpandedBrgyCard(isExpanded ? null : card.barangay);
+                              setPage(card.barangay, 1);
+                            }}
+                            className="card-hover"
+                            style={{ padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', backgroundColor: isExpanded ? '#eff6ff' : 'white', transition: 'background 0.15s' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: '50%', backgroundColor: isExpanded ? '#1e40af' : GREEN.primary, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <MapPin size={16} color="white" />
+                              </div>
+                              <div style={{ minWidth: 0 }}>
+                                <p style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1a1a1a', margin: 0 }}>Brgy. {card.barangay}</p>
+                                <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <span style={{ backgroundColor: card.season === 'WET' ? '#eff6ff' : '#fef9c3', color: card.season === 'WET' ? '#1e40af' : '#854d0e', border: `1px solid ${card.season === 'WET' ? '#bfdbfe' : '#fde68a'}`, padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700 }}>
+                                    {card.season === 'WET' ? '' : ''} {card.season_display}
+                                  </span>
+                                  <span style={{ backgroundColor: '#f3f4f6', color: '#374151', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700, border: '1px solid #e5e7eb' }}>{card.year}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
+                              <div style={{ textAlign: 'center' }}>
+                                <p style={{ fontSize: '1.25rem', fontWeight: 800, color: GREEN.primary, margin: 0, lineHeight: 1 }}>{card.total_farmers}</p>
+                                <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: '0.1rem 0 0', fontWeight: 600, textTransform: 'uppercase' }}>Farmers</p>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <p style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e40af', margin: 0, lineHeight: 1 }}>{card.total_hectares}</p>
+                                <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: '0.1rem 0 0', fontWeight: 600, textTransform: 'uppercase' }}>Total ha</p>
+                              </div>
+                              <ChevronRight size={18} color={isExpanded ? '#1e40af' : '#9ca3af'} style={{ transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+                            </div>
+                          </div>
+
+                          {isExpanded && (
+                            <div style={{ borderTop: '1px solid #e5e7eb', animation: 'fadeIn 0.2s ease' }}>
+                              <div style={{ padding: '0.625rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: 0, fontWeight: 600 }}>Showing {pageStart + 1}–{Math.min(pageStart + FARMERS_PER_PAGE, card.farmers.length)} of {card.farmers.length} farmer{card.farmers.length !== 1 ? 's' : ''}</p>
+                                {totalPages > 1 && <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>Page {currentPage} of {totalPages}</p>}
+                              </div>
+                              <div style={{ overflowX: 'auto' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', minWidth: '480px' }}>
+                                  <thead>
+                                    <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e5e7eb' }}>
+                                      {['#', 'Farmer Name', 'Hectare', 'Hybrid', 'Inbred'].map(col => (
+                                        <th key={col} style={{ padding: '0.625rem 1rem', textAlign: col === 'Farmer Name' ? 'left' : 'center', fontWeight: 700, color: '#374151', fontSize: '0.68rem', textTransform: 'uppercase', whiteSpace: 'nowrap', borderRight: '1px solid #f3f4f6' }}>{col}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {pageFarmers.map((farmer, fIdx) => (
+                                      <tr key={`${farmer.farmer_id}-${fIdx}`} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: fIdx % 2 === 0 ? 'white' : '#fafafa' }} className="row-hover">
+                                        <td style={{ padding: '0.625rem 1rem', textAlign: 'center', color: '#9ca3af', fontWeight: 600, fontSize: '0.72rem', borderRight: '1px solid #f3f4f6', width: '40px' }}>{pageStart + fIdx + 1}</td>
+                                        <td style={{ padding: '0.625rem 1rem', borderRight: '1px solid #f3f4f6' }}>
+                                          <p style={{ fontWeight: 700, margin: 0, fontSize: '0.875rem', color: '#1a1a1a' }}>{farmer.farmer_name}</p>
+                                          {farmer.rsbsa_number && <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: '0.1rem 0 0', fontFamily: 'monospace' }}>{farmer.rsbsa_number}</p>}
+                                        </td>
+                                        <td style={{ padding: '0.625rem 1rem', textAlign: 'center', fontWeight: 700, color: '#374151', borderRight: '1px solid #f3f4f6' }}>{farmer.hectares > 0 ? `${farmer.hectares} ha` : '—'}</td>
+                                        <td style={{ padding: '0.625rem 1rem', textAlign: 'center', borderRight: '1px solid #f3f4f6' }}>{farmer.seed_type_label === 'Hybrid' ? <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: '1px solid #bfdbfe' }}>{farmer.variety_name || 'Hybrid'}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                                        <td style={{ padding: '0.625rem 1rem', textAlign: 'center' }}>{farmer.seed_type_label === 'Inbred' ? <span style={{ backgroundColor: GREEN.light, color: GREEN.primary, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: `1px solid ${GREEN.border}` }}>{farmer.variety_name || 'Inbred'}</span> : <span style={{ color: '#d1d5db' }}>—</span>}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                  {currentPage === totalPages && (
+                                    <tfoot>
+                                      <tr style={{ backgroundColor: '#f8fafc', borderTop: '2px solid #e5e7eb' }}>
+                                        <td />
+                                        <td style={{ padding: '0.625rem 1rem', fontWeight: 800, color: '#374151', fontSize: '0.78rem' }}>Total: {card.total_farmers} farmer{card.total_farmers !== 1 ? 's' : ''}</td>
+                                        <td style={{ padding: '0.625rem 1rem', textAlign: 'center', fontWeight: 800, color: GREEN.primary }}>{card.total_hectares} ha</td>
+                                        <td colSpan={2} />
+                                      </tr>
+                                    </tfoot>
+                                  )}
+                                </table>
+                              </div>
+                              {totalPages > 1 && (
+                                <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
+                                  <button onClick={() => setPage(card.barangay, Math.max(1, currentPage - 1))} disabled={currentPage === 1} style={{ padding: '0.4rem 0.875rem', borderRadius: '0.625rem', border: `1.5px solid ${currentPage === 1 ? '#e5e7eb' : '#d1d5db'}`, backgroundColor: currentPage === 1 ? '#f9fafb' : 'white', color: currentPage === 1 ? '#9ca3af' : '#374151', fontWeight: 600, fontSize: '0.78rem', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}><ChevronLeft size={14} /> Prev</button>
+                                  <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                    {Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1).reduce((acc, p, i, arr) => { if (i > 0 && p - arr[i - 1] > 1) acc.push('...'); acc.push(p); return acc; }, []).map((p, i) => p === '...' ? <span key={`ellipsis-${i}`} style={{ padding: '0.3rem 0.375rem', fontSize: '0.72rem', color: '#9ca3af' }}>…</span> : <button key={p} onClick={() => setPage(card.barangay, p)} style={{ width: 28, height: 28, borderRadius: '0.5rem', border: `1.5px solid ${currentPage === p ? GREEN.primary : '#e5e7eb'}`, backgroundColor: currentPage === p ? GREEN.primary : 'white', color: currentPage === p ? 'white' : '#374151', fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{p}</button>) }
+                                  </div>
+                                  <button onClick={() => setPage(card.barangay, Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} style={{ padding: '0.4rem 0.875rem', borderRadius: '0.625rem', border: `1.5px solid ${currentPage === totalPages ? '#e5e7eb' : '#d1d5db'}`, backgroundColor: currentPage === totalPages ? '#f9fafb' : 'white', color: currentPage === totalPages ? '#9ca3af' : '#374151', fontWeight: 600, fontSize: '0.78rem', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>Next <ChevronRight size={14} /></button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
         </div>
       )}
 
@@ -1206,7 +1332,6 @@ export default function SeedInventory() {
             <h2 style={{ fontWeight: 800, fontSize: '1rem', margin: '0 0 0.25rem' }}>Allocation History</h2>
             <p style={{ color: '#9ca3af', fontSize: '0.78rem', margin: 0 }}>Past barangay allocations from previous seasons.</p>
           </div>
-
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
             <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>

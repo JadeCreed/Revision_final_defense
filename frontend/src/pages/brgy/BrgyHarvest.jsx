@@ -65,16 +65,14 @@ const getUtilTier = (pct) => {
   if (pct === null || pct === undefined)
     return { label: 'N/A', color: '#94a3b8', bg: '#f9fafb', border: '#e5e7eb', icon: null };
   if (pct > 100)
-    return { label: 'Master Farmer', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', icon: <Trophy size={12} /> };
-  if (pct === 100)
-    return { label: 'Exceptional', color: '#1a4d1a', bg: '#dcfce7', border: '#86efac', icon: <CheckCircle2 size={12} /> };
+    return { label: 'Exceeded Target', color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', icon: <Trophy size={12} /> };
   if (pct >= 80)
-    return { label: 'Normal', color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: <CheckCircle2 size={12} /> };
-  if (pct >= 60)
-    return { label: 'Good', color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: <AlertTriangle size={12} /> };
+    return { label: 'Achieved Target', color: '#15803d', bg: '#dcfce7', border: '#86efac', icon: <CheckCircle2 size={12} /> };
+  if (pct >= 70)
+    return { label: 'Near Target', color: '#0369a1', bg: '#eff6ff', border: '#bfdbfe', icon: <AlertTriangle size={12} /> };
   if (pct >= 50)
-    return { label: 'Below target', color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', icon: <AlertTriangle size={12} /> };
-  return { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={12} /> };
+    return { label: 'Below Target', color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: <AlertTriangle size={12} /> };
+  return { label: 'Critical', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={12} /> };
 };
 
 const computeMetrics = (rec) => {
@@ -1534,12 +1532,11 @@ const BrgyHarvest = () => {
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               {[
-                { range: '> 100%', label: 'Master Farmer',   icon: <Trophy size={12} />,       color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '= 100%', label: 'Exceptional',     icon: <CheckCircle2 size={12} />,  color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
-                { range: '80–99%', label: 'Normal',          icon: <CheckCircle2 size={12} />,  color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-                { range: '60–79%', label: 'Good',            icon: <AlertTriangle size={12} />, color: '#b45309', bg: '#fefce8', border: '#fde68a' },
-                { range: '50–59%', label: 'Below target',    icon: <AlertTriangle size={12} />, color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
-                { range: '10–49%', label: 'Needs attention', icon: <X size={12} />,             color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
+                { range: '> 100%',      label: 'Exceeded Target', icon: <Trophy size={12} />,       color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
+                { range: '80% to 100%', label: 'Achieved Target', icon: <CheckCircle2 size={12} />, color: '#15803d', bg: '#dcfce7', border: '#86efac' },
+                { range: '70% to 79%',  label: 'Near Target',     icon: <AlertTriangle size={12} />, color: '#0369a1', bg: '#eff6ff', border: '#bfdbfe' },
+                { range: '50% to 69%',  label: 'Below Target',    icon: <AlertTriangle size={12} />, color: '#b45309', bg: '#fefce8', border: '#fde68a' },
+                { range: '< 50%',       label: 'Critical',         icon: <X size={12} />,             color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
               ].map(t => (
                 <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                   <span style={{ backgroundColor: t.bg, color: t.color, border: `1px solid ${t.border}`, borderRadius: '999px', padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700, minWidth: 130, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem' }}>

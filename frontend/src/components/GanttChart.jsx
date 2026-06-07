@@ -62,7 +62,6 @@ const GanttRow = ({ phase, entry, monthCols, distEntry }) => {
   // Use distEntry for DISTRIBUTION if no entry
   const activeEntry = (phase === 'DISTRIBUTION' && !entry) ? distEntry : entry;
   const pct         = activeEntry?.completion_pct ?? null;
-  const timelineProgress = activeEntry?.timeline_progress ?? null;
   const isDelayed   = activeEntry?.all_delayed;
   const stdStart    = activeEntry?.std_start;
   const stdEnd      = activeEntry?.std_end;
@@ -82,20 +81,25 @@ const GanttRow = ({ phase, entry, monthCols, distEntry }) => {
     />
   ) : null;
 
-  // Colored bar — width proportional to timeline_progress within the standard window
+  // Colored bar — width uses timeline_progress (mode-date position inside standard window)
   let colorBar = null;
-  if (activeEntry && stdStart && stdEnd && timelineProgress !== null) {
-    const stdW    = toWidth(stdStart, stdEnd);
-    const barLeft = toLeft(stdStart);
-    const barW    = Math.max(stdW * 0.03, (stdW * Math.min(timelineProgress, 100)) / 100);
+  const timelineProgress = activeEntry?.timeline_progress ?? null;
+  const hasBarData = activeEntry && stdStart && stdEnd &&
+    (timelineProgress !== null || (pct !== null && pct > 0));
+
+  if (hasBarData) {
+    const stdW     = toWidth(stdStart, stdEnd);
+    const barLeft  = toLeft(stdStart);
+    const progress = timelineProgress ?? 0;
+    const barW     = Math.max(stdW * 0.03, (stdW * Math.min(progress, 100)) / 100);
     const barColor = isDelayed ? '#ef4444' : color;
 
     const validF   = activeEntry.valid_farmers   ?? 0;
     const delayedF = activeEntry.delayed_farmers ?? 0;
-    const ontime   = activeEntry.completion_pct ?? 0;
+    const onTimePct = pct ?? 0;
     const tooltip  = activeEntry.mode_date
-      ? `Timeline: ${timelineProgress}% · On-time: ${ontime}% · ${validF} valid · ${delayedF} delayed · Mode: ${fmtDate(activeEntry.mode_date)}`
-      : `Timeline: ${timelineProgress}% · On-time: ${ontime}% · ${validF} valid · ${delayedF} delayed`;
+      ? `Mode date: ${fmtDate(activeEntry.mode_date)} · ${onTimePct}% on-time · ${validF} on-time farmers · ${delayedF} delayed`
+      : `${onTimePct}% on-time · ${validF} on-time · ${delayedF} delayed`;
 
     colorBar = (
       <div
@@ -113,7 +117,7 @@ const GanttRow = ({ phase, entry, monthCols, distEntry }) => {
     );
   }
 
-  const vsRed = isDelayed || (timelineProgress !== null && timelineProgress < 30);
+  const vsRed = isDelayed || (pct !== null && pct < 30);
 
   return (
     <div style={{
@@ -170,16 +174,25 @@ const GanttRow = ({ phase, entry, monthCols, distEntry }) => {
         )}
       </div>
 
-      {/* % done — shows timeline_progress (where mode_date is in the standard window) */}
+      {/* % done */}
       <div style={{ textAlign: 'right', paddingLeft: 8 }}>
-        {timelineProgress !== null ? (
+        {pct !== null ? (
           <span style={{
-            fontSize: 11, fontWeight: 700,
-            padding: '3px 8px', borderRadius: 99,
-            background: vsRed ? '#fee2e2' : timelineProgress >= 80 ? '#dcfce7' : '#fef9c3',
-            color:      vsRed ? '#991b1b' : timelineProgress >= 80 ? '#166534' : '#854d0e',
+            display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2,
           }}>
-            {isDelayed ? 'delayed' : `${timelineProgress}%`}
+            <span style={{
+              fontSize: 11, fontWeight: 700,
+              padding: '3px 8px', borderRadius: 99,
+              background: vsRed ? '#fee2e2' : pct >= 80 ? '#dcfce7' : '#fef9c3',
+              color:      isDelayed ? '#991b1b' : pct >= 80 ? '#166534' : '#854d0e',
+            }}>
+              {isDelayed ? 'delayed' : `${pct}%`}
+            </span>
+            {activeEntry?.delayed_farmers > 0 && !isDelayed && (
+              <span style={{ fontSize: 10, color: '#991b1b', fontWeight: 600 }}>
+                {activeEntry.delayed_farmers} late
+              </span>
+            )}
           </span>
         ) : (
           <span style={{ fontSize: 11, color: '#cbd5e1' }}>—</span>
@@ -211,9 +224,8 @@ const GanttChart = ({ ganttData, distDates, season, year, stdDays, ganttAlert, t
 
   const distEntry = distDates?.[tab]
     ? {
-        completion_pct:    100,
-        timeline_progress: 100,
-        mode_date:         distDates[tab].date,
+        completion_pct: 100,
+        mode_date:      distDates[tab].date,
         mode_count:     distDates[tab].count,
         farmers:        distDates[tab].total,
         total_farmers:  distDates[tab].total,

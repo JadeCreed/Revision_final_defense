@@ -1,59 +1,24 @@
-// src/pages/admin/Production.jsx
 import { useState, useEffect, useCallback, useRef } from 'react';
-import {
-  BarChart3, Users, Layers, TrendingUp, Target,
-  AlertTriangle, RefreshCw, ChevronDown, ChevronUp,
-  Download, CheckCircle2, X, Trophy,
-} from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Download, Trophy } from 'lucide-react';
 import API from '../../api/axios';
+import { getGisAllPolls, getHarvestRecords } from '../../api/axios';
 
-// ─── CONSTANTS — must match BrgyHarvest exactly ────────────────
-const SEED_CFG = {
-  HYBRID:   { label: 'Hybrid seeds',       color: '#1a4d1a', bg: '#f0fdf4', border: '#bbf7d0', target_kg_ha: 5000 },
-  INBRED:   { label: 'Certified seeds',    color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', target_kg_ha: 4000 },
-  OWN_SEED: { label: 'Farmer saved seeds', color: '#b45309', bg: '#fefce8', border: '#fde68a', target_kg_ha: 3000 },
-};
-
-// Utilization tiers — exact match with BrgyHarvest.jsx
-const getUtilTier = (pct) => {
-  if (pct === null || pct === undefined)
-    return { label: 'N/A', color: '#94a3b8', bg: '#f9fafb', border: '#e5e7eb', icon: null };
-  if (pct > 100)
-    return { label: 'Master Farmer',   color: '#166534', bg: '#f0fdf4', border: '#bbf7d0', icon: <Trophy size={11} /> };
-  if (pct === 100)
-    return { label: 'Exceptional',     color: '#1a4d1a', bg: '#dcfce7', border: '#86efac', icon: <CheckCircle2 size={11} /> };
-  if (pct >= 80)
-    return { label: 'Normal',          color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0', icon: <CheckCircle2 size={11} /> };
-  if (pct >= 60)
-    return { label: 'Good',            color: '#b45309', bg: '#fefce8', border: '#fde68a', icon: <AlertTriangle size={11} /> };
-  if (pct >= 50)
-    return { label: 'Below target',    color: '#c2410c', bg: '#fff7ed', border: '#fed7aa', icon: <AlertTriangle size={11} /> };
-  return   { label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', icon: <X size={11} /> };
-};
-
-// Compute utilization — same formula as BrgyHarvest.jsx
-// harvest_kg = harvest_bags * 50, expected = area * target_kg_ha
-const computeUtil = (rec) => {
-  const bags   = parseFloat(rec.harvest_bags) || 0;
-  const area   = parseFloat(rec.harvest_area_ha) || 0;
-  const seed   = rec.seed_source || 'OWN_SEED';
-  const target = SEED_CFG[seed]?.target_kg_ha || 3000;
-  const harvKg = bags * 50;
-  const expKg  = area * target;
-  if (expKg <= 0) return null;
-  return (harvKg / expKg) * 100;
-};
-
-const fmtNum = (n, d = 2) =>
-  n != null && !isNaN(n)
-    ? Number(n).toLocaleString('en-PH', { minimumFractionDigits: d, maximumFractionDigits: d })
-    : '—';
+import { computeUtil, computeMetrics, fmtNum, getUtilTier, SEED_CFG, SEED_KEYS, TIER_CFG, UtilBadge } from '../../components/production/productionUtils';
+import ProductionFilterBar    from '../../components/production/ProductionFilterBar';
+import ProductionTiles        from '../../components/production/ProductionTiles';
+import HarvestPerformanceTable from '../../components/production/HarvestPerformanceTable';
+import ProductionInsights     from '../../components/production/ProductionInsights';
+import YieldGapTable          from '../../components/production/YieldGapTable';
+import HarvestStatusDonut     from '../../components/production/charts/HarvestStatusDonut.jsx';
+import ProductionBySeedChart  from '../../components/production/charts/ProductionBySeedChart';
+import YieldBySeedChart       from '../../components/production/charts/YieldBySeedChart';
+import YieldGapChart          from '../../components/production/charts/YieldGapChart';
 
 // ─── TOAST ────────────────────────────────────────────────────
 const Toast = ({ toasts }) => (
   <div style={{ position: 'fixed', bottom: '1.5rem', left: '50%', transform: 'translateX(-50%)', zIndex: 9999, display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'center', pointerEvents: 'none' }}>
     {toasts.map(t => (
-      <div key={t.id} style={{ backgroundColor: t.type === 'error' ? '#991b1b' : '#1a4d1a', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'prodToast 0.3s cubic-bezier(0.34,1.56,0.64,1)', maxWidth: 'calc(100vw - 2rem)' }}>
+      <div key={t.id} style={{ backgroundColor: t.type === 'error' ? '#991b1b' : '#1a4d1a', color: 'white', padding: '0.75rem 1.25rem', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', animation: 'prod-spin 0.3s ease', maxWidth: 'calc(100vw - 2rem)' }}>
         {t.type === 'error' ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
         {t.msg}
       </div>
@@ -61,191 +26,156 @@ const Toast = ({ toasts }) => (
   </div>
 );
 
-const MetricCard = ({ icon: Icon, label, value, sub, color, highlight }) => (
-  <div style={{ backgroundColor: highlight ? color + '0d' : 'white', borderRadius: '1rem', padding: '1rem 1.1rem', border: `1px solid ${highlight ? color + '40' : '#e2e8f0'}` }}>
-    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.375rem' }}>
-      <Icon size={14} color={color || '#94a3b8'} />
-      <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</span>
+// ─── SECTION CARD ─────────────────────────────────────────────
+const Section = ({ title, sub, children }) => (
+  <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', overflow: 'hidden', marginBottom: '1rem' }}>
+    <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+      <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>{title}</p>
+      {sub && <p style={{ margin: '0.2rem 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>{sub}</p>}
     </div>
-    <p style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: color || '#0f172a', lineHeight: 1 }}>{value}</p>
-    {sub && <p style={{ margin: '0.25rem 0 0', fontSize: '0.68rem', color: '#64748b' }}>{sub}</p>}
+    <div style={{ padding: '1.25rem' }}>
+      {children}
+    </div>
   </div>
 );
 
-const UtilBadge = ({ pct }) => {
-  const tier = getUtilTier(pct);
-  return (
-    <span style={{ backgroundColor: tier.bg, color: tier.color, border: `1px solid ${tier.border}`, borderRadius: '999px', padding: '0.15rem 0.625rem', fontSize: '0.65rem', fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-      {tier.icon} {pct !== null && pct !== undefined ? `${fmtNum(pct, 1)}% · ` : ''}{tier.label}
-    </span>
-  );
-};
-
-// ─── SEED TYPE CARD ───────────────────────────────────────────
-const SeedTypeCard = ({ data }) => {
-  const [expanded, setExpanded] = useState(false);
-  const cfg  = SEED_CFG[data.seed_source] || SEED_CFG.OWN_SEED;
-  const tier = getUtilTier(data.avg_utilization_pct);
-  const barW = data.avg_utilization_pct != null ? Math.min(100, data.avg_utilization_pct) : 0;
+// ─── STATUS SUMMARY CARDS ─────────────────────────────────────
+const StatusSummaryCards = ({ records, computeUtil }) => {
+  const counts = {};
+  TIER_CFG.forEach(t => { counts[t.key] = 0; });
+  records.forEach(r => {
+    const pct  = computeUtil(r);
+    const tier = getUtilTier(pct);
+    if (tier && tier.key !== 'N/A') counts[tier.key] = (counts[tier.key] || 0) + 1;
+  });
 
   return (
-    <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-      <div style={{ padding: '1rem 1.25rem', borderBottom: expanded ? '1px solid #f1f5f9' : 'none' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: cfg.color, flexShrink: 0 }} />
-            <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>{cfg.label}</span>
-            <span style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700 }}>
-              Target: {(cfg.target_kg_ha / 1000).toFixed(0)} t/ha
-            </span>
-          </div>
-          <button onClick={() => setExpanded(p => !p)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0.25rem' }}>
-            {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.625rem' }}>
+      {TIER_CFG.map(t => (
+        <div key={t.key} style={{ backgroundColor: t.bg, borderRadius: '0.875rem', padding: '0.875rem', border: `1px solid ${t.border}`, textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: t.color, lineHeight: 1 }}>{counts[t.key] || 0}</p>
+          <p style={{ margin: '0.3rem 0 0', fontSize: '0.62rem', fontWeight: 700, color: t.color, textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.3 }}>{t.key}</p>
         </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          {[
-            { label: 'Farmers',    value: data.farmer_count },
-            { label: 'Area (ha)',  value: fmtNum(data.total_area_ha) },
-            { label: 'Production', value: `${fmtNum(data.total_production_mt)} MT` },
-            { label: 'Avg yield',  value: `${fmtNum(data.avg_yield_t_ha)} t/ha` },
-          ].map(m => (
-            <div key={m.label} style={{ textAlign: 'center', backgroundColor: '#f8fafc', borderRadius: '0.5rem', padding: '0.5rem 0.25rem' }}>
-              <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>{m.value}</p>
-              <p style={{ margin: 0, fontSize: '0.6rem', color: '#94a3b8', textTransform: 'uppercase', fontWeight: 600 }}>{m.label}</p>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ flex: 1, height: 7, backgroundColor: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${Math.max(2, barW)}%`, backgroundColor: tier.color, borderRadius: '999px', transition: 'width 0.6s ease' }} />
-          </div>
-          <UtilBadge pct={data.avg_utilization_pct} />
-        </div>
-      </div>
-
-      {expanded && data.top_performers?.length > 0 && (
-        <div style={{ padding: '0.875rem 1.25rem' }}>
-          <p style={{ margin: '0 0 0.625rem', fontSize: '0.68rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Top performers</p>
-          {data.top_performers.map((p, i) => {
-            const pTier = getUtilTier(p.utilization_pct);
-            return (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: i < data.top_performers.length - 1 ? '1px solid #f9fafb' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ width: 22, height: 22, borderRadius: '50%', backgroundColor: '#f1f5f9', display: 'grid', placeItems: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#64748b', flexShrink: 0 }}>{i + 1}</span>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 700, color: '#0f172a' }}>{p.farmer_name}</p>
-                    <p style={{ margin: 0, fontSize: '0.65rem', color: '#64748b' }}>{p.barangay} · {p.variety}</p>
-                  </div>
-                </div>
-                <UtilBadge pct={p.utilization_pct} />
-              </div>
-            );
-          })}
-        </div>
-      )}
+      ))}
     </div>
   );
 };
 
-// ─── BARANGAY TABLE ───────────────────────────────────────────
-const BarangayTable = ({ data }) => {
-  const [sortCol, setSortCol] = useState('total_production_mt');
-  const [sortDir, setSortDir] = useState('desc');
+// ─── TOP FARMERS TABLE ────────────────────────────────────────
+const TopFarmersTable = ({ records, computeUtil }) => {
+  const top = records
+    .map(r => ({ r, util: computeUtil(r) }))
+    .filter(x => x.util !== null)
+    .sort((a, b) => b.util - a.util)
+    .slice(0, 10);
 
-  const sorted = [...data].sort((a, b) => {
-    const va = a[sortCol] ?? 0;
-    const vb = b[sortCol] ?? 0;
-    return sortDir === 'asc' ? va - vb : vb - va;
-  });
-
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('desc'); }
-  };
-
-  const Th = ({ col, label, right }) => (
-    <th onClick={() => toggleSort(col)} style={{ padding: '0.625rem 0.875rem', textAlign: right ? 'right' : 'left', fontSize: '0.65rem', fontWeight: 700, color: sortCol === col ? '#1a4d1a' : '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', backgroundColor: '#f8fafc', whiteSpace: 'nowrap', userSelect: 'none' }}>
-      {label} {sortCol === col ? (sortDir === 'asc' ? '↑' : '↓') : ''}
-    </th>
-  );
+  if (!top.length) return <p style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>No data yet.</p>;
 
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600, fontSize: '0.82rem' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
         <thead>
-          <tr>
-            <Th col='barangay'            label='Barangay' />
-            <Th col='farmer_count'        label='Farmers'     right />
-            <Th col='total_area_ha'       label='Area (ha)'   right />
-            <Th col='total_production_mt' label='Prod (MT)'   right />
-            <Th col='avg_yield_t_ha'      label='Avg yield'   right />
-            <Th col='avg_utilization_pct' label='Utilization' right />
-            <th style={{ padding: '0.625rem 0.875rem', fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #e2e8f0', backgroundColor: '#f8fafc' }}>Status</th>
+          <tr style={{ backgroundColor: '#f8fafc' }}>
+            {['#', 'Farmer', 'Seed Type', 'Production', 'Achievement'].map(h => (
+              <th key={h} style={{ padding: '0.6rem 0.875rem', fontSize: '0.62rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #e2e8f0', textAlign: h === '#' || h === 'Achievement' || h === 'Production' ? 'right' : 'left' }}>
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((row, idx) => {
-            const tier = getUtilTier(row.avg_utilization_pct);
-            const barW = row.avg_utilization_pct != null ? Math.min(100, row.avg_utilization_pct) : 0;
+          {top.map(({ r, util }, idx) => {
+            const cfg = SEED_CFG[r.seed_source] || SEED_CFG.OWN_SEED;
+            const mt  = ((parseFloat(r.harvest_bags) || 0) * 50) / 1000;
             return (
-              <tr key={row.barangay} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
-                <td style={{ padding: '0.75rem 0.875rem', fontWeight: 700, color: '#0f172a', borderBottom: '1px solid #f3f4f6' }}>{row.barangay}</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', color: '#374151', borderBottom: '1px solid #f3f4f6' }}>{row.farmer_count}</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', color: '#374151', borderBottom: '1px solid #f3f4f6' }}>{fmtNum(row.total_area_ha)}</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#0f172a', borderBottom: '1px solid #f3f4f6' }}>{fmtNum(row.total_production_mt)} MT</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', color: '#374151', borderBottom: '1px solid #f3f4f6' }}>{fmtNum(row.avg_yield_t_ha)} t/ha</td>
-                <td style={{ padding: '0.75rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', justifyContent: 'flex-end' }}>
-                    <span style={{ fontWeight: 700, color: tier.color, minWidth: 44, textAlign: 'right' }}>
-                      {row.avg_utilization_pct !== null && row.avg_utilization_pct !== undefined ? `${fmtNum(row.avg_utilization_pct, 1)}%` : '—'}
-                    </span>
-                    <div style={{ width: 60, height: 5, backgroundColor: '#f1f5f9', borderRadius: '999px', overflow: 'hidden', flexShrink: 0 }}>
-                      <div style={{ height: '100%', width: `${Math.max(2, barW)}%`, backgroundColor: tier.color, borderRadius: '999px' }} />
-                    </div>
-                  </div>
+              <tr key={r.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
+                <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', color: '#94a3b8', fontWeight: 700, borderBottom: '1px solid #f3f4f6' }}>{idx + 1}</td>
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>{r.farmer_name || `Farmer #${r.farmer}`}</p>
+                  {r.barangay && <p style={{ margin: 0, fontSize: '0.67rem', color: '#94a3b8' }}>Brgy. {r.barangay}</p>}
                 </td>
-                <td style={{ padding: '0.75rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
-                  <UtilBadge pct={row.avg_utilization_pct} />
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+                  <span style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700 }}>
+                    {cfg.label.replace(' seeds', '')}
+                  </span>
                 </td>
+                <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#0f172a', borderBottom: '1px solid #f3f4f6' }}>{fmtNum(mt)} MT</td>
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}><UtilBadge pct={util} /></td>
               </tr>
             );
           })}
-          {/* Totals row */}
-          {sorted.length > 0 && (() => {
-            const totalFarmers = sorted.reduce((s, r) => s + (r.farmer_count || 0), 0);
-            const totalArea    = sorted.reduce((s, r) => s + (r.total_area_ha || 0), 0);
-            const totalProd    = sorted.reduce((s, r) => s + (r.total_production_mt || 0), 0);
-            const avgYield     = totalArea > 0 ? totalProd / totalArea : 0;
-            const utils        = sorted.map(r => r.avg_utilization_pct).filter(v => v != null);
-            const avgUtil      = utils.length > 0 ? utils.reduce((a, b) => a + b, 0) / utils.length : null;
-            const totalTier    = getUtilTier(avgUtil);
-            return (
-              <tr style={{ backgroundColor: '#f0fdf4', borderTop: '2px solid #bbf7d0' }}>
-                <td style={{ padding: '0.75rem 0.875rem', fontWeight: 800, color: '#1a4d1a' }}>Total</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#1a4d1a' }}>{totalFarmers}</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#1a4d1a' }}>{fmtNum(totalArea)}</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 800, color: '#1a4d1a' }}>{fmtNum(totalProd)} MT</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#1a4d1a' }}>{fmtNum(avgYield)} t/ha</td>
-                <td style={{ padding: '0.75rem 0.875rem', textAlign: 'right', fontWeight: 800, color: '#1a4d1a' }}>{avgUtil !== null ? `${fmtNum(avgUtil, 1)}%` : '—'}</td>
-                <td style={{ padding: '0.75rem 0.875rem' }}><UtilBadge pct={avgUtil} /></td>
-              </tr>
-            );
-          })()}
         </tbody>
       </table>
     </div>
   );
 };
 
-// ─── MAIN COMPONENT ────────────────────────────────────────────
+// ─── INTERVENTION TABLE ───────────────────────────────────────
+const InterventionTable = ({ records, computeUtil, computeMetrics }) => {
+  const rows = records
+    .map(r => ({ r, util: computeUtil(r), m: computeMetrics(r) }))
+    .filter(x => x.util !== null && x.util < 70)
+    .sort((a, b) => a.util - b.util);
+
+  if (!rows.length) return (
+    <div style={{ padding: '1.5rem', textAlign: 'center', color: '#15803d', fontSize: '0.85rem' }}>
+      ✓ No farmers requiring immediate intervention.
+    </div>
+  );
+
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+        <thead>
+          <tr style={{ backgroundColor: '#fef2f2' }}>
+            {['Farmer', 'Seed Type', 'Gap (kg)', 'Achievement', 'Status'].map(h => (
+              <th key={h} style={{ padding: '0.6rem 0.875rem', fontSize: '0.62rem', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1px solid #fecaca', textAlign: 'left' }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ r, util, m }, idx) => {
+            const cfg = SEED_CFG[r.seed_source] || SEED_CFG.OWN_SEED;
+            const gap = m.expected_kg - m.harvest_kg;
+            return (
+              <tr key={r.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fff5f5' }}>
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #fee2e2' }}>
+                  <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>{r.farmer_name || `Farmer #${r.farmer}`}</p>
+                  {r.barangay && <p style={{ margin: 0, fontSize: '0.67rem', color: '#94a3b8' }}>Brgy. {r.barangay}</p>}
+                </td>
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #fee2e2' }}>
+                  <span style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700 }}>
+                    {cfg.label.replace(' seeds', '')}
+                  </span>
+                </td>
+                <td style={{ padding: '0.7rem 0.875rem', fontWeight: 700, color: '#b91c1c', borderBottom: '1px solid #fee2e2' }}>
+                  {gap > 0 ? `−${fmtNum(gap, 0)} kg` : '—'}
+                </td>
+                <td style={{ padding: '0.7rem 0.875rem', fontWeight: 800, color: getUtilTier(util).color, borderBottom: '1px solid #fee2e2' }}>
+                  {fmtNum(util, 1)}%
+                </td>
+                <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #fee2e2' }}>
+                  <UtilBadge pct={util} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ─── MAIN PAGE ────────────────────────────────────────────────
 const Production = () => {
-  const [harvestRecords,  setHarvestRecords]  = useState([]);
-  const [loading,         setLoading]         = useState(true);
-  const [refreshing,      setRefreshing]      = useState(false);
-  const [toasts,          setToasts]          = useState([]);
+  const [polls,          setPolls]          = useState([]);
+  const [selectedPollId, setSelectedPollId] = useState(null);
+  const [allRecords,     setAllRecords]     = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [refreshing,     setRefreshing]     = useState(false);
+  const [activeTab,      setActiveTab]      = useState('harvest');
+  const [seedFilter,     setSeedFilter]     = useState('');
+  const [toasts,         setToasts]         = useState([]);
   const toastId = useRef(0);
 
   const pushToast = useCallback((msg, type = 'success') => {
@@ -254,246 +184,250 @@ const Production = () => {
     setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
   }, []);
 
-  const loadAll = useCallback(async (isRefresh = false) => {
+  // Load polls on mount
+  useEffect(() => {
+    const fetchPolls = async () => {
+      try {
+        const res = await getGisAllPolls();
+        const list = Array.isArray(res.data) ? res.data : [];
+        setPolls(list);
+        // Default: active poll
+        const active = list.find(p => p.is_active) || list[0];
+        if (active) setSelectedPollId(active.poll_id);
+      } catch {
+        pushToast('Failed to load seasons.', 'error');
+      }
+    };
+    fetchPolls();
+  }, [pushToast]);
+
+  // Load harvest records when poll changes
+  const loadRecords = useCallback(async (isRefresh = false) => {
+    if (!selectedPollId) return;
     try {
       if (isRefresh) setRefreshing(true); else setLoading(true);
-      // Load all harvest records — admin sees all brgys
-      const res = await API.get('/production/harvest/');
+      const res  = await getHarvestRecords({ poll_id: selectedPollId });
       const data = res.data;
-      setHarvestRecords(Array.isArray(data) ? data : (data?.results || []));
+      setAllRecords(Array.isArray(data) ? data : (data?.results || []));
     } catch {
       pushToast('Failed to load production data.', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [pushToast]);
+  }, [selectedPollId, pushToast]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { loadRecords(); }, [loadRecords]);
 
-  // ── COMPUTE ALL ANALYTICS FROM HARVEST RECORDS ──
-  // Using same formula as BrgyHarvest: harvest_kg = bags * 50, util = harvest_kg / expected_kg * 100
-  const records = harvestRecords;
+  // Apply seed filter
+  const records = seedFilter
+    ? allRecords.filter(r => r.seed_source === seedFilter)
+    : allRecords;
 
-  const totalFarmers  = new Set(records.map(r => r.farmer)).size;
-  const totalAreaHa   = records.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
-  const totalMT       = records.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
-  const avgYieldTHa   = totalAreaHa > 0 ? totalMT / totalAreaHa : 0;
-
-  const allUtils      = records.map(r => computeUtil(r)).filter(v => v !== null);
-  const overallUtil   = allUtils.length > 0 ? allUtils.reduce((a, b) => a + b, 0) / allUtils.length : null;
-  const overallTier   = getUtilTier(overallUtil);
-
-  // By seed type
-  const bySeedType = ['HYBRID', 'INBRED', 'OWN_SEED'].map(src => {
-    const group  = records.filter(r => r.seed_source === src);
-    const area   = group.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
-    const mt     = group.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
-    const utils  = group.map(r => computeUtil(r)).filter(v => v !== null);
-    const avgUtil = utils.length > 0 ? utils.reduce((a, b) => a + b, 0) / utils.length : null;
-    const avgYield = area > 0 ? mt / area : 0;
-
-    // Top 3 by utilization
-    const withUtil = group
-      .map(r => ({ r, util: computeUtil(r) }))
-      .filter(x => x.util !== null)
-      .sort((a, b) => b.util - a.util)
-      .slice(0, 3);
-
-    return {
-      seed_source:          src,
-      label:                SEED_CFG[src]?.label || src,
-      farmer_count:         new Set(group.map(r => r.farmer)).size,
-      total_area_ha:        area,
-      total_production_mt:  mt,
-      avg_yield_t_ha:       avgYield,
-      avg_utilization_pct:  avgUtil,
-      top_performers:       withUtil.map(x => ({
-        farmer_name:     x.r.farmer_name || `Farmer #${x.r.farmer}`,
-        barangay:        x.r.barangay || '',
-        variety:         x.r.variety || '',
-        utilization_pct: x.util,
-      })),
-    };
-  });
-
-  // By barangay
-  const brgyGroups = {};
-  records.forEach(r => {
-    const brgy = r.barangay || 'Unknown';
-    if (!brgyGroups[brgy]) brgyGroups[brgy] = [];
-    brgyGroups[brgy].push(r);
-  });
-  const byBarangay = Object.entries(brgyGroups).sort(([a], [b]) => a.localeCompare(b)).map(([brgy, recs]) => {
-    const area   = recs.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
-    const mt     = recs.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
-    const utils  = recs.map(r => computeUtil(r)).filter(v => v !== null);
-    const avgUtil = utils.length > 0 ? utils.reduce((a, b) => a + b, 0) / utils.length : null;
-    return {
-      barangay:            brgy,
-      farmer_count:        new Set(recs.map(r => r.farmer)).size,
-      total_area_ha:       area,
-      total_production_mt: mt,
-      avg_yield_t_ha:      area > 0 ? mt / area : 0,
-      avg_utilization_pct: avgUtil,
-    };
-  });
-
-  // Low performers (below 100% utilization)
-  const lowPerformers = records
-    .map(r => ({ r, util: computeUtil(r) }))
-    .filter(x => x.util !== null && x.util < 100)
-    .sort((a, b) => a.util - b.util)
-    .map(({ r, util }) => {
-      const seed   = r.seed_source || 'OWN_SEED';
-      const target = SEED_CFG[seed]?.target_kg_ha || 3000;
-      const area   = parseFloat(r.harvest_area_ha) || 0;
-      const expKg  = area * target;
-      const actKg  = (parseFloat(r.harvest_bags) || 0) * 50;
-      return {
-        farmer_name:     r.farmer_name || `Farmer #${r.farmer}`,
-        barangay:        r.barangay || '',
-        seed_source:     seed,
-        variety:         r.variety || '',
-        utilization_pct: util,
-        expected_kg:     expKg,
-        actual_kg:       actKg,
-        gap_kg:          expKg - actKg,
-      };
-    });
+  const selectedPoll = polls.find(p => p.poll_id === selectedPollId);
 
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '1rem', color: '#64748b' }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes prodToast { 0%{opacity:0;transform:scale(0.88)} 70%{transform:scale(1.03)} 100%{opacity:1;transform:scale(1)} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-      `}</style>
-      <div style={{ width: 28, height: 28, border: '3px solid #bbf7d0', borderTopColor: '#1a4d1a', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <style>{`@keyframes prod-spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ width: 28, height: 28, border: '3px solid #bbf7d0', borderTopColor: '#1a4d1a', borderRadius: '50%', animation: 'prod-spin 0.7s linear infinite' }} />
       <span style={{ fontSize: '0.875rem' }}>Loading production data...</span>
     </div>
   );
 
   return (
     <div style={{ paddingBottom: '5rem' }}>
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes prodToast { 0%{opacity:0;transform:scale(0.88)} 70%{transform:scale(1.03)} 100%{opacity:1;transform:scale(1)} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-      `}</style>
-
+      <style>{`@keyframes prod-spin { to { transform: rotate(360deg); } }`}</style>
       <Toast toasts={toasts} />
 
       {/* HEADER */}
       <div style={{ padding: '1.25rem 1.25rem 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Production dashboard</h1>
+            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Production Monitoring & Analytics</h1>
             <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
-              Harvest performance across all barangays · Hybrid 5,000 kg/ha · Certified 4,000 kg/ha · Farmer saved 3,000 kg/ha
+              Monitor harvest performance, production output, yield attainment, and production trends.
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
-            <button onClick={() => loadAll(true)} disabled={refreshing} style={{ padding: '0.5rem 0.875rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: refreshing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>
-              <RefreshCw size={14} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }} />
-              {refreshing ? 'Refreshing...' : 'Refresh'}
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button style={{ padding: '0.5rem 1rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.78rem', fontWeight: 600, color: '#374151' }}>
+              <Download size={13} /> Export PDF
+            </button>
+            <button style={{ padding: '0.5rem 1rem', backgroundColor: '#1a4d1a', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.78rem', fontWeight: 600, color: 'white' }}>
+              <Download size={13} /> Export Excel
             </button>
           </div>
         </div>
 
-        {/* KEY METRICS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-          <MetricCard icon={Users}     label='Total farmers'    value={totalFarmers}                                          sub='harvest records encoded'  color='#0f172a' />
-          <MetricCard icon={Layers}    label='Total area'       value={`${fmtNum(totalAreaHa)} ha`}                           sub='harvested area'           color='#166534' />
-          <MetricCard icon={BarChart3} label='Total production' value={`${fmtNum(totalMT)} MT`}                               sub='all seed types combined'  color='#2563eb' />
-          <MetricCard icon={TrendingUp} label='Avg. yield'      value={`${fmtNum(avgYieldTHa)} t/ha`}                         sub='across all records'       color='#7c3aed' />
-          <MetricCard icon={Target}    label='Utilization'      value={overallUtil !== null ? `${fmtNum(overallUtil, 1)}%` : '—'} sub={overallTier.label}    color={overallTier.color} highlight />
+        {/* FILTER BAR */}
+        <ProductionFilterBar
+          polls={polls}
+          selectedPollId={selectedPollId}
+          onPollChange={setSelectedPollId}
+          seedFilter={seedFilter}
+          onSeedFilter={setSeedFilter}
+          onRefresh={() => loadRecords(true)}
+          refreshing={refreshing}
+        />
+
+        {/* TILES */}
+        <ProductionTiles records={records} computeUtil={computeUtil} />
+
+        {/* TABS */}
+        <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.875rem', padding: '0.2rem', gap: '0.2rem', width: 'fit-content', marginBottom: '1.5rem' }}>
+          {[{ key: 'harvest', label: 'Harvest Performance' }, { key: 'analytics', label: 'Production Analytics' }].map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+              style={{
+                padding: '0.45rem 1.25rem', borderRadius: '0.625rem', border: 'none',
+                backgroundColor: activeTab === t.key ? 'white' : 'transparent',
+                color: activeTab === t.key ? '#1a4d1a' : '#64748b',
+                fontWeight: activeTab === t.key ? 700 : 500,
+                fontSize: '0.83rem', cursor: 'pointer',
+                boxShadow: activeTab === t.key ? '0 1px 4px rgba(0,0,0,0.1)' : 'none',
+                transition: 'all 0.15s',
+              }}>
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* SEED TYPE BREAKDOWN */}
-      <div style={{ padding: '0 1.25rem', marginBottom: '1.5rem' }}>
-        <p style={{ margin: '0 0 0.875rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Breakdown by seed program</p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {bySeedType.length > 0 && bySeedType.some(s => s.farmer_count > 0)
-            ? bySeedType.filter(s => s.farmer_count > 0).map(s => <SeedTypeCard key={s.seed_source} data={s} />)
-            : <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', border: '1px solid #e2e8f0', color: '#94a3b8', fontSize: '0.875rem' }}>No harvest data available yet.</div>
-          }
-        </div>
-      </div>
+      {/* TAB 1 — HARVEST PERFORMANCE */}
+      {activeTab === 'harvest' && (
+        <div style={{ padding: '0 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
 
-      {/* BARANGAY TABLE */}
-      <div style={{ padding: '0 1.25rem', marginBottom: '1.5rem' }}>
-        <p style={{ margin: '0 0 0.875rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Performance by barangay</p>
-        <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
-          {byBarangay.length > 0
-            ? <BarangayTable data={byBarangay} />
-            : <div style={{ padding: '2.5rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.875rem' }}>No barangay data available yet.</div>
-          }
-        </div>
-      </div>
-
-      {/* LOW PERFORMERS */}
-      {lowPerformers.length > 0 && (
-        <div style={{ padding: '0 1.25rem', marginBottom: '1.5rem', animation: 'slideUp 0.3s ease' }}>
-          <p style={{ margin: '0 0 0.875rem', fontSize: '0.72rem', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Farmers below target — needs attention</p>
-          <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '1rem', overflow: 'hidden' }}>
-            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-              <AlertTriangle size={16} color='#b91c1c' />
-              <span style={{ fontWeight: 700, fontSize: '0.875rem', color: '#b91c1c' }}>
-                {lowPerformers.length} farmer{lowPerformers.length !== 1 ? 's' : ''} below 100% utilization
-              </span>
-            </div>
-            {lowPerformers.map((p, idx) => {
-              const tier = getUtilTier(p.utilization_pct);
-              return (
-                <div key={idx} style={{ padding: '0.875rem 1.25rem', borderBottom: idx < lowPerformers.length - 1 ? '1px solid #fee2e2' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'white', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <div>
-                    <p style={{ margin: 0, fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>{p.farmer_name}</p>
-                    <p style={{ margin: 0, fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
-                      {SEED_CFG[p.seed_source]?.label || p.seed_source}
-                      {p.barangay ? ` · Brgy. ${p.barangay}` : ''}
-                      {' · '}Expected: {fmtNum(p.expected_kg, 0)} kg · Got: {fmtNum(p.actual_kg, 0)} kg
-                      {' · '}Gap: <strong style={{ color: '#b91c1c' }}>{fmtNum(p.gap_kg, 0)} kg</strong>
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem', flexShrink: 0 }}>
-                    <UtilBadge pct={p.utilization_pct} />
-                    <span style={{ fontSize: '0.62rem', color: '#94a3b8' }}>
-                      {p.utilization_pct < 60 ? 'AT field visit recommended' : 'Monitor next visit'}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+          {/* Donut + Status Cards side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <Section title='Harvest Performance Distribution' sub='Distribution of farmers by achievement tier'>
+              <HarvestStatusDonut records={records} computeUtil={computeUtil} />
+            </Section>
+            <Section title='Status Summary' sub='Count of farmers per performance tier'>
+              <StatusSummaryCards records={records} computeUtil={computeUtil} />
+            </Section>
           </div>
+
+          {/* Farmer table */}
+          <Section title='Harvest Performance Table' sub='Detailed records per farmer — click column headers to sort'>
+            <HarvestPerformanceTable records={records} computeUtil={computeUtil} computeMetrics={computeMetrics} />
+          </Section>
         </div>
       )}
 
-      {/* TIER REFERENCE */}
-      <div style={{ padding: '0 1.25rem', marginBottom: '1.5rem' }}>
-        <div style={{ backgroundColor: '#f8fafc', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '1rem 1.25rem' }}>
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Performance tier reference</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
-            {[
-              { range: '> 100%',  label: 'Master Farmer',   color: '#166534', bg: '#f0fdf4', border: '#bbf7d0' },
-              { range: '= 100%',  label: 'Exceptional',     color: '#1a4d1a', bg: '#dcfce7', border: '#86efac' },
-              { range: '80–99%',  label: 'Normal',          color: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-              { range: '60–79%',  label: 'Good',            color: '#b45309', bg: '#fefce8', border: '#fde68a' },
-              { range: '50–59%',  label: 'Below target',    color: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
-              { range: '< 50%',   label: 'Needs attention', color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
-            ].map(t => (
-              <div key={t.label} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span style={{ backgroundColor: t.bg, color: t.color, border: `1px solid ${t.border}`, borderRadius: '999px', padding: '0.15rem 0.625rem', fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}>{t.label}</span>
-                <span style={{ fontSize: '0.68rem', color: '#64748b' }}>{t.range} of target</span>
-              </div>
-            ))}
+      {/* TAB 2 — PRODUCTION ANALYTICS */}
+      {activeTab === 'analytics' && (
+        <div style={{ padding: '0 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+          {/* Charts row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <Section title='Production by Seed Type' sub='Total harvest output in MT per seed program'>
+              <ProductionBySeedChart records={records} />
+            </Section>
+            <Section title='Average Yield by Seed Type' sub='Actual t/ha vs DA target yield'>
+              <YieldBySeedChart records={records} />
+            </Section>
           </div>
-          <p style={{ margin: '0.75rem 0 0', fontSize: '0.65rem', color: '#94a3b8', lineHeight: 1.5 }}>
-            Targets: Hybrid 5,000 kg/ha · Certified seeds 4,000 kg/ha · Farmer saved seeds 3,000 kg/ha · All paddy bags = 50 kg fixed
-          </p>
+
+          {/* Top farmers */}
+          <Section title='Top Performing Farmers' sub='Top 10 farmers by achievement rate'>
+            <TopFarmersTable records={records} computeUtil={computeUtil} />
+          </Section>
+
+          {/* Intervention */}
+          <Section title='Farmers Requiring Attention' sub='Farmers below Near Target (70%) — recommended for AT field visit'>
+            <InterventionTable records={records} computeUtil={computeUtil} computeMetrics={computeMetrics} />
+          </Section>
+
+          {/* Seed Productivity Analysis */}
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+            <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc' }}>
+              <p style={{ margin: 0, fontSize: '0.78rem', fontWeight: 700, color: '#0f172a' }}>Seed Productivity Analysis</p>
+              <p style={{ margin: '0.2rem 0 0', fontSize: '0.68rem', color: '#94a3b8' }}>
+                Productive Seed Equivalent = (Actual Yield ÷ Expected Yield) × Seed Distributed · Yield Gap = Seed Dist − Productive Equiv
+              </p>
+            </div>
+
+            {/* Summary cards for seed totals */}
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                {SEED_KEYS.filter(k => k !== 'OWN_SEED').map(k => {
+                  const group    = records.filter(r => r.seed_source === k);
+                  const totals   = group.reduce((s, r) => {
+                    const m = computeMetrics(r);
+                    return { dist: s.dist + m.seed_dist_kg, prod: s.prod + m.prod_seed_equiv, gap: s.gap + m.yield_gap_equiv };
+                  }, { dist: 0, prod: 0, gap: 0 });
+                  const cfg = SEED_CFG[k];
+                  return (
+                    <div key={k} style={{ backgroundColor: cfg.bg, borderRadius: '0.875rem', padding: '1rem', border: `1px solid ${cfg.border}` }}>
+                      <p style={{ margin: '0 0 0.625rem', fontSize: '0.7rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{cfg.label}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#374151' }}>
+                          <span>Seed distributed</span>
+                          <strong style={{ color: cfg.color }}>{fmtNum(totals.dist, 1)} kg</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#374151' }}>
+                          <span>Productive equivalent</span>
+                          <strong style={{ color: '#15803d' }}>{fmtNum(totals.prod, 1)} kg</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#374151' }}>
+                          <span>Yield gap equivalent</span>
+                          <strong style={{ color: totals.gap > 0 ? '#b45309' : '#15803d' }}>{fmtNum(totals.gap, 1)} kg</strong>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Yield Gap Charts */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0', borderBottom: '1px solid #f1f5f9' }}>
+              <div style={{ padding: '1.25rem', borderRight: '1px solid #f1f5f9' }}>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Productive Seed Equivalent vs Yield Gap</p>
+                <YieldGapChart records={records} computeMetrics={computeMetrics} />
+              </div>
+              <div style={{ padding: '1.25rem' }}>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Per-farmer Breakdown</p>
+                <YieldGapTable records={records} computeMetrics={computeMetrics} computeUtil={computeUtil} />
+              </div>
+            </div>
+
+            {/* Auto insight for seed productivity */}
+            {records.filter(r => r.seed_source !== 'OWN_SEED').length > 0 && (() => {
+              const seedTotals = SEED_KEYS.filter(k => k !== 'OWN_SEED').map(k => {
+                const group = records.filter(r => r.seed_source === k);
+                if (!group.length) return null;
+                const t = group.reduce((s, r) => {
+                  const m = computeMetrics(r);
+                  return { dist: s.dist + m.seed_dist_kg, prod: s.prod + m.prod_seed_equiv, gap: s.gap + m.yield_gap_equiv };
+                }, { dist: 0, prod: 0, gap: 0 });
+                return { k, label: SEED_CFG[k].label, ...t };
+              }).filter(Boolean);
+
+              return (
+                <div style={{ padding: '1.25rem', backgroundColor: '#f8fafc' }}>
+                  <p style={{ margin: '0 0 0.625rem', fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed productivity insight</p>
+                  {seedTotals.map(s => (
+                    <div key={s.k} style={{ marginBottom: '0.375rem', fontSize: '0.8rem', color: '#374151', lineHeight: 1.6 }}>
+                      <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', backgroundColor: SEED_CFG[s.k].color, marginRight: '0.5rem', verticalAlign: 'middle' }} />
+                      <strong>{s.label}</strong> distribution totaled {fmtNum(s.dist, 1)} kg. Based on harvest performance, approximately{' '}
+                      <strong style={{ color: '#15803d' }}>{fmtNum(s.prod, 1)} kg</strong> equivalent seed productivity was realized.
+                      {s.gap > 0 && <> An estimated <strong style={{ color: '#b45309' }}>{fmtNum(s.gap, 1)} kg</strong> seed-equivalent production potential was not achieved.</>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Auto Insights */}
+          <ProductionInsights
+            records={records}
+            computeUtil={computeUtil}
+            computeMetrics={computeMetrics}
+            season={selectedPoll?.season}
+            year={selectedPoll?.year}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 };

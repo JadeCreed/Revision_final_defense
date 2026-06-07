@@ -4,6 +4,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.db import models
+
+from apps.distribution.models import DistributionBatch
 
 from .models import SeedDelivery, BrgyAllocation, SeedDeliveryAudit
 from .serializers import (
@@ -11,7 +14,7 @@ from .serializers import (
     BrgyAllocationSerializer, SeedDeliveryAuditSerializer,
 )
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
-from apps.distribution.models import DistributionBatch, DistributionEntry
+
 
 # ─────────────────────────────────────────
 # ADMIN VIEWS
@@ -196,3 +199,112 @@ def brgy_pending_count_view(request):
         status='PENDING',
     ).count()
     return Response({'pending_count': count})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUserRole])
+def brgy_beneficiary_allocation_view(request):
+    """
+    Fetches approved BENEFICIARY batches (status='APPROVED') from
+    the distribution app. These are batches that the BRGY President
+    encoded and the admin approved in the Beneficiaries menu.
+
+    We read farm_area_ha (Hybrid) and area_planted (Inbred) which
+    are filled during beneficiary encoding — NOT distribution fields
+    like qty_bags or date_received.
+    """
+    seed_type_id = request.query_params.get('seed_type_id')
+    variety_id = request.query_params.get('variety_id')
+    season = request.query_params.get('season')
+    year = request.query_params.get('year')
+
+    batches_qs = DistributionBatch.objects.filter(
+        status='APPROVED'
+    ).select_related(
+        'event__seed_type',
+        'event__variety',
+    ).prefetch_related(
+        'entries__farmer',
+        'entries__variety',
+    )
+
+    if seed_type_id:
+        batches_qs = batches_qs.filter(event__seed_type_id=seed_type_id)
+
+    if variety_id:
+        batches_qs = batches_qs.filter(
+            models.Q(event__variety_id=variety_id) |
+            models.Q(entries__variety_id=variety_id)
+        ).distinct()
+
+    if season:
+        batches_qs = batches_qs.filter(event__season=season.upper())
+
+    if year:
+        batches_qs = batches_qs.filter(event__year=year)
+
+    brgy_map = {}
+
+    for batch in batches_qs:
+        event = batch.event
+        barangay = event.barangay
+        if not barangay:
+            continue
+
+        seed_type_name = (event.seed_type.name or '').upper() if event.seed_type else ''
+        is_hybrid = 'HYBRID' in seed_type_name or seed_type_name in ('NRP', 'RFO')
+        season_display = dict([
+            ('WET', 'Wet Season'),
+            ('DRY', 'Dry Season'),
+        ]).get(event.season, event.season)
+
+        if barangay not in brgy_map:
+            brgy_map[barangay] = {
+                'barangay': barangay,
+                'season': event.season,
+                'season_display': season_display,
+                'year': event.year,
+                'seed_type_id': event.seed_type_id,
+                'seed_type_name': event.seed_type.name if event.seed_type else '',
+                'total_farmers': 0,
+                'total_hectares': 0.0,
+                'farmers': [],
+            }
+
+        for entry in batch.entries.all():
+            farmer = entry.farmer
+            if not farmer:
+                continue
+
+            if is_hybrid:
+                hectares = float(entry.farm_area_ha or 0)
+                seed_type_label = 'Hybrid'
+            else:
+                hectares = float(entry.area_planted or 0)
+                seed_type_label = 'Inbred'
+
+            variety_name = ''
+            if entry.variety:
+                variety_name = entry.variety.name
+            elif event.variety:
+                variety_name = event.variety.name
+
+            brgy_map[barangay]['total_farmers'] += 1
+            brgy_map[barangay]['total_hectares'] += hectares
+            brgy_map[barangay]['farmers'].append({
+                'farmer_id': farmer.id,
+                'farmer_name': farmer.get_full_name(),
+                'rsbsa_number': farmer.rsbsa_number or '',
+                'hectares': hectares,
+                'variety_name': variety_name,
+                'seed_type_label': seed_type_label,
+                'batch_number': batch.batch_number,
+            })
+
+    for brgy in brgy_map.values():
+        brgy['total_hectares'] = round(brgy['total_hectares'], 2)
+
+    return Response(list(brgy_map.values()))
+
+
+

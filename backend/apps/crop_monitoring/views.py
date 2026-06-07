@@ -321,17 +321,17 @@ class ATCropMonitoringCreateView(APIView):
             farmer=farmer,
             poll=active_poll,
             seed_source=seed_source,
+            crop_phase=crop_phase,
         ).first()
         if existing_record:
             return Response({
                 'error': (
                     f'This farmer already has a monitoring record for '
                     f'{existing_record.get_crop_phase_display()} '
-                    f'in {seed_source or "unspecified"} seed this season. '
-                    f'Use update to change the phase.'
+                    f'in {seed_source or "unspecified"} seed this season.'
                 ),
                 'existing_record_id': existing_record.id,
-                'existing_phase': existing_record.crop_phase,
+                'existing_phase':     existing_record.crop_phase,
             }, status=400)
 
         # Build record

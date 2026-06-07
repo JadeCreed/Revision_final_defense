@@ -205,6 +205,7 @@
     │   │   │   │   ├── ATGisMap.jsx
     │   │   │   │   ├── ATReports.jsx
     │   │   │   │   └── CropMonitoring.jsx
+    │   │   │   │   └── ATProfile.jsx
     │   │   │   ├── brgy/
     │   │   │   │   ├── BPDashboard.jsx
     │   │   │   │   ├── BrgyAnnouncements.jsx
@@ -213,6 +214,7 @@
     │   │   │   │   ├── BrgyDistribution.jsx
     │   │   │   │   ├── BrgyFarmers.jsx
     │   │   │   │   ├── BrgyHarvest.jsx
+    │   │   │   │   ├── BPProfile.jsx
     │   │   │   │   ├── BrgyPoll.jsx
     │   │   │   │   └── BrgyReports.jsx
     │   │   │   ├── farmer/
