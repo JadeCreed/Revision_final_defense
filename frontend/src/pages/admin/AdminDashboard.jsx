@@ -24,14 +24,22 @@ const STYLES = `
   from { transform: scale(0.92); opacity: 0; }
   to   { transform: scale(1);    opacity: 1; }
 }
-.dash-card {
-  animation: fadeUp 0.45s ease both;
+.dash-card  { animation: fadeUp 0.45s ease both; }
+.dash-fade  { animation: fadeIn 0.5s ease both; }
+.dash-scale { animation: scaleIn 0.4s ease both; }
+
+/* ── Responsive grid helpers ── */
+.grid-kpi       { display: grid; gap: 14px; grid-template-columns: repeat(5, minmax(0,1fr)); }
+.grid-2col      { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+.grid-brgy      { display: grid; gap: 0 32px; grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 768px) {
+  .grid-kpi  { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .grid-2col { grid-template-columns: 1fr; }
+  .grid-brgy { grid-template-columns: 1fr; }
 }
-.dash-fade {
-  animation: fadeIn 0.5s ease both;
-}
-.dash-scale {
-  animation: scaleIn 0.4s ease both;
+@media (max-width: 400px) {
+  .grid-kpi  { grid-template-columns: 1fr 1fr; }
 }
 `;
 
@@ -350,7 +358,7 @@ export default function AdminDashboard() {
         )}
 
         {/* ── KPI Cards ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: gridCol(5), gap: 14, marginBottom: 20 }}>
+        <div className="grid-kpi" style={{ marginBottom: 20 }}>
           {loading ? Array(5).fill(0).map((_, i) => (
             <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '18px 20px',
               border: '1px solid #e2e8f0' }}>
@@ -369,7 +377,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Row 2: Phase Distribution + Damage Donut ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="grid-2col" style={{ marginBottom: 16 }}>
 
           {/* Phase Distribution */}
           <Section title="Crop Phase Distribution" delay={300}>
@@ -416,7 +424,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Row 3: Yield by Seed + Farmers by Seed ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="grid-2col" style={{ marginBottom: 16 }}>
 
           {/* Yield by Seed Type */}
           <Section title="Yield by Seed Type (t/ha)" delay={420}>
@@ -505,7 +513,7 @@ export default function AdminDashboard() {
               const rows = data?.utilization_by_barangay || [];
               const maxUtil = Math.max(...rows.map(r => r.utilization_pct || 0), 100);
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 32px' }}>
+                <div className="grid-brgy">
                   {rows.map((b, i) => (
                     <div key={b.barangay} className="dash-fade" style={{ animationDelay: `${540 + i * 40}ms` }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between',
@@ -545,7 +553,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Row 5: Delay Analytics + Pipeline ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="grid-2col" style={{ marginBottom: 16 }}>
 
           {/* Delay Analytics */}
           <Section title="Delay Analytics by Phase" delay={600}>
@@ -637,7 +645,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Row 6: Alerts + Executive Insights ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+        <div className="grid-2col" style={{ marginBottom: 16 }}>
 
           {/* Alerts */}
           <Section title="Alerts & Attention Required" delay={720}>
