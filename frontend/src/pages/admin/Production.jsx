@@ -1,14 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertTriangle, CheckCircle2, Download, Trophy } from 'lucide-react';
-import API from '../../api/axios';
-import { getGisAllPolls, getHarvestRecords } from '../../api/axios';
+import { getGisAllPolls, getHarvestRecords, getSeedProductivity } from '../../api/axios';
 
 import { computeUtil, computeMetrics, fmtNum, getUtilTier, SEED_CFG, SEED_KEYS, TIER_CFG, UtilBadge } from '../../components/production/productionUtils';
 import ProductionFilterBar    from '../../components/production/ProductionFilterBar';
 import ProductionTiles        from '../../components/production/ProductionTiles';
 import HarvestPerformanceTable from '../../components/production/HarvestPerformanceTable';
-import ProductionInsights     from '../../components/production/ProductionInsights';
-import YieldGapTable          from '../../components/production/YieldGapTable';
 import HarvestStatusDonut     from '../../components/production/charts/HarvestStatusDonut.jsx';
 import ProductionBySeedChart  from '../../components/production/charts/ProductionBySeedChart';
 import YieldBySeedChart       from '../../components/production/charts/YieldBySeedChart';
@@ -170,11 +167,13 @@ const InterventionTable = ({ records, computeUtil, computeMetrics }) => {
 const Production = () => {
   const [polls,          setPolls]          = useState([]);
   const [selectedPollId, setSelectedPollId] = useState(null);
-  const [allRecords,     setAllRecords]     = useState([]);
-  const [loading,        setLoading]        = useState(true);
-  const [refreshing,     setRefreshing]     = useState(false);
+  const [allRecords,       setAllRecords]       = useState([]);
+  const [seedProdData,     setSeedProdData]     = useState([]);
+  const [loading,          setLoading]          = useState(true);
+  const [refreshing,       setRefreshing]       = useState(false);
   const [activeTab,      setActiveTab]      = useState('harvest');
   const [seedFilter,     setSeedFilter]     = useState('');
+  const [seedPage,       setSeedPage]       = useState(1);
   const [toasts,         setToasts]         = useState([]);
   const toastId = useRef(0);
 
@@ -206,9 +205,17 @@ const Production = () => {
     if (!selectedPollId) return;
     try {
       if (isRefresh) setRefreshing(true); else setLoading(true);
-      const res  = await getHarvestRecords({ poll_id: selectedPollId });
-      const data = res.data;
-      setAllRecords(Array.isArray(data) ? data : (data?.results || []));
+      const [harvestRes, seedProdRes] = await Promise.allSettled([
+        getHarvestRecords({ poll_id: selectedPollId }),
+        getSeedProductivity({ poll_id: selectedPollId }),
+      ]);
+      if (harvestRes.status === 'fulfilled') {
+        const data = harvestRes.value.data;
+        setAllRecords(Array.isArray(data) ? data : (data?.results || []));
+      }
+      if (seedProdRes.status === 'fulfilled') {
+        setSeedProdData(Array.isArray(seedProdRes.value.data) ? seedProdRes.value.data : []);
+      }
     } catch {
       pushToast('Failed to load production data.', 'error');
     } finally {
@@ -218,6 +225,7 @@ const Production = () => {
   }, [selectedPollId, pushToast]);
 
   useEffect(() => { loadRecords(); }, [loadRecords]);
+  useEffect(() => { setSeedPage(1); }, [seedFilter, seedProdData.length]);
 
   // Apply seed filter
   const records = seedFilter
@@ -378,54 +386,214 @@ const Production = () => {
               </div>
             </div>
 
-            {/* Yield Gap Charts */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0', borderBottom: '1px solid #f1f5f9' }}>
-              <div style={{ padding: '1.25rem', borderRight: '1px solid #f1f5f9' }}>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Productive Seed Equivalent vs Yield Gap</p>
-                <YieldGapChart records={records} computeMetrics={computeMetrics} />
-              </div>
-              <div style={{ padding: '1.25rem' }}>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>Per-farmer Breakdown</p>
-                <YieldGapTable records={records} computeMetrics={computeMetrics} computeUtil={computeUtil} />
-              </div>
+            {/* Yield Gap Chart — full width */}
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>
+                Productive Seed Equivalent vs Yield Gap
+              </p>
+              <YieldGapChart records={records} computeMetrics={computeMetrics} />
             </div>
 
-            {/* Auto insight for seed productivity */}
-            {records.filter(r => r.seed_source !== 'OWN_SEED').length > 0 && (() => {
-              const seedTotals = SEED_KEYS.filter(k => k !== 'OWN_SEED').map(k => {
-                const group = records.filter(r => r.seed_source === k);
-                if (!group.length) return null;
-                const t = group.reduce((s, r) => {
-                  const m = computeMetrics(r);
-                  return { dist: s.dist + m.seed_dist_kg, prod: s.prod + m.prod_seed_equiv, gap: s.gap + m.yield_gap_equiv };
-                }, { dist: 0, prod: 0, gap: 0 });
-                return { k, label: SEED_CFG[k].label, ...t };
-              }).filter(Boolean);
+            {/* Seed Productivity Analytics Table — full width below chart */}
+            <div style={{ padding: '1.25rem', borderBottom: '1px solid #f1f5f9' }}>
+              <p style={{ margin: '0 0 0.125rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569' }}>
+                Seed Productivity Analytics Table
+              </p>
+              <p style={{ margin: '0 0 0.875rem', fontSize: '0.67rem', color: '#94a3b8' }}>
+                Per-farmer breakdown — Yield Ratio = Actual ÷ Expected · Productive Equivalent = Seed Distributed × Yield Ratio · Gap = Distributed − Productive
+              </p>
+              {(() => {
+                // Use backend-computed seed productivity data
+                const PAGE_SIZE = 15;
+                const rows = (seedFilter
+                  ? seedProdData.filter(r => r.seed_source === seedFilter)
+                  : seedProdData
+                ).map(r => ({
+                  id:              r.harvest_id,
+                  farmer_name:     r.farmer_name,
+                  barangay:        r.barangay,
+                  seed_source:     r.seed_source,
+                  seed_dist_kg:    r.seed_distributed_kg,
+                  prod_seed_equiv: r.productive_equiv_kg,
+                  yield_gap_equiv: r.yield_gap_equiv_kg,
+                  yield_ratio:     r.utilization_pct > 0 ? r.utilization_pct / 100 : 0,
+                  util_pct:        r.utilization_pct,
+                }));
+                const totalSeedPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+                const paginatedRows  = rows.slice((seedPage - 1) * PAGE_SIZE, seedPage * PAGE_SIZE);
 
-              return (
-                <div style={{ padding: '1.25rem', backgroundColor: '#f8fafc' }}>
-                  <p style={{ margin: '0 0 0.625rem', fontSize: '0.7rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Seed productivity insight</p>
-                  {seedTotals.map(s => (
-                    <div key={s.k} style={{ marginBottom: '0.375rem', fontSize: '0.8rem', color: '#374151', lineHeight: 1.6 }}>
-                      <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', backgroundColor: SEED_CFG[s.k].color, marginRight: '0.5rem', verticalAlign: 'middle' }} />
-                      <strong>{s.label}</strong> distribution totaled {fmtNum(s.dist, 1)} kg. Based on harvest performance, approximately{' '}
-                      <strong style={{ color: '#15803d' }}>{fmtNum(s.prod, 1)} kg</strong> equivalent seed productivity was realized.
-                      {s.gap > 0 && <> An estimated <strong style={{ color: '#b45309' }}>{fmtNum(s.gap, 1)} kg</strong> seed-equivalent production potential was not achieved.</>}
+                if (!rows.length) return (
+                  <p style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>
+                    No seed productivity data available.
+                  </p>
+                );
+
+                return (
+                  <>
+                    <div style={{ overflowX: 'auto', borderRadius: '0.875rem', border: '1px solid #e2e8f0' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: 700 }}>
+                      <thead>
+                        <tr style={{ backgroundColor: '#f8fafc' }}>
+                          {[
+                            { label: 'Farmer', align: 'left' },
+                            { label: 'Seed Type', align: 'left' },
+                            { label: 'Seed Distributed', align: 'right' },
+                            { label: 'Productive Equivalent', align: 'right' },
+                            { label: 'Yield Gap Equivalent', align: 'right' },
+                            { label: 'Yield %', align: 'right' },
+                            { label: 'Status', align: 'left' },
+                          ].map(h => (
+                            <th key={h.label} style={{
+                              padding: '0.625rem 0.875rem',
+                              fontSize: '0.62rem', fontWeight: 700,
+                              color: '#94a3b8', textTransform: 'uppercase',
+                              letterSpacing: '0.06em',
+                              borderBottom: '1px solid #e2e8f0',
+                              textAlign: h.align, whiteSpace: 'nowrap',
+                            }}>
+                              {h.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedRows.map((row, idx) => {
+                          const cfg = SEED_CFG[row.seed_source] || SEED_CFG.OWN_SEED;
+                          const tier = getUtilTier(row.util_pct);
+                          return (
+                            <tr key={row.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
+                              <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+                                <p style={{ margin: 0, fontWeight: 700, color: '#0f172a' }}>{row.farmer_name}</p>
+                                {row.barangay && <p style={{ margin: 0, fontSize: '0.67rem', color: '#94a3b8' }}>Brgy. {row.barangay}</p>}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+                                <span style={{ backgroundColor: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.62rem', fontWeight: 700 }}>
+                                  {cfg.label.replace(' seeds', '')}
+                                </span>
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', color: '#374151', borderBottom: '1px solid #f3f4f6' }}>
+                                {fmtNum(row.seed_dist_kg, 1)} kg
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', fontWeight: 700, color: '#15803d', borderBottom: '1px solid #f3f4f6' }}>
+                                {fmtNum(row.prod_seed_equiv, 1)} kg
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', fontWeight: 700, borderBottom: '1px solid #f3f4f6', color: row.yield_gap_equiv > 0 ? '#b45309' : '#15803d' }}>
+                                {fmtNum(row.yield_gap_equiv, 1)} kg
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', textAlign: 'right', fontWeight: 800, color: tier.color, borderBottom: '1px solid #f3f4f6' }}>
+                                {row.util_pct !== null ? `${fmtNum(row.util_pct, 1)}%` : '—'}
+                              </td>
+                              <td style={{ padding: '0.7rem 0.875rem', borderBottom: '1px solid #f3f4f6' }}>
+                                <UtilBadge pct={row.util_pct} />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    </div>
+
+                    {totalSeedPages > 1 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', marginTop: '0.875rem', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          onClick={() => setSeedPage(p => Math.max(1, p - 1))}
+                          disabled={seedPage === 1}
+                          style={{ padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', backgroundColor: 'white', cursor: seedPage === 1 ? 'not-allowed' : 'pointer', fontSize: '0.78rem', color: '#374151', opacity: seedPage === 1 ? 0.4 : 1 }}>
+                          Prev
+                        </button>
+                        <button
+                          onClick={() => setSeedPage(p => Math.min(totalSeedPages, p + 1))}
+                          disabled={seedPage === totalSeedPages}
+                          style={{ padding: '0.375rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.5rem', backgroundColor: 'white', cursor: seedPage === totalSeedPages ? 'not-allowed' : 'pointer', fontSize: '0.78rem', color: '#374151', opacity: seedPage === totalSeedPages ? 0.4 : 1 }}>
+                          Next
+                        </button>
+                      </div>
+                      <span style={{ color: '#475569', fontSize: '0.78rem' }}>
+                        Page {seedPage} of {totalSeedPages} · {rows.length} records
+                      </span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+
+          {/* Production Insights — pinakababa ng analytics tab */}
+          {records.length > 0 && (() => {
+            const totalMT    = records.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
+            const totalArea  = records.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
+            const avgYield   = totalArea > 0 ? totalMT / totalArea : 0;
+            const allUtils   = records.map(r => computeUtil(r)).filter(v => v !== null);
+            const avgUtil    = allUtils.length > 0 ? allUtils.reduce((a, b) => a + b, 0) / allUtils.length : null;
+            const belowCount = records.filter(r => { const u = computeUtil(r); return u !== null && u < 80; }).length;
+            const exceeded   = records.filter(r => { const u = computeUtil(r); return u !== null && u > 100; }).length;
+            const critical   = records.filter(r => { const u = computeUtil(r); return u !== null && u < 50; }).length;
+
+            const seedYields = SEED_KEYS.map(k => {
+              const g    = records.filter(r => r.seed_source === k);
+              const area = g.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
+              const mt   = g.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
+              return { k, label: SEED_CFG[k].label, avg: area > 0 ? mt / area : 0, count: g.length };
+            }).filter(s => s.count > 0).sort((a, b) => b.avg - a.avg);
+
+            const totalGap = records.reduce((s, r) => {
+              const m = computeMetrics(r);
+              return s + Math.max(0, m.expected_kg - m.harvest_kg);
+            }, 0);
+
+            const insightItems = [
+              seedYields[0] && {
+                color: SEED_CFG[seedYields[0].k].color,
+                text: `${seedYields[0].label} recorded the highest average yield at ${fmtNum(seedYields[0].avg)} t/ha.`,
+              },
+              avgYield > 0 && {
+                color: '#2563eb',
+                text: `Average yield reached ${fmtNum(avgYield)} t/ha across all seed types.`,
+              },
+              belowCount > 0 && {
+                color: '#b45309',
+                text: `${belowCount} farmer${belowCount !== 1 ? 's' : ''} ${belowCount !== 1 ? 'are' : 'is'} below target (below 80% achievement).`,
+              },
+              exceeded > 0 && {
+                color: '#166534',
+                text: `${exceeded} farmer${exceeded !== 1 ? 's' : ''} exceeded the target yield — classified as Exceeded Target.`,
+              },
+              critical > 0 && {
+                color: '#b91c1c',
+                text: `${critical} farmer${critical !== 1 ? 's' : ''} classified as Critical. Immediate AT field visit recommended.`,
+              },
+              avgUtil !== null && {
+                color: getUtilTier(avgUtil).color,
+                text: `Overall achievement rate is ${fmtNum(avgUtil, 1)}% — rated as ${getUtilTier(avgUtil).key}.`,
+              },
+              totalMT > 0 && {
+                color: '#0369a1',
+                text: `Total production reached ${fmtNum(totalMT)} MT${selectedPoll?.season && selectedPoll?.year ? ` for ${selectedPoll.season === 'DRY' ? 'Dry' : 'Wet'} Season ${selectedPoll.year}` : ''}.`,
+              },
+              totalGap > 0 && {
+                color: '#b45309',
+                text: `Seasonal yield gap reached ${fmtNum(totalGap, 0)} kg — potential production not yet realized.`,
+              },
+            ].filter(Boolean);
+
+            return (
+              <div style={{ backgroundColor: '#f8fafc', borderRadius: '1rem', border: '1px solid #e2e8f0', padding: '1.25rem' }}>
+                <p style={{ margin: '0 0 0.875rem', fontSize: '0.72rem', fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  Production Insights
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {insightItems.map((ins, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', fontSize: '0.82rem', color: '#374151', lineHeight: 1.6 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: ins.color, display: 'inline-block', marginTop: '0.45rem', flexShrink: 0 }} />
+                      <span>{ins.text}</span>
                     </div>
                   ))}
                 </div>
-              );
-            })()}
-          </div>
-
-          {/* Auto Insights */}
-          <ProductionInsights
-            records={records}
-            computeUtil={computeUtil}
-            computeMetrics={computeMetrics}
-            season={selectedPoll?.season}
-            year={selectedPoll?.year}
-          />
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>

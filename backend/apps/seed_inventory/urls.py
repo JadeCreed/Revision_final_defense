@@ -9,6 +9,9 @@ from .views import (
     confirm_pickup_view,
     brgy_pending_count_view,
     brgy_beneficiary_allocation_view,
+    brgy_my_seed_allocation_view,
+    brgy_schedule_notification_view,
+    brgy_confirm_allocation_view,
 )
 
 urlpatterns = [
@@ -26,4 +29,7 @@ urlpatterns = [
 
     # Beneficiary allocation cards
     path('beneficiary-allocations/',                    brgy_beneficiary_allocation_view),
+    path('my-seed-allocation/',                         brgy_my_seed_allocation_view),
+    path('schedule-notifications/',                     brgy_schedule_notification_view),
+    path('confirm-allocation/',                         brgy_confirm_allocation_view),
 ]

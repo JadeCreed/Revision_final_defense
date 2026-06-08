@@ -86,7 +86,32 @@ class CropPhaseAnalyticsView(APIView):
         latest_records = list(latest_map.values())
 
         # ── KPIs ──────────────────────────────────────────────
-        total_farmers = len(set(rec.farmer_id for rec in latest_records))
+        # total_farmers = farmers with CropMonitoringRecord (AT-encoded phases)
+        # PLUS farmers who received seeds but not yet encoded by AT
+        monitored_farmer_ids = set(rec.farmer_id for rec in latest_records)
+
+        dist_farmer_qs = DistributionEntry.objects.filter(
+            batch__status='APPROVED',
+            date_received__isnull=False,
+        )
+        if poll:
+            dist_farmer_qs = dist_farmer_qs.filter(
+                batch__event__season=poll.season,
+                batch__event__year=poll.year,
+            )
+        if seed_filter and seed_filter in SEED_LABELS:
+            if seed_filter == 'HYBRID':
+                dist_farmer_qs = dist_farmer_qs.filter(
+                    batch__event__seed_type__name__icontains='hybrid'
+                )
+            elif seed_filter == 'INBRED':
+                dist_farmer_qs = dist_farmer_qs.filter(
+                    batch__event__seed_type__name__icontains='inbred'
+                )
+
+        distributed_farmer_ids = set(dist_farmer_qs.values_list('farmer_id', flat=True))
+        all_season_farmer_ids = monitored_farmer_ids | distributed_farmer_ids
+        total_farmers = len(all_season_farmer_ids)
         total_area    = sum(
             float(rec.area_monitored_ha or 0)
             for rec in latest_records
@@ -114,7 +139,7 @@ class CropPhaseAnalyticsView(APIView):
         if season == 'WET':
             season_start = datetime.date(yr, 6, 1)
         else:
-            season_start = datetime.date(yr, 11, 1)
+            season_start = datetime.date(yr - 1, 11, 1)
 
         def build_std_windows(seed_key):
             phases  = SEED_PHASES.get(seed_key, [])
@@ -154,13 +179,37 @@ class CropPhaseAnalyticsView(APIView):
                 std_end_iso   = win['end'].isoformat()
                 std_days_val  = win['days']
 
-                # Use ALL records for this phase (historical).
-                # Pick the earliest date per farmer for this phase.
-                all_phase_qs = seed_all.filter(crop_phase=phase_key)
-                farmer_phase_dates = {}
-                for rec in all_phase_qs.order_by('date_observed'):
-                    if rec.farmer_id not in farmer_phase_dates:
-                        farmer_phase_dates[rec.farmer_id] = rec.date_observed
+                if phase_key == 'DISTRIBUTION':
+                    # DISTRIBUTION = from DistributionEntry (date_received)
+                    # AT does not encode this — Brgy President does via distribution
+                    dist_phase_qs = DistributionEntry.objects.filter(
+                        batch__status='APPROVED',
+                        date_received__isnull=False,
+                    )
+                    if seed_key == 'HYBRID':
+                        dist_phase_qs = dist_phase_qs.filter(
+                            batch__event__seed_type__name__icontains='hybrid'
+                        )
+                    else:
+                        dist_phase_qs = dist_phase_qs.filter(
+                            batch__event__seed_type__name__icontains='inbred'
+                        )
+                    if poll:
+                        dist_phase_qs = dist_phase_qs.filter(
+                            batch__event__season=poll.season,
+                            batch__event__year=poll.year,
+                        )
+                    farmer_phase_dates = {}
+                    for entry in dist_phase_qs.order_by('date_received'):
+                        if entry.farmer_id not in farmer_phase_dates:
+                            farmer_phase_dates[entry.farmer_id] = entry.date_received
+                else:
+                    # All other phases — from CropMonitoringRecord (AT encodes)
+                    all_phase_qs = seed_all.filter(crop_phase=phase_key)
+                    farmer_phase_dates = {}
+                    for rec in all_phase_qs.order_by('date_observed'):
+                        if rec.farmer_id not in farmer_phase_dates:
+                            farmer_phase_dates[rec.farmer_id] = rec.date_observed
 
                 total_in_phase = len(farmer_phase_dates)
 
@@ -246,12 +295,12 @@ class CropPhaseAnalyticsView(APIView):
             ]
         else:
             timeline_months = [
-                {'month': 11, 'label': 'Nov', 'year': yr},
-                {'month': 12, 'label': 'Dec', 'year': yr},
-                {'month': 1, 'label': 'Jan', 'year': yr + 1},
-                {'month': 2, 'label': 'Feb', 'year': yr + 1},
-                {'month': 3, 'label': 'Mar', 'year': yr + 1},
-                {'month': 4, 'label': 'Apr', 'year': yr + 1},
+                {'month': 11, 'label': 'Nov', 'year': yr - 1},
+                {'month': 12, 'label': 'Dec', 'year': yr - 1},
+                {'month': 1,  'label': 'Jan', 'year': yr},
+                {'month': 2,  'label': 'Feb', 'year': yr},
+                {'month': 3,  'label': 'Mar', 'year': yr},
+                {'month': 4,  'label': 'Apr', 'year': yr},
             ]
 
         # ── DISTRIBUTION DATES ────────────────────────────────
@@ -260,6 +309,7 @@ class CropPhaseAnalyticsView(APIView):
             dist_qs = DistributionEntry.objects.filter(
                 batch__status='APPROVED',
                 date_received__isnull=False,
+                qty_bags__isnull=False,
             )
             if seed_key == 'HYBRID':
                 dist_qs = dist_qs.filter(batch__event__seed_type__name__icontains='hybrid')

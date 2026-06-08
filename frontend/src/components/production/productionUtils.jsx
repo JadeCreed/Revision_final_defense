@@ -44,12 +44,14 @@ export const computeMetrics = (rec) => {
   const yield_t_ha = area > 0 ? harvest_mt / area : 0;
   const expected_kg = area * target;
   const util_pct   = expected_kg > 0 ? (harvest_kg / expected_kg) * 100 : null;
-  // Seed productivity analysis
-  const SEEDING_DENSITY = { HYBRID: 15, INBRED: 40, OWN_SEED: 50 };
-  const density    = SEEDING_DENSITY[seed] || 15;
-  const seed_dist_kg = area * density;
-  const prod_seed_equiv = expected_kg > 0 ? (harvest_kg / expected_kg) * seed_dist_kg : 0;
-  const yield_gap_equiv = seed_dist_kg - prod_seed_equiv;
+  // Seed productivity — actual distribution received (bags × kg per bag)
+  const SEED_BAG_KG  = { HYBRID: 15, INBRED: 20, OWN_SEED: 0 };
+  const bagsReceived = parseFloat(rec.seed_bags_received) || 0;
+  const seed_dist_kg = bagsReceived * (SEED_BAG_KG[seed] || 0);
+  const prod_seed_equiv = (seed_dist_kg > 0 && expected_kg > 0)
+    ? (harvest_kg / expected_kg) * seed_dist_kg
+    : 0;
+  const yield_gap_equiv = Math.max(0, seed_dist_kg - prod_seed_equiv);
   return { harvest_kg, harvest_mt, yield_t_ha, expected_kg, util_pct, seed_dist_kg, prod_seed_equiv, yield_gap_equiv };
 };
 

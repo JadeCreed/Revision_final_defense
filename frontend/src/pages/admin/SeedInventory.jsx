@@ -1103,9 +1103,15 @@ export default function SeedInventory() {
                     <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0 }}>Scheduled seed variety deliveries</p>
                   </div>
                 </div>
-                <span style={{ fontSize: '0.72rem', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '0.25rem 0.75rem', borderRadius: '999px', fontWeight: 600 }}>
-                  {schedules.length} program{schedules.length !== 1 ? 's' : ''}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <button onClick={openHistory}
+                    style={{ padding: '0.4rem 0.75rem', backgroundColor: 'white', color: GREEN.primary, border: `1.5px solid ${GREEN.border}`, borderRadius: '999px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                    <History size={13} /> View History
+                  </button>
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '0.25rem 0.75rem', borderRadius: '999px', fontWeight: 600 }}>
+                    {schedules.length} program{schedules.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -1154,12 +1160,7 @@ export default function SeedInventory() {
                 <h2 style={{ fontWeight: 800, fontSize: '1.25rem', margin: 0 }}>{selected.seed_type_name}</h2>
                 {selected.variety_name && <p style={{ opacity: 0.8, fontSize: '0.8rem', margin: '0.25rem 0 0' }}>{selected.variety_name}</p>}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button onClick={e => { e.stopPropagation(); openHistory(); }}
-                  style={{ padding: '0.5rem 0.875rem', backgroundColor: 'rgba(255,255,255,0.2)', color: 'white', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '0.625rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <History size={13} /> View History
-                </button>
-              </div>
+              <div />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem', marginTop: '1.25rem' }}>
               {[
@@ -1243,6 +1244,21 @@ export default function SeedInventory() {
                               </div>
                               <div style={{ minWidth: 0 }}>
                                 <p style={{ fontWeight: 800, fontSize: '0.95rem', color: '#1a1a1a', margin: 0 }}>Brgy. {card.barangay}</p>
+                                {card.alloc_status && (
+                                  <span style={{
+                                    display: 'inline-block',
+                                    marginTop: '0.2rem',
+                                    padding: '0.15rem 0.5rem',
+                                    borderRadius: '999px',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 700,
+                                    backgroundColor: card.alloc_status === 'CONFIRMED' ? '#dcfce7' : '#fef9c3',
+                                    color: card.alloc_status === 'CONFIRMED' ? '#166534' : '#854d0e',
+                                    border: `1px solid ${card.alloc_status === 'CONFIRMED' ? '#bbf7d0' : '#fde68a'}`,
+                                  }}>
+                                    {card.alloc_status === 'CONFIRMED' ? '✓ Confirmed' : '⏳ Pending'}
+                                  </span>
+                                )}
                                 <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
                                   <span style={{ backgroundColor: card.season === 'WET' ? '#eff6ff' : '#fef9c3', color: card.season === 'WET' ? '#1e40af' : '#854d0e', border: `1px solid ${card.season === 'WET' ? '#bfdbfe' : '#fde68a'}`, padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700 }}>
                                     {card.season === 'WET' ? '' : ''} {card.season_display}
@@ -1326,7 +1342,7 @@ export default function SeedInventory() {
       )}
 
       {/* ══ HISTORY VIEW ══ */}
-      {view === 'history' && selected && (
+      {view === 'history' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
             <h2 style={{ fontWeight: 800, fontSize: '1rem', margin: '0 0 0.25rem' }}>Allocation History</h2>

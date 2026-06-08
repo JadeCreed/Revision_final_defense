@@ -10,7 +10,7 @@
 // Only <Outlet /> (the page content) changes on route change.
 // ============================================================
 
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate  } from 'react-router-dom';
 import { Bell, Sprout, CalendarDays } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import Sidebar from '../components/navigation/Sidebar';
@@ -18,6 +18,7 @@ import BottomNav from '../components/navigation/BottomNav';
 import { useAuth } from '../auth/AuthContext';
 import { ROLE_LABELS } from '../components/navigation/MenuConfig';
 import { getGisActivePoll } from '../api/axios';
+
 
 const SEASON_CONFIG = {
   OPEN:   { bg: '#f0fdf4', border: '#bbf7d0', iconBg: '#dcfce7', dot: '#16a34a', text: '#166534' },
@@ -63,6 +64,7 @@ const ActiveSeasonBadge = ({ poll, loading }) => {
 
 const DashboardLayout = () => {
   const { firstName, lastName, role } = useAuth();
+  const navigate = useNavigate();
   const roleLabel = ROLE_LABELS[role] || role;
   const [activePoll, setActivePoll] = useState(null);
   const [pollLoading, setPollLoading] = useState(true);
@@ -130,7 +132,7 @@ const DashboardLayout = () => {
           {/* Profile section: Avatar + Name + Role */}
             <div
               className="profile-area"
-              onClick={() => alert('Profile settings coming soon!')} // 👤 replace with dropdown later
+              onClick={() => navigate('/admin/profile')}
               title="View profile"
             >
             {/* Avatar circle — replace with <img> when you have profile photos */}

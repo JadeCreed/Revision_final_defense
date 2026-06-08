@@ -1527,3 +1527,51 @@ class AdminCancelResetRequestView(APIView):
         # Clear the reset request flag
         User.objects.filter(pk=user.pk).update(password_reset_requested=False,password_reset_requested_at=None)
         return Response({"message": f"Reset request for {user.first_name} {user.last_name} cancelled"})
+    
+class BPProfileUpdateView(APIView):
+    permission_classes = [IsAuthenticated, IsBPUser]
+
+    def get(self, request):
+        return Response({
+            'first_name':     request.user.first_name,
+            'last_name':      request.user.last_name,
+            'email':          request.user.email,
+            'contact_number': request.user.contact_number,
+            'barangay':       request.user.barangay,
+        })
+
+    def put(self, request):
+        user = request.user
+        allowed = ['first_name', 'last_name', 'email', 'contact_number']
+        for field in allowed:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+        try:
+            user.save()
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+        return Response({'message': 'Profile updated successfully.'})
+    
+
+class AdminProfileUpdateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        return Response({
+            'first_name':     request.user.first_name,
+            'last_name':      request.user.last_name,
+            'email':          request.user.email,
+            'contact_number': request.user.contact_number,
+        })
+
+    def put(self, request):
+        user = request.user
+        allowed = ['first_name', 'last_name', 'email', 'contact_number']
+        for field in allowed:
+            if field in request.data:
+                setattr(user, field, request.data[field])
+        try:
+            user.save()
+        except Exception as e:
+            return Response({'error': str(e)}, status=400)
+        return Response({'message': 'Profile updated successfully.'})

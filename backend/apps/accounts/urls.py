@@ -34,6 +34,8 @@ from .views import (
     AdminArchiveListView,
     AvailableBarangaysView,
     AdminCancelResetRequestView,
+    BPProfileUpdateView,
+    AdminProfileUpdateView,
 
 )
 
@@ -67,7 +69,9 @@ urlpatterns = [
 
     path('barangays/available/', AvailableBarangaysView.as_view(), name='available-barangays'),
 
-
+    path('brgy/profile/', BPProfileUpdateView.as_view(), name='brgy-profile-update'),
+    path('admin/profile/', AdminProfileUpdateView.as_view(), name='admin-profile'),
+    
     path('admin-reset-request/', AdminResetRequestView.as_view(), name='admin-reset-request'),
     path('admin/users/<int:user_id>/cancel-reset-request/', AdminCancelResetRequestView.as_view(), name='cancel-reset-request'),
     path('admin-create-user/', AdminCreateUserView.as_view()),

@@ -45,13 +45,17 @@ def utilization_pct(record):
 
 
 def get_tier_label(pct):
-    if pct is None:       return 'N/A'
-    if pct >= 200:        return 'Master Farmer'
-    if pct >= 150:        return 'Exceptional'
-    if pct >= 100:        return 'Excellent'
-    if pct >= 75:         return 'Good'
-    if pct >= 50:         return 'Below target'
-    return 'Needs attention'
+    if pct is None:
+        return 'N/A'
+    if pct > 100:
+        return 'Exceeded Target'
+    if pct >= 80:
+        return 'Achieved Target'
+    if pct >= 70:
+        return 'Near Target'
+    if pct >= 50:
+        return 'Below Target'
+    return 'Critical'
 
 
 class ProductionSummaryView(APIView):
@@ -257,13 +261,12 @@ class ProductionGISSummaryView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUserRole]
 
     GIS_COLORS = {
-        'Master Farmer':  '#15803d',
-        'Exceptional':    '#22c55e',
-        'Excellent':      '#4ade80',
-        'Good':           '#f59e0b',
-        'Below target':   '#f97316',
-        'Needs attention':'#dc2626',
-        'N/A':            '#1E293B',
+        'Exceeded Target': '#166534',
+        'Achieved Target': '#15803d',
+        'Near Target':     '#0369a1',
+        'Below Target':    '#b45309',
+        'Critical':        '#b91c1c',
+        'N/A':             '#1E293B',
     }
 
     def get(self, request):
@@ -299,6 +302,80 @@ class ProductionGISSummaryView(APIView):
                 'color':               self.GIS_COLORS.get(tier, '#1E293B'),
             })
 
+        return Response(result)
+
+
+class SeedProductivityView(APIView):
+    """
+    GET /api/production/seed-productivity/
+    Per-farmer seed productivity analytics.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    SEED_BAG_KG = {
+        'HYBRID': 15,
+        'INBRED': 20,
+    }
+
+    def get(self, request):
+        poll_id = request.query_params.get('poll_id')
+        qs = HarvestRecord.objects.select_related('farmer').exclude(seed_source='OWN_SEED')
+
+        if poll_id:
+            try:
+                poll = Poll.objects.get(id=poll_id)
+                if poll.season == 'WET':
+                    qs = qs.filter(
+                        harvest_date__year=poll.year,
+                        harvest_date__month__gte=6,
+                        harvest_date__month__lte=10,
+                    )
+                elif poll.season == 'DRY':
+                    qs = qs.filter(
+                        Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
+                        Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
+                    )
+            except Poll.DoesNotExist:
+                pass
+
+        result = []
+        for r in qs:
+            util = utilization_pct(r)
+            if util is None:
+                continue
+
+            # Actual seed received from Distribution menu
+            bags_received = float(r.seed_bags_received or 0)
+            kg_per_bag = self.SEED_BAG_KG.get(r.seed_source, 0)
+            seed_distributed = bags_received * kg_per_bag
+
+            # Skip if there is no actual distribution data
+            if seed_distributed == 0:
+                continue
+
+            productive_equiv = seed_distributed * (util / 100)
+            yield_gap_equiv = max(0, seed_distributed - productive_equiv)
+
+            area = float(r.harvest_area_ha or 0)
+
+            farmer = r.farmer
+            name = f"{farmer.last_name}, {farmer.first_name}" if farmer else str(r.farmer_id)
+
+            result.append({
+                'harvest_id': r.id,
+                'farmer_name': name,
+                'barangay': getattr(farmer, 'barangay', '') if farmer else '',
+                'seed_source': r.seed_source,
+                'seed_label': SEED_LABELS.get(r.seed_source, r.seed_source),
+                'area_ha': round(area, 2),
+                'seed_distributed_kg': round(seed_distributed, 2),
+                'productive_equiv_kg': round(productive_equiv, 2),
+                'yield_gap_equiv_kg': round(yield_gap_equiv, 2),
+                'utilization_pct': round(util, 1),
+                'tier': get_tier_label(util),
+            })
+
+        result.sort(key=lambda x: x['yield_gap_equiv_kg'], reverse=True)
         return Response(result)
 
 

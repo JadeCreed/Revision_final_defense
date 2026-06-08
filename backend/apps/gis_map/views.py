@@ -150,17 +150,10 @@ class GISPlotsView(APIView):
             )
 
             if poll_year and poll_season:
-                if poll_season == 'WET':
-                    dist_entries = dist_entries.filter(
-                        batch__approved_at__year=poll_year,
-                        batch__approved_at__month__gte=5,
-                        batch__approved_at__month__lte=10,
-                    )
-                elif poll_season == 'DRY':
-                    dist_entries = dist_entries.filter(
-                        Q(batch__approved_at__year=poll_year - 1, batch__approved_at__month__gte=11) |
-                        Q(batch__approved_at__year=poll_year, batch__approved_at__month__lte=4)
-                    )
+                dist_entries = dist_entries.filter(
+                    batch__event__season=poll_season,
+                    batch__event__year=poll_year,
+                )
             if barangay_filter:
                 dist_entries = dist_entries.filter(farmer__barangay__iexact=barangay_filter)
 
@@ -396,18 +389,10 @@ class GISMapSummaryView(APIView):
         def distribution_season_filter(qs):
             if not poll_year or not poll_season:
                 return qs
-            if poll_season == 'WET':
-                return qs.filter(
-                    batch__approved_at__year=poll_year,
-                    batch__approved_at__month__gte=5,
-                    batch__approved_at__month__lte=10,
-                )
-            if poll_season == 'DRY':
-                return qs.filter(
-                    Q(batch__approved_at__year=poll_year - 1, batch__approved_at__month__gte=11) |
-                    Q(batch__approved_at__year=poll_year, batch__approved_at__month__lte=4)
-                )
-            return qs
+            return qs.filter(
+                batch__event__season=poll_season,
+                batch__event__year=poll_year,
+            )
 
         try:
             # Unique farmers being monitored (regardless of seed source)

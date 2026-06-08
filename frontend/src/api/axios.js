@@ -189,6 +189,9 @@ export const getBrgyAllocations       = ()           => API.get('/inventory/my-a
 export const getBrgyPendingCount      = ()           => API.get('/inventory/my-allocations/pending-count/');
 export const confirmPickup            = (id)         => API.post(`/inventory/allocations/${id}/confirm/`);
 export const getBeneficiaryAllocations = (params = {}) => API.get('/inventory/beneficiary-allocations/', { params });
+export const getBrgyMyAllocation       = ()           => API.get('/inventory/my-seed-allocation/');
+export const getBrgyScheduleNotifications = () => API.get('/inventory/schedule-notifications/');
+export const brgyConfirmAllocation    = (data)       => API.post('/inventory/confirm-allocation/', data);
 
 // ── REPORTS ──
 // ── REPORTS ── (replace existing report calls)
@@ -240,6 +243,7 @@ export const getProductionBySeedType  = ()            => API.get('/production/by
 export const getProductionByBarangay  = ()            => API.get('/production/by-barangay/');
 export const getProductionLowPerformers = (threshold = 100) =>
   API.get(`/production/low-performers/?threshold=${threshold}`);
-export const getProductionGISSummary  = ()            => API.get('/production/gis-summary/');
+export const getProductionGISSummary    = ()            => API.get('/production/gis-summary/');
+export const getSeedProductivity        = (params = {}) => API.get('/production/seed-productivity/', { params });
 
 export default API;

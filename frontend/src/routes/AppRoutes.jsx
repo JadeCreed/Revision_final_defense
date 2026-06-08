@@ -36,6 +36,8 @@ import SystemUsers       from '../pages/admin/users/SystemUsers';
 import ResetRequests     from '../pages/admin/users/ResetRequests';
 import Archive           from '../pages/admin/users/Archive';
 
+import AdminProfile from '../pages/admin/AdminProfile';
+
 
 // ── FARMER pages ──
 import FarmerDashboard      from '../pages/farmer/FarmerDashboard';
@@ -63,6 +65,8 @@ import BrgyCropPhase     from '../pages/brgy/BrgyCropPhase';
 import BrgyAnnouncements from '../pages/brgy/BrgyAnnouncements';
 import BrgyReports       from '../pages/brgy/BrgyReports';
 import BrgyPoll          from '../pages/brgy/BrgyPoll';
+
+import BPProfile    from '../pages/brgy/BPProfile';
 
 // ── ANNOUNCEMENTS(SHARED PAGES) ──
 import AnnouncementDetail   from '../components/announcements/AnnouncementDetail';
@@ -108,6 +112,7 @@ const AppRoutes = () => (
           <Route path="/admin/users/officials"         element={<SystemUsers />} />
           <Route path="/admin/users/reset-requests"    element={<ResetRequests />} />
           <Route path="/admin/users/archive"           element={<Archive />} />
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
       </Route>
 
@@ -148,9 +153,9 @@ const AppRoutes = () => (
         <Route path="/brgy/crop-phase"           element={<BrgyCropPhase />} />
         <Route path="/brgy/announcements"        element={<BrgyAnnouncements />} />
         <Route path="/brgy/reports"              element={<BrgyReports />} />
-        <Route path="/brgy/profile"              element={<FarmerProfile />} />
         <Route path="/brgy/announcements/:id"    element={<AnnouncementDetail />} />
         <Route path="/brgy/poll"                 element={<BrgyPoll />} /> 
+        <Route path="/brgy/profile" element={<BPProfile />} />
         
       </Route>
     </Route>

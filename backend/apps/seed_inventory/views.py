@@ -301,10 +301,224 @@ def brgy_beneficiary_allocation_view(request):
                 'batch_number': batch.batch_number,
             })
 
+    from apps.seed_poll.models import FinalSeed
+    final_seed_obj = FinalSeed.objects.order_by('-created_at').first()
+
     for brgy in brgy_map.values():
         brgy['total_hectares'] = round(brgy['total_hectares'], 2)
 
+        if final_seed_obj:
+            existing_alloc = BrgyAllocation.objects.filter(
+                barangay=brgy['barangay'],
+                delivery__seed_type_id=brgy['seed_type_id'],
+                delivery__season=final_seed_obj.season,
+                delivery__year=final_seed_obj.year,
+            ).first()
+            brgy['alloc_status'] = existing_alloc.status if existing_alloc else 'PENDING'
+            brgy['alloc_id'] = existing_alloc.id if existing_alloc else None
+        else:
+            brgy['alloc_status'] = 'PENDING'
+            brgy['alloc_id'] = None
+
     return Response(list(brgy_map.values()))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsBPUser])
+def brgy_my_seed_allocation_view(request):
+    """
+    Auto-computes how many bags this barangay should receive based on
+    approved beneficiary hectares for each DELIVERED seed variety.
+    """
+    from apps.distribution.models import DistributionBatch
+    from apps.seed_poll.models import FinalSeed
+
+    barangay = request.user.barangay
+    if not barangay:
+        return Response([])
+
+    final_seed = FinalSeed.objects.order_by('-created_at').first()
+    if not final_seed:
+        return Response([])
+
+    season = final_seed.season
+    year = final_seed.year
+
+    delivered_deliveries = SeedDelivery.objects.filter(
+        season=season,
+        year=year,
+        status='DELIVERED',
+    ).select_related('seed_type', 'variety')
+
+    if not delivered_deliveries.exists():
+        return Response([])
+
+    result = []
+
+    for delivery in delivered_deliveries:
+        seed_type = delivery.seed_type
+        if not seed_type:
+            continue
+
+        seed_name = (seed_type.name or '').upper()
+        is_hybrid = 'HYBRID' in seed_name or seed_name in ('NRP', 'RFO')
+
+        batches = DistributionBatch.objects.filter(
+            status='APPROVED',
+            event__barangay=barangay,
+            event__season=season,
+            event__year=year,
+            event__seed_type=seed_type,
+        ).prefetch_related('entries')
+
+        if delivery.variety:
+            batches = batches.filter(
+                models.Q(event__variety=delivery.variety) |
+                models.Q(entries__variety=delivery.variety)
+            ).distinct()
+
+        if not batches.exists():
+            continue
+
+        total_ha = 0.0
+        farmer_count = 0
+
+        for batch in batches:
+            for entry in batch.entries.all():
+                ha = float(entry.farm_area_ha or 0) if is_hybrid else float(entry.area_planted or 0)
+                total_ha += ha
+                farmer_count += 1
+
+        if total_ha <= 0:
+            continue
+
+        allocated_bags = round(total_ha * 1) if is_hybrid else round(total_ha * 2)
+        existing_alloc = BrgyAllocation.objects.filter(
+            barangay=barangay,
+            delivery=delivery,
+        ).first()
+
+        result.append({
+            'delivery_id': delivery.id,
+            'seed_type_id': seed_type.id,
+            'seed_type_name': seed_type.name,
+            'variety_id': delivery.variety_id,
+            'variety_name': delivery.variety.name if delivery.variety else '',
+            'is_hybrid': is_hybrid,
+            'season': season,
+            'season_display': dict([('WET', 'Wet Season'), ('DRY', 'Dry Season')]).get(season, season),
+            'year': year,
+            'delivery_date': str(delivery.delivery_date),
+            'total_hectares': round(total_ha, 2),
+            'farmer_count': farmer_count,
+            'allocated_bags': allocated_bags,
+            'bag_weight_kg': 15 if is_hybrid else 20,
+            'alloc_status': existing_alloc.status if existing_alloc else 'PENDING',
+            'alloc_id': existing_alloc.id if existing_alloc else None,
+            'already_confirmed': existing_alloc.status == 'CONFIRMED' if existing_alloc else False,
+        })
+
+    return Response(result)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsBPUser])
+def brgy_confirm_allocation_view(request):
+    """Create/update BRGY allocation confirmation using the auto-computed bag count."""
+    barangay = request.user.barangay
+    delivery_id = request.data.get('delivery_id')
+    allocated_bags = request.data.get('allocated_bags')
+
+    if not all([barangay, delivery_id, allocated_bags is not None]):
+        return Response({'error': 'Missing required fields.'}, status=400)
+
+    delivery = get_object_or_404(SeedDelivery, pk=delivery_id, status='DELIVERED')
+
+    existing = BrgyAllocation.objects.filter(delivery=delivery, barangay=barangay).first()
+    if existing:
+        if existing.status == 'CONFIRMED':
+            return Response({'error': 'Already confirmed.'}, status=400)
+        existing.allocated_bags = int(allocated_bags)
+        existing.status = 'CONFIRMED'
+        existing.confirmed_by = request.user
+        existing.date_confirmed = timezone.now().date()
+        existing.save()
+        alloc = existing
+    else:
+        alloc = BrgyAllocation.objects.create(
+            delivery=delivery,
+            barangay=barangay,
+            allocated_bags=int(allocated_bags),
+            status='CONFIRMED',
+            confirmed_by=request.user,
+            date_confirmed=timezone.now().date(),
+            notes=f"Auto-confirmed by {request.user.get_full_name()} based on {allocated_bags} bags computed from beneficiary hectares.",
+        )
+
+    SeedDeliveryAudit.objects.create(
+        delivery=delivery,
+        allocation=alloc,
+        action='CONFIRMED',
+        performed_by=request.user,
+        details=(
+            f"Brgy. {barangay} confirmed receipt of {alloc.allocated_bags} bags "
+            f"({delivery.season} {delivery.year}) on {alloc.date_confirmed}."
+        )
+    )
+
+    return Response({
+        'id': alloc.id,
+        'barangay': alloc.barangay,
+        'allocated_bags': alloc.allocated_bags,
+        'status': alloc.status,
+        'date_confirmed': str(alloc.date_confirmed),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsBPUser])
+def brgy_schedule_notification_view(request):
+    """
+    Returns DELIVERED SeedDelivery records for the current season.
+    Triggered only after admin confirms delivery of a seed variety.
+    Used for Notif 2 (Confirm Received / allocated bags).
+    """
+    from apps.seed_poll.models import FinalSeed
+
+    barangay = request.user.barangay
+    if not barangay:
+        return Response([])
+
+    final_seed = FinalSeed.objects.order_by('-created_at').first()
+    if not final_seed:
+        return Response([])
+
+    season = final_seed.season
+    year = final_seed.year
+
+    deliveries = SeedDelivery.objects.filter(
+        season=season,
+        year=year,
+        status='DELIVERED',
+    ).select_related('seed_type', 'variety').order_by('-delivery_date')
+
+    result = []
+    for d in deliveries:
+        result.append({
+            'id': d.id,
+            'seed_type_id': d.seed_type_id,
+            'seed_type_name': d.seed_type.name if d.seed_type else '',
+            'variety_id': d.variety_id,
+            'variety_name': d.variety.name if d.variety else '',
+            'season': d.season,
+            'season_display': dict([('WET', 'Wet Season'), ('DRY', 'Dry Season')]).get(d.season, d.season),
+            'year': d.year,
+            'delivery_date': str(d.delivery_date),
+            'total_bags': d.total_bags,
+            'status': getattr(d, 'status', 'SCHEDULED'),
+        })
+
+    return Response(result)
 
 
 

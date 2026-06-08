@@ -263,6 +263,7 @@ const HybridPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, 
             ['Farm Area', entry.farm_area_ha ? `${entry.farm_area_ha} ha` : '—'],
             ['QTY (bags)', entry.qty_bags ?? '—'],
             ['Variety', entry.variety_name || '—'],
+            ['Date Received', entry.date_received || '—'],
           ].map(([label, value]) => (
             <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.5rem', padding: '0.5rem 0.75rem' }}>
               <p style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', margin: '0 0 0.125rem' }}>{label}</p>
@@ -280,8 +281,6 @@ const HybridPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, 
         <FileText size={18} color="#1e40af" />
         <span style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.95rem' }}>Hybrid (Region)</span>
       </div>
-
-      {/* Pre-filled from beneficiaries */}
       <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '0.875rem', marginBottom: '1.25rem' }}>
         <p style={{ fontWeight: 700, fontSize: '0.75rem', color: '#1e40af', margin: '0 0 0.625rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
           <CheckCircle size={13} /> From Beneficiaries
@@ -297,26 +296,36 @@ const HybridPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, 
           </div>
         </div>
       </div>
-
-      {/* QTY input */}
-      <div style={{ marginBottom: '1rem' }}>
-        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.3rem' }}>
-          QTY (bags) <span style={{ color: '#dc2626' }}>*</span>
-        </label>
-        {suggestedBags !== null && (
-          <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0 0 0.35rem' }}>
-            Suggested: {suggestedBags} bag{suggestedBags !== 1 ? 's' : ''} ({suggestedKg}kg) · {farmArea}ha
-          </p>
-        )}
-        <input type="number" min="1" value={form.qty_bags || ''} onChange={e => { setForm(p => ({ ...p, qty_bags: e.target.value })); setErrors(p => ({ ...p, qty_bags: '' })); }} placeholder={suggestedBags !== null ? `e.g. ${suggestedBags}` : 'Number of seed bags received'} style={{ ...inp(!!errors.qty_bags || exceedsMax), paddingRight: liveKg !== null ? '5.5rem' : '0.875rem' }} />
-        {liveKg !== null && <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{liveKg}kg</p>}
-        {errors.qty_bags && !exceedsMax && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.qty_bags}</p>}
-        {exceedsMax && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>Exceeds limit. Max {maxBags} bags ({maxBags * kgPerBag}kg) for {farmArea}ha.</p>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.3rem' }}>
+            QTY (bags) <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          {suggestedBags !== null && (
+            <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0 0 0.35rem' }}>
+              Suggested: {suggestedBags} bag{suggestedBags !== 1 ? 's' : ''} ({suggestedKg}kg) · {farmArea}ha
+            </p>
+          )}
+          <input type="number" min="1" value={form.qty_bags || ''} onChange={e => { setForm(p => ({ ...p, qty_bags: e.target.value })); setErrors(p => ({ ...p, qty_bags: '' })); }} placeholder={suggestedBags !== null ? `e.g. ${suggestedBags}` : 'Number of seed bags received'} style={{ ...inp(!!errors.qty_bags || exceedsMax), paddingRight: liveKg !== null ? '5.5rem' : '0.875rem' }} />
+          {liveKg !== null && <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0.25rem 0 0' }}>{liveKg}kg</p>}
+          {errors.qty_bags && !exceedsMax && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.qty_bags}</p>}
+          {exceedsMax && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>Exceeds limit. Max {maxBags} bags ({maxBags * kgPerBag}kg) for {farmArea}ha.</p>}
+        </div>
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.3rem' }}>
+            Date Received <span style={{ color: '#dc2626' }}>*</span>
+          </label>
+          <input type="date" value={form.date_received || ''} onChange={e => { setForm(p => ({ ...p, date_received: e.target.value })); setErrors(p => ({ ...p, date_received: '' })); }} style={inp(!!errors.date_received)} />
+          {errors.date_received && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_received}</p>}
+        </div>
+        <div style={{ backgroundColor: '#f9fafb', border: '1px dashed #d1d5db', borderRadius: '0.625rem', padding: '0.75rem' }}>
+          <p style={{ fontWeight: 600, fontSize: '0.72rem', color: '#9ca3af', margin: '0 0 0.125rem' }}>2025 DS YIELD</p>
+          <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: 0 }}>Harvest data will be encoded in Yield Encode after harvest.</p>
+        </div>
+        <button onClick={onSave} disabled={saving} style={{ width: '100%', padding: '0.75rem', backgroundColor: saving ? '#d1d5db' : '#1e40af', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+          <CheckCircle size={16} /> {saving ? 'Saving...' : 'Confirm Seed Distributed'}
+        </button>
       </div>
-
-      <button onClick={onSave} disabled={saving} style={{ width: '100%', padding: '0.75rem', backgroundColor: saving ? '#d1d5db' : '#1e40af', color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 700, fontSize: '0.875rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-        <CheckCircle size={16} /> {saving ? 'Saving...' : 'Confirm Seed Distributed'}
-      </button>
     </div>
   );
 };
@@ -352,6 +361,7 @@ const BrgyDistribution = () => {
   const [hybridErrors, setHybridErrors] = useState({});
   const [inbredSaving, setInbredSaving] = useState(false);
   const [hybridSaving, setHybridSaving] = useState(false);
+  const [activeDistTab, setActiveDistTab] = useState('inbred');
   const [confirmSnack, setConfirmSnack] = useState(null);
   const [pendingSave, setPendingSave] = useState(null);
 
@@ -436,6 +446,7 @@ const BrgyDistribution = () => {
     setSelectedFarmer(farmer);
     setFarmerDetailLoading(true);
     setView('farmer_detail');
+    setActiveDistTab('inbred');
     setInbredForm({});
     setHybridForm({});
     setInbredErrors({});
@@ -457,7 +468,10 @@ const BrgyDistribution = () => {
         });
       }
       if (hybrid) {
-        setHybridForm({ qty_bags: hybrid.qty_bags || '' });
+        setHybridForm({
+          qty_bags: hybrid.qty_bags || '',
+          date_received: hybrid.date_received || '',
+        });
       }
     } catch {
       showToast('error', 'Failed to load farmer distribution data.');
@@ -480,6 +494,7 @@ const BrgyDistribution = () => {
   const validateHybrid = () => {
     const errs = {};
     if (!hybridForm.qty_bags) errs.qty_bags = 'Required';
+    if (!hybridForm.date_received) errs.date_received = 'Required';
     return errs;
   };
 
@@ -557,7 +572,10 @@ const BrgyDistribution = () => {
       if (!entry) return;
       setHybridSaving(true);
       try {
-        await updateEntry(entry.entry_id, { qty_bags: Math.round(Number(hybridForm.qty_bags)) });
+        await updateEntry(entry.entry_id, {
+          qty_bags: Math.round(Number(hybridForm.qty_bags)),
+          date_received: hybridForm.date_received || null,
+        });
         showToast('success', 'Hybrid distribution data saved.');
         // ── Notify AT na nag-start na ng distribution ──
         try {
@@ -865,20 +883,35 @@ const BrgyDistribution = () => {
                 </div>
               </div>
 
-              {/* Two panels — responsive */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'row',
-                gap: '1rem',
-                flexWrap: 'wrap',
-              }}>
-                <style>{`
-                  @media (max-width: 640px) {
-                    .dist-panels { flex-direction: column !important; }
-                  }
-                `}</style>
-                <div className="dist-panels" style={{ display: 'flex', flexDirection: 'row', gap: '1rem', width: '100%', flexWrap: 'wrap' }}>
-                  {/* Inbred panel */}
+              {/* Tab UI — Inbred | Hybrid */}
+              <div style={{ width: '100%' }}>
+                <div style={{ display: 'flex', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb', marginBottom: '1rem', gap: '0.25rem' }}>
+                  {(() => {
+                    const inbredEntry = farmerDetail.seed_entries?.find(e => isInbred(e.seed_type_name));
+                    const hybridEntry = farmerDetail.seed_entries?.find(e => isHybrid(e.seed_type_name));
+                    const tabs = [];
+                    if (inbredEntry) tabs.push({ key: 'inbred', label: 'Inbred', color: GREEN.primary, encoded: inbredEntry?.is_distribution_encoded });
+                    if (hybridEntry) tabs.push({ key: 'hybrid', label: 'Hybrid', color: '#1e40af', encoded: hybridEntry?.is_distribution_encoded });
+                    if (tabs.length === 0) return null;
+                    return tabs.map(tab => (
+                      <button key={tab.key} onClick={() => setActiveDistTab(tab.key)}
+                        style={{
+                          flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem', border: 'none',
+                          backgroundColor: activeDistTab === tab.key ? 'white' : 'transparent',
+                          color: activeDistTab === tab.key ? tab.color : '#6b7280',
+                          fontWeight: activeDistTab === tab.key ? 700 : 400,
+                          cursor: 'pointer', fontSize: '0.85rem',
+                          boxShadow: activeDistTab === tab.key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none',
+                          transition: 'all 0.15s',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
+                        }}>
+                        {tab.label}
+                        {tab.encoded && <CheckCircle size={13} color={tab.color} />}
+                      </button>
+                    ));
+                  })()}
+                </div>
+                {activeDistTab === 'inbred' && (
                   <InbredPanel
                     entry={farmerDetail.seed_entries?.find(e => isInbred(e.seed_type_name))}
                     form={inbredForm}
@@ -889,7 +922,8 @@ const BrgyDistribution = () => {
                     onSave={handleSaveInbred}
                     inp={inp}
                   />
-                  {/* Hybrid panel */}
+                )}
+                {activeDistTab === 'hybrid' && (
                   <HybridPanel
                     entry={farmerDetail.seed_entries?.find(e => isHybrid(e.seed_type_name))}
                     form={hybridForm}
@@ -900,7 +934,7 @@ const BrgyDistribution = () => {
                     onSave={handleSaveHybrid}
                     inp={inp}
                   />
-                </div>
+                )}
               </div>
             </>
           ) : (

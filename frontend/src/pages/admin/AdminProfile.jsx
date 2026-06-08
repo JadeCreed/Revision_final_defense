@@ -1,16 +1,18 @@
-// src/pages/brgy/BPProfile.jsx
+// src/pages/admin/AdminProfile.jsx
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../../auth/AuthContext';
 import API from '../../api/axios';
 import {
-  User, Mail, Phone, MapPin, Lock,
+  User, Mail, Phone, Shield, Lock,
   CheckCircle, AlertCircle, Eye, EyeOff, Edit2, X,
 } from 'lucide-react';
 
-const BP_COLOR  = '#2d4d1a';
-const BP_LIGHT  = '#f0fdf4';
-const BP_BORDER = '#bbf7d0';
+import { Outlet, useNavigate } from 'react-router-dom';
+
+const AD_COLOR  = '#1a1a2e';
+const AD_LIGHT  = '#f8fafc';
+const AD_BORDER = '#e2e8f0';
+const AD_ACCENT = '#2d6a2d';
 
 const Toast = ({ toast }) => {
   if (!toast) return null;
@@ -18,7 +20,7 @@ const Toast = ({ toast }) => {
     <div style={{
       position: 'fixed', bottom: '1.5rem', left: '50%',
       transform: 'translateX(-50%)', zIndex: 600,
-      backgroundColor: toast.type === 'success' ? BP_COLOR : '#991b1b',
+      backgroundColor: toast.type === 'success' ? AD_ACCENT : '#991b1b',
       color: 'white', padding: '0.75rem 1.5rem',
       borderRadius: '0.875rem', fontWeight: 600,
       fontSize: '0.875rem', display: 'flex',
@@ -40,23 +42,23 @@ const inp = (hasErr = false) => ({
   fontFamily: 'inherit', backgroundColor: 'white',
 });
 
-const BPProfile = () => {
-  const [profile, setProfile]       = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [editingInfo, setEditingInfo]     = useState(false);
-  const [infoForm, setInfoForm]     = useState({
+const AdminProfile = () => {
+  const [profile, setProfile]           = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [editingInfo, setEditingInfo]   = useState(false);
+  const [infoForm, setInfoForm]         = useState({
     first_name: '', last_name: '', email: '', contact_number: '',
   });
-  const [infoErrors, setInfoErrors] = useState({});
-  const [savingInfo, setSavingInfo] = useState(false);
+  const [infoErrors, setInfoErrors]     = useState({});
+  const [savingInfo, setSavingInfo]     = useState(false);
   const [editingPassword, setEditingPassword] = useState(false);
-  const [pwForm, setPwForm]         = useState({
+  const [pwForm, setPwForm]             = useState({
     current_password: '', new_password: '', confirm_password: '',
   });
-  const [pwErrors, setPwErrors]     = useState({});
-  const [savingPw, setSavingPw]     = useState(false);
-  const [showPw, setShowPw]         = useState({ current: false, new: false, confirm: false });
-  const [toast, setToast]           = useState(null);
+  const [pwErrors, setPwErrors]         = useState({});
+  const [savingPw, setSavingPw]         = useState(false);
+  const [showPw, setShowPw]             = useState({ current: false, new: false, confirm: false });
+  const [toast, setToast]               = useState(null);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -66,7 +68,7 @@ const BPProfile = () => {
   const fetchProfile = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await API.get('/accounts/brgy/profile/');
+      const res = await API.get('/accounts/admin/profile/');
       setProfile(res.data);
       setInfoForm({
         first_name:     res.data.first_name     || '',
@@ -94,7 +96,7 @@ const BPProfile = () => {
 
     setSavingInfo(true);
     try {
-      await API.put('/accounts/brgy/profile/', {
+      await API.put('/accounts/admin/profile/', {
         first_name:     infoForm.first_name,
         last_name:      infoForm.last_name,
         email:          infoForm.email,
@@ -151,36 +153,37 @@ const BPProfile = () => {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <div style={{ width: 32, height: 32, border: `3px solid ${BP_BORDER}`, borderTopColor: BP_COLOR, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        <div style={{ width: 32, height: 32, border: '3px solid #e5e7eb', borderTopColor: AD_ACCENT, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '1.25rem', maxWidth: '600px', margin: '0 auto' }}>
+    <div style={{ padding: '2rem', maxWidth: '640px' }}>
       <Toast toast={toast} />
       <style>{`@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }`}</style>
 
       {/* Header */}
       <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>My Profile</h1>
-        <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: '0.25rem 0 0' }}>
-          Barangay President — AGRICE Lucban
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: 0 }}>My Profile</h1>
+        <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+          System Administrator — AGRICE Lucban
         </p>
       </div>
 
       {/* Avatar card */}
       <div style={{
-        backgroundColor: BP_COLOR, borderRadius: '1rem',
-        padding: '1.5rem', marginBottom: '1.25rem',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #2d4d1a 100%)',
+        borderRadius: '1rem', padding: '1.5rem', marginBottom: '1.25rem',
         display: 'flex', alignItems: 'center', gap: '1rem',
         animation: 'fadeIn 0.3s ease',
       }}>
         <div style={{
           width: 64, height: 64, borderRadius: '50%',
-          backgroundColor: 'rgba(255,255,255,0.2)',
+          backgroundColor: 'rgba(255,255,255,0.15)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '1.5rem', fontWeight: 800, color: 'white', flexShrink: 0,
+          border: '2px solid rgba(255,255,255,0.3)',
         }}>
           {initials || '?'}
         </div>
@@ -188,37 +191,35 @@ const BPProfile = () => {
           <p style={{ fontWeight: 800, fontSize: '1.1rem', color: 'white', margin: 0 }}>
             {infoForm.first_name} {infoForm.last_name}
           </p>
-          <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', margin: '0.25rem 0 0' }}>
-            Barangay President
-          </p>
-          {profile?.barangay && (
-            <p style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', margin: '0.25rem 0 0' }}>
-              Brgy. {profile.barangay}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
+            <Shield size={12} color="rgba(255,255,255,0.7)" />
+            <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', margin: 0 }}>
+              System Administrator
             </p>
-          )}
+          </div>
         </div>
       </div>
 
       {/* Basic Info */}
       <div style={{
-        backgroundColor: 'white', borderRadius: '1rem',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-        border: '1px solid #f3f4f6', marginBottom: '1.25rem',
+        backgroundColor: 'white', borderRadius: '0.875rem',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        border: '1px solid #e5e7eb', marginBottom: '1rem',
         overflow: 'hidden', animation: 'fadeIn 0.3s ease',
       }}>
         <div style={{
           padding: '1rem 1.25rem', borderBottom: '1px solid #f3f4f6',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
-          <p style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a', margin: 0 }}>
+          <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#111827', margin: 0 }}>
             Basic Information
           </p>
           {!editingInfo ? (
             <button onClick={() => setEditingInfo(true)} style={{
               display: 'flex', alignItems: 'center', gap: '0.375rem',
-              padding: '0.375rem 0.75rem', backgroundColor: BP_LIGHT,
-              border: `1px solid ${BP_BORDER}`, borderRadius: '0.5rem',
-              cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: BP_COLOR,
+              padding: '0.375rem 0.75rem', backgroundColor: '#f9fafb',
+              border: '1px solid #e5e7eb', borderRadius: '0.5rem',
+              cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#374151',
             }}>
               <Edit2 size={13} /> Edit
             </button>
@@ -240,15 +241,15 @@ const BPProfile = () => {
               ].map(({ icon: Icon, label, value }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
                   <div style={{
-                    width: 36, height: 36, backgroundColor: BP_LIGHT,
+                    width: 36, height: 36, backgroundColor: '#f3f4f6',
                     borderRadius: '0.625rem', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
-                    <Icon size={16} color={BP_COLOR} />
+                    <Icon size={16} color="#374151" />
                   </div>
                   <div>
                     <p style={{ fontSize: '0.68rem', color: '#9ca3af', fontWeight: 600, textTransform: 'uppercase', margin: 0 }}>{label}</p>
-                    <p style={{ fontSize: '0.875rem', color: '#1a1a1a', fontWeight: 600, margin: '0.125rem 0 0' }}>{value}</p>
+                    <p style={{ fontSize: '0.875rem', color: '#111827', fontWeight: 600, margin: '0.125rem 0 0' }}>{value}</p>
                   </div>
                 </div>
               ))}
@@ -264,11 +265,9 @@ const BPProfile = () => {
                     <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.3rem' }}>
                       {label} {required && <span style={{ color: '#dc2626' }}>*</span>}
                     </label>
-                    <input
-                      value={infoForm[key]}
+                    <input value={infoForm[key]}
                       onChange={e => { setInfoForm(p => ({ ...p, [key]: e.target.value })); setInfoErrors(p => ({ ...p, [key]: '' })); }}
-                      style={inp(!!infoErrors[key])}
-                    />
+                      style={inp(!!infoErrors[key])} />
                     {infoErrors[key] && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.2rem 0 0' }}>{infoErrors[key]}</p>}
                   </div>
                 ))}
@@ -291,7 +290,7 @@ const BPProfile = () => {
               </div>
               <button onClick={handleSaveInfo} disabled={savingInfo} style={{
                 width: '100%', padding: '0.75rem',
-                backgroundColor: savingInfo ? '#d1d5db' : BP_COLOR,
+                backgroundColor: savingInfo ? '#d1d5db' : AD_ACCENT,
                 color: 'white', border: 'none', borderRadius: '0.75rem',
                 fontWeight: 700, fontSize: '0.875rem',
                 cursor: savingInfo ? 'not-allowed' : 'pointer',
@@ -305,39 +304,11 @@ const BPProfile = () => {
         </div>
       </div>
 
-      {/* Assigned Barangay (read-only) */}
-      {profile?.barangay && (
-        <div style={{
-          backgroundColor: 'white', borderRadius: '1rem',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-          border: '1px solid #f3f4f6', marginBottom: '1.25rem',
-          overflow: 'hidden', animation: 'fadeIn 0.3s ease',
-        }}>
-          <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <MapPin size={16} color={BP_COLOR} />
-            <p style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a', margin: 0 }}>Assigned Barangay</p>
-            <span style={{ fontSize: '0.72rem', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '0.1rem 0.5rem', borderRadius: '999px' }}>
-              Assigned by Admin
-            </span>
-          </div>
-          <div style={{ padding: '1.25rem' }}>
-            <span style={{
-              backgroundColor: BP_LIGHT, color: BP_COLOR,
-              padding: '0.25rem 0.875rem', borderRadius: '999px',
-              fontSize: '0.78rem', fontWeight: 600,
-              border: `1px solid ${BP_BORDER}`,
-            }}>
-              Brgy. {profile.barangay}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Change Password */}
       <div style={{
-        backgroundColor: 'white', borderRadius: '1rem',
-        boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-        border: '1px solid #f3f4f6',
+        backgroundColor: 'white', borderRadius: '0.875rem',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        border: '1px solid #e5e7eb',
         overflow: 'hidden', animation: 'fadeIn 0.3s ease',
       }}>
         <div style={{
@@ -345,15 +316,15 @@ const BPProfile = () => {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Lock size={16} color={BP_COLOR} />
-            <p style={{ fontWeight: 700, fontSize: '0.95rem', color: '#1a1a1a', margin: 0 }}>Change Password</p>
+            <Lock size={16} color="#374151" />
+            <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#111827', margin: 0 }}>Change Password</p>
           </div>
           {!editingPassword ? (
             <button onClick={() => setEditingPassword(true)} style={{
               display: 'flex', alignItems: 'center', gap: '0.375rem',
-              padding: '0.375rem 0.75rem', backgroundColor: BP_LIGHT,
-              border: `1px solid ${BP_BORDER}`, borderRadius: '0.5rem',
-              cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: BP_COLOR,
+              padding: '0.375rem 0.75rem', backgroundColor: '#f9fafb',
+              border: '1px solid #e5e7eb', borderRadius: '0.5rem',
+              cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, color: '#374151',
             }}>
               <Edit2 size={13} /> Change
             </button>
@@ -394,7 +365,7 @@ const BPProfile = () => {
             ))}
             <button onClick={handleChangePassword} disabled={savingPw} style={{
               width: '100%', padding: '0.75rem',
-              backgroundColor: savingPw ? '#d1d5db' : BP_COLOR,
+              backgroundColor: savingPw ? '#d1d5db' : AD_ACCENT,
               color: 'white', border: 'none', borderRadius: '0.75rem',
               fontWeight: 700, fontSize: '0.875rem',
               cursor: savingPw ? 'not-allowed' : 'pointer',
@@ -408,7 +379,7 @@ const BPProfile = () => {
 
         {!editingPassword && (
           <div style={{ padding: '1rem 1.25rem' }}>
-            <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: 0 }}>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: 0 }}>
               Keep your account secure by using a strong password.
             </p>
           </div>
@@ -418,4 +389,4 @@ const BPProfile = () => {
   );
 };
 
-export default BPProfile;
+export default AdminProfile;
