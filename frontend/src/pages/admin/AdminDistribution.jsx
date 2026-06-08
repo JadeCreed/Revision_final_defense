@@ -497,6 +497,31 @@ const AdminDistribution = () => {
       <Toast toast={toast} />
       <SignatureModal sig={viewSig} onClose={() => setViewSig(null)} />
 
+      {/* Header + Stats */}
+      <div style={{ marginBottom: '1.5rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Seed Distribution</h1>
+        <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
+          View and manage seed distribution across all barangays.
+        </p>
+      </div>
+
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          {[
+            { label: 'Total Events',     value: stats.total_events,         Icon: ClipboardList },
+            { label: 'Pending Batches',  value: stats.pending_batches,      Icon: Clock        },
+            { label: 'Approved',         value: stats.approved_batches,     Icon: CheckCircle  },
+            { label: 'Farmers Served',   value: stats.total_farmers_served, Icon: Users        },
+          ].map(({ label, value, Icon }) => (
+            <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.125rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+              <Icon size={18} color={GREEN.primary} />
+              <p style={{ fontSize: '1.5rem', fontWeight: 800, color: GREEN.primary, margin: '0.375rem 0 0.125rem', lineHeight: 1 }}>{value}</p>
+              <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase' }}>{label}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb' }}>
         {TABS.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => { setActiveTab(key); setView('landing'); }} style={{ flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === key ? 'white' : 'transparent', color: activeTab === key ? '#1a1a1a' : '#6b7280', fontWeight: activeTab === key ? 700 : 400, cursor: 'pointer', fontSize: '0.8rem', boxShadow: activeTab === key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem' }}>
@@ -506,7 +531,7 @@ const AdminDistribution = () => {
       </div>
 
       {/* ── BREADCRUMB ── */}
-      {view !== 'landing' && (
+      {activeTab === 'events' && view !== 'landing' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '1.25rem', fontSize: '0.8rem', flexWrap: 'wrap' }}>
           <button
             onClick={() => {
@@ -542,32 +567,6 @@ const AdminDistribution = () => {
       ══════════════════════════════════════════ */}
       {activeTab === 'events' && view === 'landing' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
-          {/* Header */}
-          <div style={{ marginBottom: '1.5rem' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1a1a1a', margin: 0 }}>Seed Distribution</h1>
-            <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: '0.25rem 0 0' }}>
-              View and manage seed distribution across all barangays.
-            </p>
-          </div>
-
-          {/* Stats */}
-          {stats && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-              {[
-                { label: 'Total Events',     value: stats.total_events,         Icon: ClipboardList },
-                { label: 'Pending Batches',  value: stats.pending_batches,      Icon: Clock        },
-                { label: 'Approved',         value: stats.approved_batches,     Icon: CheckCircle  },
-                { label: 'Farmers Served',   value: stats.total_farmers_served, Icon: Users        },
-              ].map(({ label, value, Icon }) => (
-                <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.125rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-                  <Icon size={18} color={GREEN.primary} />
-                  <p style={{ fontSize: '1.5rem', fontWeight: 800, color: GREEN.primary, margin: '0.375rem 0 0.125rem', lineHeight: 1 }}>{value}</p>
-                  <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: 0, fontWeight: 600, textTransform: 'uppercase' }}>{label}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
           {/* Admin farmer search */}
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.5rem', border: '1px solid #f3f4f6' }}>
             <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#374151', margin: '0 0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

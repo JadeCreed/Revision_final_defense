@@ -12,6 +12,8 @@ from .views import (
     BrgyHarvestingFarmersView,
     BrgyHarvestHistoryView,
     SeedProductivityView,
+    BrgyReportDataView,
+    BrgyReportPDFView,
 )
 
 urlpatterns = [
@@ -31,4 +33,6 @@ urlpatterns = [
     path('low-performers/',   ProductionLowPerformersView.as_view(),  name='production-low-performers'),
     path('gis-summary/',      ProductionGISSummaryView.as_view(),     name='production-gis-summary'),
     path('seed-productivity/', SeedProductivityView.as_view(),         name='seed-productivity'),
+    path('brgy-report/',      BrgyReportDataView.as_view(),           name='brgy-report'),
+    path('brgy-report/pdf/',  BrgyReportPDFView.as_view(),            name='brgy-report-pdf'),
 ]

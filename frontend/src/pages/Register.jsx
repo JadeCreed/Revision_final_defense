@@ -36,7 +36,14 @@ const Register = () => {
     if (!form.last_name.trim()) newErrors.last_name = 'Last name is required';
     if (!form.barangay) newErrors.barangay = 'Please select a barangay';
     if (form.contact_number.length !== 11) newErrors.contact_number = 'Must be 11 digits';
-    if (!form.rsbsa_number.trim()) newErrors.rsbsa_number = 'RSBSA number is required';
+    if (!form.rsbsa_number.trim()) {
+      newErrors.rsbsa_number = 'RSBSA number is required';
+    } else {
+      const rsbsaPattern = /^04-56-22-\d{2,3}-\d{5}$/;
+      if (!rsbsaPattern.test(form.rsbsa_number.trim())) {
+        newErrors.rsbsa_number = 'Invalid format. Must be Lucban, Quezon format: 04-56-22-XXX-XXXXX (e.g. 04-56-22-001-01234)';
+      }
+    }
     if (form.password.length < 6) newErrors.password = 'Password must be at least 6 characters';
     if (form.password !== form.confirm_password) newErrors.confirm_password = 'Passwords do not match';
     return newErrors;
@@ -179,7 +186,7 @@ const Register = () => {
           {/* RSBSA */}
           <div style={{ marginBottom: '0.85rem' }}>
             <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#374151', marginBottom: '0.35rem' }}>RSBSA Number</label>
-            <input type="text" name="rsbsa_number" placeholder="04-0432-000-0010" value={form.rsbsa_number} onChange={handleChange} required style={inputStyle(!!errors.rsbsa_number)}
+            <input type="text" name="rsbsa_number" placeholder="04-56-22-001-01234" value={form.rsbsa_number} onChange={handleChange} required style={inputStyle(!!errors.rsbsa_number)}
               onFocus={e => { e.target.style.borderColor = '#2d6a2d'; e.target.style.background = 'white'; }}
               onBlur={e => { e.target.style.borderColor = errors.rsbsa_number ? '#fca5a5' : '#d1d5db'; e.target.style.background = '#fafafa'; }}
             />

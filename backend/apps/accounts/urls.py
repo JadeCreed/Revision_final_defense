@@ -3,6 +3,9 @@ from .views import (
     ATProfileView,
     ATProfileUpdateView,
     ChangePasswordView,
+    AdminFarmerMasterRecordView,
+    AdminFarmerMasterRecordDetailView,
+    AdminFarmerRegistryBulkUploadView,
     BPProfileView,
     FarmerRegisterView,
     LoginView,
@@ -65,6 +68,9 @@ urlpatterns = [
     path('admin/users/<int:user_id>/reset-password/',AdminResetUserPasswordView.as_view(),  name='admin-reset-password'),
 
     path('admin/users/archive/',AdminArchiveListView.as_view(), name='archive'),
+    path('admin/farmer-registry/', AdminFarmerMasterRecordView.as_view(), name='farmer-registry'),
+    path('admin/farmer-registry/<int:pk>/', AdminFarmerMasterRecordDetailView.as_view(), name='farmer-registry-detail'),
+    path('admin/farmer-registry/bulk-upload/', AdminFarmerRegistryBulkUploadView.as_view(), name='farmer-registry-bulk'),
     path('admin/users/<int:user_id>/reactivate/',AdminReactivateUserView.as_view(), name='reactivate-user'),
 
     path('barangays/available/', AvailableBarangaysView.as_view(), name='available-barangays'),

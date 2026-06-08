@@ -239,4 +239,25 @@ class PasswordResetOTP(models.Model):
     def is_expired(self):
         return timezone.now() > self.created_at + timedelta(minutes=5)
     
-    
+
+class FarmerMasterRecord(models.Model):
+    """
+    Pre-loaded MAO farmer registry.
+    Admin uploads this data. Used to validate farmer registration.
+    """
+    rsbsa_number  = models.CharField(max_length=50, unique=True)
+    first_name    = models.CharField(max_length=100)
+    last_name     = models.CharField(max_length=100)
+    middle_name   = models.CharField(max_length=100, blank=True, null=True)
+    barangay      = models.CharField(max_length=50, choices=BARANGAY_CHOICES)
+    date_of_birth = models.DateField(blank=True, null=True)
+    contact_number = models.CharField(max_length=11, blank=True, null=True)
+    hectares      = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    is_claimed    = models.BooleanField(default=False)  # True kapag nag-register na
+    created_at    = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['last_name', 'first_name']
+
+    def __str__(self):
+        return f"{self.rsbsa_number} — {self.last_name}, {self.first_name}"

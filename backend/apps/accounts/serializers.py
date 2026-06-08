@@ -49,6 +49,21 @@ class FarmerRegisterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "confirm_password": "Passwords do not match"
             })
+
+        rsbsa = (data.get('rsbsa_number') or '').strip()
+        if rsbsa:
+            from .models import FarmerMasterRecord
+
+            master = FarmerMasterRecord.objects.filter(rsbsa_number=rsbsa).first()
+            if not master:
+                raise serializers.ValidationError({
+                    "rsbsa_number": "RSBSA number not found in the MAO registry. Please contact the Municipal Agriculture Office."
+                })
+            if master.is_claimed:
+                raise serializers.ValidationError({
+                    "rsbsa_number": "This RSBSA number is already registered."
+                })
+
         return data
 
     # 📱 Contact number validation
@@ -74,6 +89,13 @@ class FarmerRegisterSerializer(serializers.ModelSerializer):
             is_verified=False
         )
         FarmerProfile.objects.get_or_create(user=user)
+
+        from .models import FarmerMasterRecord
+
+        FarmerMasterRecord.objects.filter(
+            rsbsa_number=validated_data['rsbsa_number']
+        ).update(is_claimed=True)
+
         return user
     
 class AdminCreateUserSerializer(serializers.ModelSerializer):

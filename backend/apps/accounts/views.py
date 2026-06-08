@@ -20,7 +20,7 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUserRole,IsFarmer,IsVerifiedUser,IsATUser,IsBPUser
-from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,PasswordResetOTP
+from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,PasswordResetOTP,FarmerMasterRecord
 from rest_framework import serializers 
 from .serializers import (
     FarmerRegisterSerializer,
@@ -470,6 +470,152 @@ class FarmerRegisterView(APIView):
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+
+class AdminFarmerMasterRecordView(ListAPIView):
+    """
+    GET  /api/accounts/admin/farmer-registry/        — list all records
+    POST /api/accounts/admin/farmer-registry/        — add single record
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class = StandardPagination
+
+    def get(self, request, *args, **kwargs):
+        search = (request.query_params.get('search') or '').strip()
+        records = FarmerMasterRecord.objects.all().order_by('id')
+        if search:
+            records = records.filter(
+                Q(rsbsa_number__icontains=search) |
+                Q(first_name__icontains=search) |
+                Q(last_name__icontains=search)
+            )
+
+        page = self.paginate_queryset(records)
+        if page is not None:
+            data = [{
+                'id': record.id,
+                'rsbsa_number': record.rsbsa_number,
+                'first_name': record.first_name,
+                'last_name': record.last_name,
+                'middle_name': record.middle_name,
+                'barangay': record.barangay,
+                'date_of_birth': record.date_of_birth,
+                'contact_number': record.contact_number,
+                'hectares': record.hectares,
+                'is_claimed': record.is_claimed,
+            } for record in page]
+            return self.get_paginated_response(data)
+
+        data = [{
+            'id': record.id,
+            'rsbsa_number': record.rsbsa_number,
+            'first_name': record.first_name,
+            'last_name': record.last_name,
+            'middle_name': record.middle_name,
+            'barangay': record.barangay,
+            'date_of_birth': record.date_of_birth,
+            'contact_number': record.contact_number,
+            'hectares': record.hectares,
+            'is_claimed': record.is_claimed,
+        } for record in records]
+
+        return Response({'count': len(data), 'results': data})
+
+    def post(self, request, *args, **kwargs):
+        rsbsa = (request.data.get('rsbsa_number') or '').strip()
+        if not rsbsa:
+            return Response({'error': 'RSBSA number is required.'}, status=400)
+        if FarmerMasterRecord.objects.filter(rsbsa_number=rsbsa).exists():
+            return Response({'error': 'RSBSA number already exists in registry.'}, status=400)
+
+        record = FarmerMasterRecord.objects.create(
+            rsbsa_number=request.data.get('rsbsa_number', '').strip(),
+            first_name=request.data.get('first_name', ''),
+            last_name=request.data.get('last_name', ''),
+            middle_name=request.data.get('middle_name', ''),
+            barangay=request.data.get('barangay', ''),
+            date_of_birth=request.data.get('date_of_birth') or None,
+            contact_number=request.data.get('contact_number', ''),
+            hectares=request.data.get('hectares') or None,
+        )
+        return Response({'message': 'Record added.', 'id': record.id}, status=201)
+
+
+class AdminFarmerMasterRecordDetailView(APIView):
+    """
+    DELETE /api/accounts/admin/farmer-registry/<id>/  — remove a record
+    PUT    /api/accounts/admin/farmer-registry/<id>/  — edit a record
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def delete(self, request, pk, *args, **kwargs):
+        try:
+            record = FarmerMasterRecord.objects.get(pk=pk)
+        except FarmerMasterRecord.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=404)
+
+        record.delete()
+        return Response({'message': 'Record deleted.'})
+
+    def put(self, request, pk, *args, **kwargs):
+        try:
+            record = FarmerMasterRecord.objects.get(pk=pk)
+        except FarmerMasterRecord.DoesNotExist:
+            return Response({'error': 'Not found.'}, status=404)
+
+        allowed = ['first_name', 'last_name', 'middle_name', 'barangay', 'date_of_birth', 'contact_number', 'hectares']
+        for field in allowed:
+            if field in request.data:
+                setattr(record, field, request.data[field] or None)
+        record.save()
+        return Response({'message': 'Record updated.'})
+
+
+class AdminFarmerRegistryBulkUploadView(APIView):
+    """
+    POST /api/accounts/admin/farmer-registry/bulk-upload/
+    Accepts JSON array of records for bulk import.
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, *args, **kwargs):
+        records = request.data.get('records', [])
+        if not records:
+            return Response({'error': 'No records provided.'}, status=400)
+
+        created = 0
+        skipped = 0
+        errors = []
+
+        for row in records:
+            rsbsa = (row.get('rsbsa_number') or '').strip()
+            if not rsbsa:
+                skipped += 1
+                continue
+            if FarmerMasterRecord.objects.filter(rsbsa_number=rsbsa).exists():
+                skipped += 1
+                continue
+            try:
+                FarmerMasterRecord.objects.create(
+                    rsbsa_number=rsbsa,
+                    first_name=row.get('first_name', ''),
+                    last_name=row.get('last_name', ''),
+                    middle_name=row.get('middle_name', ''),
+                    barangay=row.get('barangay', ''),
+                    date_of_birth=row.get('date_of_birth') or None,
+                    contact_number=row.get('contact_number', ''),
+                    hectares=row.get('hectares') or None,
+                )
+                created += 1
+            except Exception as exc:
+                errors.append({'rsbsa': rsbsa, 'error': str(exc)})
+
+        return Response({
+            'message': f'{created} records added, {skipped} skipped.',
+            'created': created,
+            'skipped': skipped,
+            'errors': errors,
+        })
+
 
 class FarmerDashboardView(APIView):
     """

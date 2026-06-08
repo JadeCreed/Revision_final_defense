@@ -158,8 +158,20 @@
     │   │   │   ├── poll/
     │   │   │   │   ├── PollCard.jsx
     │   │   │   │   └── VoteForm.jsx
+    │   │   │   ├── production/
     │   │   │   ├── tables/
-    │   │   │   │   └── TableBase.jsx
+    │   │   │   │   ├── HarvestPerformanceTable.jsx
+    │   │   │   │   ├── ProductionFilterBar.jsx
+    │   │   │   │   ├── ProductionInsights.jsx
+    │   │   │   │   ├── ProductionTiles.jsx
+    │   │   │   │   ├── productionUtils.jsx
+    │   │   │   │   ├── YieldGapTable.jsx
+    │   │   │   │   └── charts/
+    │   │   │   │         ├── HarvestStatusDonut.jsx
+    │   │   │   │         ├── ProductionBySeedChart.jsx
+    │   │   │   │         ├── YieldBySeedChart.jsx
+    │   │   │   │         └── YieldGapChart.jsx
+    │   │   │   │
     |   |   |   ├── KpiCards.jsx
     |   |   |   ├── GanttChart.jsx
     |   |   |   ├── PhaseDistribution.jsx

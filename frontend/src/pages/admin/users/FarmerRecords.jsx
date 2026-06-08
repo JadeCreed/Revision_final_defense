@@ -5,6 +5,8 @@ import {
   getFarmerMasterlist, getFarmerFullProfile,
   updateFarmerProfile, deactivateUser,
   adminResetPassword,
+  getFarmerRegistry, addFarmerRegistry,
+  updateFarmerRegistry, deleteFarmerRegistry, bulkUploadRegistry,
 } from '../../../api/axios';
 import {
   Pagination, SortDropdown, COL_WIDTHS, NewBadge, getSeenIds,
@@ -793,6 +795,191 @@ const FarmerMasterlistTab = () => {
 };
 
 
+// ── TAB 3: FARMER REGISTRY (MAO Master List) ──
+const FarmerRegistryTab = () => {
+  const [records, setRecords] = useState([]);
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [modal, setModal] = useState(null);
+  const [form, setForm] = useState({
+    rsbsa_number: '', first_name: '', last_name: '', middle_name: '',
+    barangay: '', date_of_birth: '', contact_number: '', hectares: '',
+  });
+  const [formErrors, setFormErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [uploadLoading, setUploadLoading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const emptyForm = {
+    rsbsa_number: '', first_name: '', last_name: '', middle_name: '',
+    barangay: '', date_of_birth: '', contact_number: '', hectares: '',
+  };
+
+  const fetchRecords = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await getFarmerRegistry({ search, page, page_size: 10 });
+      const data = res.data;
+      setRecords(data.results || data);
+      setCount(data.count || (data.results ? data.results.length : data.length) || 0);
+    } catch {
+      setError('Failed to load registry.');
+    } finally {
+      setLoading(false);
+    }
+  }, [search, page]);
+
+  useEffect(() => { fetchRecords(); }, [fetchRecords]);
+  useEffect(() => { setPage(1); }, [search]);
+
+  const validateForm = () => {
+    const errs = {};
+    const rsbsaPattern = /^04-56-22-\d{2,3}-\d{5}$/;
+    if (!form.rsbsa_number.trim()) errs.rsbsa_number = 'Required';
+    else if (!rsbsaPattern.test(form.rsbsa_number.trim())) errs.rsbsa_number = 'Invalid format. Must be 04-56-22-XXX-XXXXX';
+    if (!form.first_name.trim()) errs.first_name = 'Required';
+    if (!form.last_name.trim()) errs.last_name = 'Required';
+    if (!form.barangay) errs.barangay = 'Required';
+    if (form.contact_number && !/^\d{11}$/.test(form.contact_number)) errs.contact_number = 'Must be 11 digits';
+    if (form.hectares && isNaN(parseFloat(form.hectares))) errs.hectares = 'Must be a number';
+    return errs;
+  };
+
+  const handleOpenAdd = () => { setForm(emptyForm); setFormErrors({}); setModal('add'); };
+  const handleOpenEdit = (record) => {
+    setForm({
+      rsbsa_number: record.rsbsa_number || '',
+      first_name: record.first_name || '',
+      last_name: record.last_name || '',
+      middle_name: record.middle_name || '',
+      barangay: record.barangay || '',
+      date_of_birth: record.date_of_birth || '',
+      contact_number: record.contact_number || '',
+      hectares: record.hectares ?? '',
+    });
+    setFormErrors({});
+    setModal(record);
+  };
+
+  const handleSave = async () => {
+    const errs = validateForm();
+    if (Object.keys(errs).length > 0) { setFormErrors(errs); return; }
+    setSaving(true); setError('');
+    try {
+      const payload = {
+        ...form,
+        rsbsa_number: form.rsbsa_number.trim(),
+        hectares: form.hectares ? parseFloat(form.hectares) : null,
+        date_of_birth: form.date_of_birth || null,
+        contact_number: form.contact_number || null,
+        middle_name: form.middle_name || null,
+      };
+      if (modal === 'add') await addFarmerRegistry(payload);
+      else await updateFarmerRegistry(modal.id, payload);
+      setModal(null);
+      setSuccess(modal === 'add' ? 'Record added successfully.' : 'Record updated successfully.');
+      fetchRecords();
+      setTimeout(() => setSuccess(''), 4000);
+    } catch (err) {
+      const data = err.response?.data;
+      if (data?.rsbsa_number) setFormErrors({ rsbsa_number: Array.isArray(data.rsbsa_number) ? data.rsbsa_number[0] : data.rsbsa_number });
+      else setError(data?.error || 'Save failed.');
+    } finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteModal) return;
+    setDeleting(true); setError('');
+    try {
+      await deleteFarmerRegistry(deleteModal.id);
+      setDeleteModal(null);
+      setSuccess('Record deleted.');
+      fetchRecords();
+      setTimeout(() => setSuccess(''), 4000);
+    } catch {
+      setError('Delete failed.');
+    } finally { setDeleting(false); }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+    setUploadLoading(true); setUploadResult(null); setError('');
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { setError('File is empty or has no data rows.'); return; }
+      const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+      const records = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const row = {};
+        header.forEach((h, idx) => { row[h] = values[idx] || ''; });
+        const rsbsa = row.rsbsa_number || row.rsbsa || row.rsbsa_no || '';
+        if (!rsbsa) continue;
+        records.push({
+          rsbsa_number: rsbsa,
+          first_name: row.first_name || row.firstname || row.fname || '',
+          last_name: row.last_name || row.lastname || row.lname || '',
+          middle_name: row.middle_name || row.middlename || '',
+          barangay: row.barangay || row.brgy || '',
+          date_of_birth: row.date_of_birth || row.dob || row.birthday || '',
+          contact_number: row.contact_number || row.contact || row.mobile || '',
+          hectares: row.hectares || row.farm_area || row.area || '',
+        });
+      }
+      if (!records.length) { setError('No valid rows found. Make sure the file has an rsbsa_number column.'); return; }
+      const res = await bulkUploadRegistry({ records });
+      setUploadResult(res.data);
+      fetchRecords();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Upload failed. Please check the file format.');
+    } finally { setUploadLoading(false); }
+  };
+
+  const CLAIMED_COLOR = { bg: '#dcfce7', color: '#166534', label: 'Account Created' };
+  const FREE_COLOR = { bg: '#f3f4f6', color: '#6b7280', label: 'No Account' };
+
+  return (
+    <div>
+      <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '0.75rem', padding: '0.875rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#1e40af' }}>
+        <strong>CSV Format:</strong> Required columns: <code>rsbsa_number, first_name, last_name, barangay</code> · Optional: <code>middle_name, date_of_birth (YYYY-MM-DD), contact_number, hectares</code> · First row must be the header.
+      </div>
+      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
+        <input placeholder="Search RSBSA, name..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...filterStyle, flex: 1, minWidth: '200px' }} />
+        <button onClick={handleOpenAdd} style={{ padding: '0.5rem 1.125rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Add Record</button>
+        <button onClick={() => fileInputRef.current?.click()} disabled={uploadLoading} style={{ padding: '0.5rem 1.125rem', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.875rem', cursor: uploadLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: uploadLoading ? 0.7 : 1 }}>{uploadLoading ? 'Uploading...' : '⬆ Upload CSV'}</button>
+        <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
+      </div>
+      {error && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
+      {success && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{success}</div>}
+      {uploadResult && <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.875rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534' }}>✅ <strong>{uploadResult.created}</strong> records added · <strong>{uploadResult.skipped}</strong> skipped {uploadResult.errors?.length > 0 && <span style={{ color: '#991b1b' }}>· {uploadResult.errors.length} errors</span>} <button onClick={() => setUploadResult(null)} style={{ marginLeft: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#166534', fontSize: '0.85rem', fontWeight: '600' }}>Dismiss</button></div>}
+      <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead><tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>{[['RSBSA Number','160px'],['Name','180px'],['Barangay','110px'],['Contact','120px'],['Hectares','90px'],['Status','140px'],['Actions','120px']].map(([col,w]) => <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>)}</tr></thead>
+            <tbody>
+              {loading ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr> : records.length === 0 ? <tr><td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No records yet. Add records manually or upload a CSV.</td></tr> : records.map((r, idx) => { const sc = r.is_claimed ? CLAIMED_COLOR : FREE_COLOR; return <tr key={r.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}><td style={{ padding: '0.875rem 1rem', color: '#6b7280', fontFamily: 'monospace' }}>{r.rsbsa_number}</td><td style={{ padding: '0.875rem 1rem', fontWeight: '500' }}>{r.last_name}, {r.first_name}{r.middle_name ? ` ${r.middle_name[0]}.` : ''}</td><td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{r.barangay || '—'}</td><td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{r.contact_number || '—'}</td><td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{r.hectares != null ? parseFloat(r.hectares).toFixed(2) : '—'}</td><td style={{ padding: '0.875rem 1rem' }}><span style={{ backgroundColor: sc.bg, color: sc.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{sc.label}</span></td><td style={{ padding: '0.875rem 1rem' }}><div style={{ display: 'flex', gap: '0.5rem' }}><button onClick={() => handleOpenEdit(r)} style={{ padding: '0.3rem 0.65rem', backgroundColor: '#f3f4f6', color: '#374151', border: '1px solid #e5e7eb', borderRadius: '0.375rem', fontSize: '0.78rem', cursor: 'pointer' }}>Edit</button>{!r.is_claimed && <button onClick={() => setDeleteModal(r)} style={{ padding: '0.3rem 0.65rem', backgroundColor: 'white', color: '#dc2626', border: '1.5px solid #dc2626', borderRadius: '0.375rem', fontSize: '0.78rem', cursor: 'pointer' }}>Delete</button>}</div></td></tr>; })}
+            </tbody>
+          </table>
+        </div>
+        <Pagination count={count} page={page} pageSize={10} onPageChange={setPage} />
+      </div>
+      {modal !== null && <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, padding: '1rem', overflowY: 'auto' }}><div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '560px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}><div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}><div><h2 style={{ fontWeight: '700', margin: 0 }}>{modal === 'add' ? 'Add Registry Record' : 'Edit Registry Record'}</h2><p style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.25rem' }}>{modal === 'add' ? 'Enter MAO farmer registry details.' : 'Update farmer registry details.'}</p></div><button onClick={() => setModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button></div><div style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}><div><label style={labelStyle}>RSBSA Number <span style={{ color: '#dc2626' }}>*</span></label><input value={form.rsbsa_number} onChange={e => { setForm(p => ({ ...p, rsbsa_number: e.target.value })); setFormErrors(p => ({ ...p, rsbsa_number: '' })); }} placeholder="04-56-22-001-01234" disabled={modal !== 'add'} style={{ ...inputStyle, backgroundColor: modal !== 'add' ? '#f9fafb' : 'white' }} />{formErrors.rsbsa_number && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.rsbsa_number}</p>}</div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}><div><label style={labelStyle}>First Name <span style={{ color: '#dc2626' }}>*</span></label><input value={form.first_name} onChange={e => { setForm(p => ({ ...p, first_name: e.target.value })); setFormErrors(p => ({ ...p, first_name: '' })); }} style={inputStyle} />{formErrors.first_name && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.first_name}</p>}</div><div><label style={labelStyle}>Last Name <span style={{ color: '#dc2626' }}>*</span></label><input value={form.last_name} onChange={e => { setForm(p => ({ ...p, last_name: e.target.value })); setFormErrors(p => ({ ...p, last_name: '' })); }} style={inputStyle} />{formErrors.last_name && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.last_name}</p>}</div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}><div><label style={labelStyle}>Middle Name</label><input value={form.middle_name} onChange={e => setForm(p => ({ ...p, middle_name: e.target.value }))} style={inputStyle} placeholder="Optional" /></div><div><label style={labelStyle}>Barangay <span style={{ color: '#dc2626' }}>*</span></label><select value={form.barangay} onChange={e => { setForm(p => ({ ...p, barangay: e.target.value })); setFormErrors(p => ({ ...p, barangay: '' })); }} style={inputStyle}><option value="">Select Barangay</option>{BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}</select>{formErrors.barangay && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.barangay}</p>}</div></div><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}><div><label style={labelStyle}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => setForm(p => ({ ...p, date_of_birth: e.target.value }))} style={inputStyle} /></div><div><label style={labelStyle}>Contact Number</label><input value={form.contact_number} placeholder="09XXXXXXXXX" onChange={e => { setForm(p => ({ ...p, contact_number: e.target.value })); setFormErrors(p => ({ ...p, contact_number: '' })); }} style={inputStyle} />{formErrors.contact_number && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.contact_number}</p>}</div></div><div><label style={labelStyle}>Total Farm Hectares (ha)</label><input type="number" step="0.01" min="0" value={form.hectares} onChange={e => { setForm(p => ({ ...p, hectares: e.target.value })); setFormErrors(p => ({ ...p, hectares: '' })); }} placeholder="e.g. 1.50" style={inputStyle} />{formErrors.hectares && <p style={{ color: '#dc2626', fontSize: '0.72rem', margin: '0.2rem 0 0' }}>{formErrors.hectares}</p>}</div></div><div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #f3f4f6' }}><button onClick={() => setModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button><button onClick={handleSave} disabled={saving} style={{ padding: '0.5rem 1.5rem', backgroundColor: saving ? '#d1d5db' : '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: saving ? 'not-allowed' : 'pointer', fontWeight: '600' }}>{saving ? 'Saving...' : modal === 'add' ? 'Add Record' : 'Save Changes'}</button></div></div></div>}
+      {deleteModal && <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}><div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '400px', width: '100%' }}><h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}>Delete Registry Record</h3><p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.9rem' }}>Delete <strong>{deleteModal.last_name}, {deleteModal.first_name}</strong> ({deleteModal.rsbsa_number})? This cannot be undone.</p><div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}><button onClick={() => setDeleteModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button><button onClick={handleDelete} disabled={deleting} style={{ padding: '0.5rem 1.25rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: deleting ? 0.7 : 1 }}>{deleting ? 'Deleting...' : 'Delete'}</button></div></div></div>}
+    </div>
+  );
+};
+
 // ── MAIN EXPORT ──
 const FarmerRecords = () => {
   const [activeTab, setActiveTab] = useState('accounts');
@@ -807,7 +994,11 @@ const FarmerRecords = () => {
       </div>
 
       <div style={{ display: 'flex', marginBottom: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb', width: 'fit-content' }}>
-        {[{ key: 'accounts', label: 'Pending Farmers' }, { key: 'masterlist', label: 'Registered Farmers' }].map(({ key, label }) => (
+        {[
+          { key: 'accounts', label: 'Pending Farmers' },
+          { key: 'masterlist', label: 'Registered Farmers' },
+          { key: 'registry', label: 'MAO Registry' },
+        ].map(({ key, label }) => (
           <button key={key} onClick={() => setActiveTab(key)}
             style={{ padding: '0.5rem 1.25rem', borderRadius: '0.5rem', border: 'none', backgroundColor: activeTab === key ? 'white' : 'transparent', color: activeTab === key ? '#1a4d1a' : '#6b7280', fontWeight: activeTab === key ? '700' : '400', fontSize: '0.875rem', cursor: 'pointer', boxShadow: activeTab === key ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {label}
@@ -817,6 +1008,7 @@ const FarmerRecords = () => {
 
       {activeTab === 'accounts'   && <FarmerAccountsTab />}
       {activeTab === 'masterlist' && <FarmerMasterlistTab />}
+      {activeTab === 'registry'   && <FarmerRegistryTab />}
     </div>
   );
 };

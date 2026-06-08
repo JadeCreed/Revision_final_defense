@@ -216,6 +216,13 @@ export const getMapSummary  = (params = {}) => API.get('/gis/summary/', { params
 export const getGisBarangays= ()       => API.get('/gis/barangays/');
 export const getGisAllPolls = ()       => API.get('/seed-poll/gis-all-polls/');export const getATMonitoringHistory = (params = {}) =>
   API.get('/crop-monitoring/at/history/', { params });
+
+// ── Farmer Registry (MAO Master List) ──
+export const getFarmerRegistry    = (params) => API.get('/accounts/admin/farmer-registry/', { params });
+export const addFarmerRegistry    = (data)   => API.post('/accounts/admin/farmer-registry/', data);
+export const updateFarmerRegistry = (id, data) => API.put(`/accounts/admin/farmer-registry/${id}/`, data);
+export const deleteFarmerRegistry = (id)     => API.delete(`/accounts/admin/farmer-registry/${id}/`);
+export const bulkUploadRegistry   = (data)   => API.post('/accounts/admin/farmer-registry/bulk-upload/', data);
 // ── CROP PHASE ──
 export const getCropPhaseAnalytics = (params = {}) => {
   const query = new URLSearchParams();
