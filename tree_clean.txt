@@ -26,6 +26,14 @@
     │   │   │   ├── tests.py
     │   │   │   ├── urls.py
     │   │   │   └── views.py
+    │   │   ├── analytics/
+    │   │   │   ├── __init__.py
+    │   │   │   ├── admin.py
+    │   │   │   ├── models.py
+    │   │   │   ├── serializers.py
+    │   │   │   ├── tests.py
+    │   │   │   ├── urls.py
+    │   │   │   └── views.py
     │   │   ├── crop_monitoring/
     │   │   │   ├── __init__.py
     │   │   │   ├── admin.py
@@ -159,7 +167,6 @@
     │   │   │   │   ├── PollCard.jsx
     │   │   │   │   └── VoteForm.jsx
     │   │   │   ├── production/
-    │   │   │   ├── tables/
     │   │   │   │   ├── HarvestPerformanceTable.jsx
     │   │   │   │   ├── ProductionFilterBar.jsx
     │   │   │   │   ├── ProductionInsights.jsx
@@ -171,7 +178,7 @@
     │   │   │   │         ├── ProductionBySeedChart.jsx
     │   │   │   │         ├── YieldBySeedChart.jsx
     │   │   │   │         └── YieldGapChart.jsx
-    │   │   │   │
+    │   │   │   ├── tables/
     |   |   |   ├── KpiCards.jsx
     |   |   |   ├── GanttChart.jsx
     |   |   |   ├── PhaseDistribution.jsx

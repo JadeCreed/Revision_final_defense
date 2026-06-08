@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'apps.seed_inventory',
     'apps.seed_poll',
     'apps.announcements',
+    'apps.analytics',
 
     'rest_framework',
     'corsheaders',

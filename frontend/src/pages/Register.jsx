@@ -41,7 +41,7 @@ const Register = () => {
     } else {
       const rsbsaPattern = /^04-56-22-\d{2,3}-\d{5}$/;
       if (!rsbsaPattern.test(form.rsbsa_number.trim())) {
-        newErrors.rsbsa_number = 'Invalid format. Must be Lucban, Quezon format: 04-56-22-XXX-XXXXX (e.g. 04-56-22-001-01234)';
+        newErrors.rsbsa_number = 'Invalid format. Lucban, Quezon format: 04-56-22-XXX-XXXXX (e.g. 04-56-22-001-01234)';
       }
     }
     if (form.password.length < 6) newErrors.password = 'Password must be at least 6 characters';

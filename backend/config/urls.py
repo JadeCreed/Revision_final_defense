@@ -31,6 +31,7 @@ urlpatterns = [
     path('api/production/', include('apps.production.urls')),
     path('api/crop-monitoring/', include('apps.crop_monitoring.urls')),
     path('api/crop-phase/', include('apps.crop_phase.urls')),
+    # path('api/analytics/', include('apps.analytics.urls')),
 ]
 
 # Serve media files in development

@@ -11,6 +11,10 @@ class SeedDelivery(models.Model):
         ('REGION',   'Region (NRP/RFO)'),
         ('PHILRICE', 'PhilRice (RCEF)'),
     ]
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('DELIVERED', 'Delivered'),
+    ]
 
     seed_type     = models.ForeignKey(SeedType, on_delete=models.PROTECT, related_name='deliveries')
     variety       = models.ForeignKey(SeedVariety, on_delete=models.SET_NULL, null=True, blank=True, related_name='deliveries')
@@ -21,6 +25,7 @@ class SeedDelivery(models.Model):
     delivery_date = models.DateField()
     lot_number    = models.CharField(max_length=100, blank=True)
     remarks       = models.TextField(blank=True)
+    status        = models.CharField(max_length=20, choices=STATUS_CHOICES, default='SCHEDULED')
     encoded_by    = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True,
         related_name='seed_deliveries'

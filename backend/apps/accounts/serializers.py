@@ -51,6 +51,10 @@ class FarmerRegisterSerializer(serializers.ModelSerializer):
             })
 
         rsbsa = (data.get('rsbsa_number') or '').strip()
+        first_name = (data.get('first_name') or '').strip().lower()
+        last_name = (data.get('last_name') or '').strip().lower()
+        barangay = (data.get('barangay') or '').strip()
+
         if rsbsa:
             from .models import FarmerMasterRecord
 
@@ -59,9 +63,23 @@ class FarmerRegisterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     "rsbsa_number": "RSBSA number not found in the MAO registry. Please contact the Municipal Agriculture Office."
                 })
+
             if master.is_claimed:
                 raise serializers.ValidationError({
-                    "rsbsa_number": "This RSBSA number is already registered."
+                    "rsbsa_number": "This RSBSA number is already registered in the system."
+                })
+
+            master_first = (master.first_name or '').strip().lower()
+            master_last = (master.last_name or '').strip().lower()
+            if first_name != master_first or last_name != master_last:
+                raise serializers.ValidationError({
+                    "rsbsa_number": "The name you entered does not match the MAO registry for this RSBSA number. Please check your First Name, Last Name, and RSBSA number."
+                })
+
+            master_barangay = (master.barangay or '').strip()
+            if barangay and master_barangay and barangay != master_barangay:
+                raise serializers.ValidationError({
+                    "barangay": "The barangay you selected does not match the MAO registry for this RSBSA number."
                 })
 
         return data

@@ -48,7 +48,7 @@ class SeedDeliverySerializer(serializers.ModelSerializer):
         fields = [
             'id', 'seed_type', 'seed_type_name',
             'variety', 'variety_name',
-            'season', 'season_display', 'year', 'source',
+            'season', 'season_display', 'year', 'source', 'status',
             'total_bags', 'allocated_bags', 'remaining_bags',
             'delivery_date', 'lot_number', 'remarks',
             'encoded_by', 'encoded_by_name',
@@ -75,16 +75,16 @@ class SeedDeliveryCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model  = SeedDelivery
         fields = [
-            'seed_type', 'variety', 'season', 'year',
+            'seed_type', 'variety', 'season', 'year', 'source', 'status',
             'total_bags', 'delivery_date', 'lot_number', 'remarks',
         ]
 
     def validate(self, data):
-        name = data['seed_type'].name.upper()
-        if 'HYBRID' in name or name in ('NRP', 'RFO'):
-            data['source'] = 'REGION'
-        else:
-            data['source'] = 'PHILRICE'
+        if 'source' not in data or not data['source']:
+            name = data['seed_type'].name.upper()
+            data['source'] = 'REGION' if ('HYBRID' in name or name in ('NRP', 'RFO')) else 'PHILRICE'
+        if 'status' not in data or not data['status']:
+            data['status'] = 'SCHEDULED'
         return data
 
 

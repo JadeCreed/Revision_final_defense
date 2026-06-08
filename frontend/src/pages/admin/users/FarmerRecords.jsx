@@ -918,10 +918,27 @@ const FarmerRegistryTab = () => {
       const text = await file.text();
       const lines = text.split('\n').filter(l => l.trim());
       if (lines.length < 2) { setError('File is empty or has no data rows.'); return; }
-      const header = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+
+      const delimiter = lines[0].includes('\t') ? '\t' : ',';
+      const header = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+      const normalizeDate = (raw) => {
+        if (!raw || !raw.trim()) return '';
+        const s = raw.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+          const [d, m, y] = s.split('/');
+          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)) {
+          const [m, d, y] = s.split('-');
+          return `${y}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+        }
+        return s;
+      };
+
       const records = [];
       for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+        const values = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ''));
         const row = {};
         header.forEach((h, idx) => { row[h] = values[idx] || ''; });
         const rsbsa = row.rsbsa_number || row.rsbsa || row.rsbsa_no || '';
@@ -932,7 +949,7 @@ const FarmerRegistryTab = () => {
           last_name: row.last_name || row.lastname || row.lname || '',
           middle_name: row.middle_name || row.middlename || '',
           barangay: row.barangay || row.brgy || '',
-          date_of_birth: row.date_of_birth || row.dob || row.birthday || '',
+          date_of_birth: normalizeDate(row.date_of_birth || row.dob || row.birthday || ''),
           contact_number: row.contact_number || row.contact || row.mobile || '',
           hectares: row.hectares || row.farm_area || row.area || '',
         });
@@ -962,7 +979,7 @@ const FarmerRegistryTab = () => {
       </div>
       {error && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
       {success && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem' }}>{success}</div>}
-      {uploadResult && <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.875rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534' }}>✅ <strong>{uploadResult.created}</strong> records added · <strong>{uploadResult.skipped}</strong> skipped {uploadResult.errors?.length > 0 && <span style={{ color: '#991b1b' }}>· {uploadResult.errors.length} errors</span>} <button onClick={() => setUploadResult(null)} style={{ marginLeft: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#166534', fontSize: '0.85rem', fontWeight: '600' }}>Dismiss</button></div>}
+      {uploadResult && <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.875rem 1rem', marginBottom: '1.25rem', fontSize: '0.85rem', color: '#166534' }}> <strong>{uploadResult.created}</strong> records added · <strong>{uploadResult.skipped}</strong> skipped {uploadResult.errors?.length > 0 && <span style={{ color: '#991b1b' }}>· {uploadResult.errors.length} errors</span>} <button onClick={() => setUploadResult(null)} style={{ marginLeft: '1rem', background: 'none', border: 'none', cursor: 'pointer', color: '#166534', fontSize: '0.85rem', fontWeight: '600' }}>Dismiss</button></div>}
       <div style={{ backgroundColor: 'white', borderRadius: '0.75rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>

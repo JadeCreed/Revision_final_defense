@@ -671,12 +671,16 @@ export default function SeedInventory() {
     }
     setDeliveredSaving(true);
     try {
+      const seedName = (matchedDelivery?.seed_type_name || entry.seedTypeName || '').toUpperCase();
+      const source = (seedName.includes('HYBRID') || seedName === 'NRP' || seedName === 'RFO') ? 'REGION' : 'PHILRICE';
+
       if (matchedDelivery) {
         await updateSeedDelivery(matchedDelivery.id, {
           seed_type: matchedDelivery.seed_type,
           variety: matchedDelivery.variety,
           season: matchedDelivery.season,
           year: matchedDelivery.year,
+          source,
           total_bags: actualBags,
           delivery_date: matchedDelivery.delivery_date,
           lot_number: matchedDelivery.lot_number,
@@ -698,6 +702,7 @@ export default function SeedInventory() {
           variety: matchedVariety?.id,
           season: entry.season,
           year: Number(entry.year),
+          source,
           total_bags: actualBags,
           delivery_date: entry.delivery_date,
           lot_number: entry.lot_number,
