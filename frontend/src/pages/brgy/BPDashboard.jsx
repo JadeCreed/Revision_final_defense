@@ -80,7 +80,7 @@ const BPDashboard = () => {
 
   // ── Existing useEffect 2: Total Farmers (HINDI BINAGO) ──
   useEffect(() => {
-    getATFarmers({ barangay, limit: 1 })
+    getATFarmers({ barangay, limit: 1, role: 'brgy' })
       .then(res => {
         const data = res.data;
         if (data?.count !== undefined) setTotalFarmers(data.count);
@@ -98,59 +98,76 @@ const BPDashboard = () => {
       .finally(() => setAnnLoading(false));
   }, []);
 
-  // ── BAGONG useEffect 4: NOTIF 1 — Schedule (mula sa localStorage) ──
+  // ── NOTIF 1: Schedule — from backend SeedDelivery records ──
   useEffect(() => {
-    const NOTIF_KEY  = 'brgy_bell_notifs_BRGY';
-    const SCHED_KEY  = 'agrice_delivery_schedules';
+    const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
 
-    try {
-      const raw = localStorage.getItem(SCHED_KEY);
-      if (!raw) return;
+    const pushNotif = (entry) => {
+      const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
+      const dismissKey = `brgy_sched_dismissed_${notifId}`;
+      const isDismissed = localStorage.getItem(dismissKey) === 'true';
 
-      const localSchedules = JSON.parse(raw);
-      const allEntries = localSchedules.flatMap(s => s.entries || []);
+      setSchedDismissed(prev => ({ ...prev, [notifId]: isDismissed }));
 
-      if (allEntries.length === 0) return;
-
-      setScheduleNotifs(allEntries);
-
-      allEntries.forEach(entry => {
-        const notifId    = `schedule_${entry.seedTypeId}_${entry.season}_${entry.year}`;
-        const dismissKey = `brgy_sched_dismissed_${notifId}`;
-        const isDismissed = localStorage.getItem(dismissKey) === 'true';
-
-        setSchedDismissed(prev => ({ ...prev, [notifId]: isDismissed }));
-
+      try {
+        const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+        const existingNotif = existing.find(n => n.id === notifId);
+        if (existingNotif && !existingNotif.read) return;
         if (isDismissed) return;
 
-        try {
-          const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-          if (existing.find(n => n.id === notifId)) return;
+        const seasonDisplay = entry.season === 'WET' ? 'Wet Season' : 'Dry Season';
+        const delivDate = entry.delivery_date
+          ? new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '—';
 
-          const seasonDisplay = entry.season === 'WET' ? 'Wet Season' : 'Dry Season';
-          const delivDate     = entry.delivery_date
-            ? new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-            : '—';
+        const newNotif = {
+          id:    notifId,
+          title: `Seed Schedule — ${entry.seed_type_name}${entry.variety_name ? ' (' + entry.variety_name + ')' : ''}`,
+          info:  `Delivery: ${delivDate} · ${entry.total_bags} bags · ${seasonDisplay} ${entry.year}`,
+          date:  new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+          read:  false,
+          route: '/brgy',
+        };
 
-          const newNotif = {
-            id:    notifId,
-            title: `Seed Schedule — ${entry.seedTypeName}${entry.varietyName ? ' (' + entry.varietyName + ')' : ''}`,
-            info:  `Delivery: ${delivDate} · ${entry.total_bags} bags · ${seasonDisplay} ${entry.year}`,
-            date:  new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-            read:  false,
-            route: '/brgy',
-          };
+        const next = [newNotif, ...existing];
+        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+        emitStorageSync(NOTIF_KEY, JSON.stringify(next));
+      } catch {}
+    };
 
-          const next = [newNotif, ...existing];
-          localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
-          emitStorageSync(NOTIF_KEY, JSON.stringify(next));
-        } catch {}
-      });
-    } catch {}
+    const loadScheduleNotifs = () => {
+      getBrgyMyAllocation()
+        .then(res => {
+          const allocs = res.data || [];
+          const entries = allocs.map(a => ({
+            seed_type_id: a.seed_type_id,
+            variety_id: a.variety_id,
+            seed_type_name: a.seed_type_name,
+            variety_name: a.variety_name,
+            season: a.season,
+            year: a.year,
+            delivery_date: a.delivery_date,
+            total_bags: a.allocated_bags,
+          }));
+          setScheduleNotifs(entries);
+          entries.forEach(pushNotif);
+        })
+        .catch(() => {});
+    };
+
+    loadScheduleNotifs();
+
+    const onStorage = (e) => {
+      if (e?.key === 'agrice_seed_delivered_trigger') {
+        loadScheduleNotifs();
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  // ── BAGONG useEffect 5: NOTIF 2 — Allocated bags (mula sa backend, DELIVERED only) ──
-  useEffect(() => {
+  const loadAllocations = () => {
     getBrgyMyAllocation()
       .then(res => {
         const allocs = res.data || [];
@@ -180,6 +197,19 @@ const BPDashboard = () => {
         });
       })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadAllocations();
+
+    const onStorage = (e) => {
+      if (e?.key === 'agrice_seed_delivered_trigger') {
+        loadAllocations();
+      }
+    };
+
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   // ── Existing handler (HINDI BINAGO) ──
@@ -206,7 +236,7 @@ const BPDashboard = () => {
 
   // ── BAGONG handler: Dismiss schedule notif (Notif 1) ──
   const handleSchedDismiss = (entry) => {
-    const notifId    = `schedule_${entry.seedTypeId}_${entry.season}_${entry.year}`;
+    const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
     const dismissKey = `brgy_sched_dismissed_${notifId}`;
     localStorage.setItem(dismissKey, 'true');
     setSchedDismissed(prev => ({ ...prev, [notifId]: true }));
@@ -331,11 +361,11 @@ const BPDashboard = () => {
       {/* ── NOTIF 1: Seed Schedule (blue, Got It!) ── */}
       {scheduleNotifs
         .filter(entry => {
-          const notifId = `schedule_${entry.seedTypeId}_${entry.season}_${entry.year}`;
+          const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
           return !schedDismissed[notifId];
         })
         .map(entry => {
-          const notifId    = `schedule_${entry.seedTypeId}_${entry.season}_${entry.year}`;
+          const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
           const seasonDisp = entry.season === 'WET' ? 'Wet Season' : 'Dry Season';
           const delivDate  = entry.delivery_date
             ? new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -364,7 +394,7 @@ const BPDashboard = () => {
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e40af', margin: 0 }}>
-                    Seed Schedule — {entry.seedTypeName}{entry.varietyName ? ` (${entry.varietyName})` : ''}
+                    Seed Schedule — {entry.seed_type_name}{entry.variety_name ? ` (${entry.variety_name})` : ''}
                   </p>
                   <p style={{ fontSize: '0.78rem', color: '#1e40af', margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
                     Delivery on {delivDate} · {entry.total_bags} bags · {seasonDisp} {entry.year}
@@ -426,8 +456,23 @@ const BPDashboard = () => {
                     — <span style={{ fontSize: '1rem' }}>{alloc.allocated_bags}</span> seed bags
                   </p>
                   <p style={{ fontSize: '0.78rem', color: tagColor, margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
-                    {alloc.farmer_count} farmer{alloc.farmer_count !== 1 ? 's' : ''} · {alloc.total_hectares} ha
-                    {' · '}{isHybrid ? '1 bag/ha (15kg)' : '2 bags/ha (20kg)'}
+                    <span style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      borderRadius: '999px',
+                      padding: '0.15rem 0.45rem',
+                      fontWeight: 700,
+                      textTransform: 'capitalize',
+                      backgroundColor: alloc.alloc_status === 'CONFIRMED' ? '#dcfce7' : '#fef3c7',
+                      color: alloc.alloc_status === 'CONFIRMED' ? '#166534' : '#92400e',
+                      marginBottom: '0.18rem',
+                    }}>
+                      {alloc.alloc_status || 'PENDING'}
+                    </span>
+                    <span style={{ display: 'block', marginTop: '0.15rem' }}>
+                      {alloc.farmer_count} farmer{alloc.farmer_count !== 1 ? 's' : ''} · {alloc.total_hectares} ha
+                      {' · '}{isHybrid ? '1 bag/ha (15kg)' : '2 bags/ha (20kg)'}
+                    </span>
                     <span style={{ display: 'block', fontSize: '0.72rem', marginTop: '0.1rem' }}>
                       {alloc.season_display} {alloc.year}
                     </span>

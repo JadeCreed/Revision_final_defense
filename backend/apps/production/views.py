@@ -631,7 +631,7 @@ class BrgyReportPDFView(APIView):
 <div class=\"header\">
   <div class=\"title\">LUCBAN MUNICIPAL AGRICULTURE OFFICE</div>
   <div class=\"subtitle\">Barangay {report_data['barangay']} — Report</div>
-  <div class=\"badge\">{season_label}</div> 
+  <div class=\"badge\">{season_label}</div>
 </div>
 <table class=\"metric-table\">
   <tr>

@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, MapPin, ChevronDown, BarChart3, CheckCircle2, AlertCircle, AlertTriangle, Users, TrendingUp } from 'lucide-react';
+import { RefreshCw, MapPin, ChevronDown, BarChart3, AlertCircle, AlertTriangle, Users } from 'lucide-react';
 import { getCropPhaseAnalytics } from '../../api/axios';
 import KpiCards          from '../../components/KpiCards';
 import GanttChart        from '../../components/GanttChart';
 import PhaseDistribution from '../../components/PhaseDistribution';
-import AreaMonitoring    from '../../components/AreaMonitoring';
-import ComplianceDonut   from '../../components/ComplianceDonut';
 import DelayChart        from '../../components/DelayChart';
 import DamageChart       from '../../components/DamageChart';
 import AttentionPanel    from '../../components/AttentionPanel';
@@ -291,20 +289,6 @@ const CropPhase = () => {
                   sub={`${ins.most_active_phase.count} farmers · ${ins.most_active_phase.pct}% of monitored`}
                   accent={pc(ins.most_active_phase.phase)} bg={`${pc(ins.most_active_phase.phase)}12`} border={`${pc(ins.most_active_phase.phase)}33`} />
               )}
-              {ins.area_performance?.pct !== null && ins.area_performance?.pct !== undefined && (
-                <InsightCard icon={<TrendingUp size={16} color="#1e40af" />}
-                  title="Area performance" value={`${ins.area_performance.pct}%`}
-                  sub={`${fmtN(ins.area_performance.actual,2)} ha of ${fmtN(ins.area_performance.planned,2)} ha planned`}
-                  accent="#1e40af" bg="#eff6ff" border="#bfdbfe" />
-              )}
-              {ins.planting_compliance?.pct !== undefined && (
-                <InsightCard icon={<CheckCircle2 size={16} color={ins.planting_compliance.pct >= 70 ? '#16a34a' : '#dc2626'} />}
-                  title="Planting compliance" value={`${ins.planting_compliance.pct}%`}
-                  sub={`${ins.planting_compliance.met} met · ${ins.planting_compliance.not_met} did not`}
-                  accent={ins.planting_compliance.pct >= 70 ? '#166534' : '#991b1b'}
-                  bg={ins.planting_compliance.pct >= 70 ? '#f0fdf4' : '#fee2e2'}
-                  border={ins.planting_compliance.pct >= 70 ? '#bbf7d0' : '#fca5a5'} />
-              )}
               {ins.delay_alert?.count > 0 && (
                 <InsightCard icon={<AlertCircle size={16} color="#dc2626" />}
                   title="Delay alert" value={`${ins.delay_alert.count} delayed`}
@@ -327,16 +311,10 @@ const CropPhase = () => {
           </div>
         )}
 
-        {/* ── Phase distribution + Area monitoring ── */}
+        {/* ── Phase distribution + Delay ── */}
         <div className="cp-two">
           <PhaseDistribution data={data?.phase_distribution} />
-          <AreaMonitoring    data={data?.area_data} />
-        </div>
-
-        {/* ── Compliance + Delay ── */}
-        <div className="cp-two">
-          <ComplianceDonut data={data?.compliance} />
-          <DelayChart      data={data?.delay_by_seed} />
+          <DelayChart data={data?.delay_by_seed} />
         </div>
 
         {/* ── Damage ── */}

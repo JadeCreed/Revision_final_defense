@@ -722,6 +722,24 @@ export default function SeedInventory() {
       setSchedules(updatedSchedules);
       saveSchedulesToStorage(updatedSchedules);
       showToast('success', `Delivery confirmed — ${actualBags} bags for ${entry.varietyName}.`);
+
+      try {
+        const deliveredKey = 'agrice_seed_delivered_trigger';
+        const payload = JSON.stringify({
+          seedTypeName: entry.seedTypeName,
+          varietyName: entry.varietyName,
+          season: entry.season,
+          year: entry.year,
+          actualBags,
+          timestamp: Date.now(),
+        });
+        localStorage.setItem(deliveredKey, payload);
+        window.dispatchEvent(new StorageEvent('storage', {
+          key: deliveredKey,
+          newValue: payload,
+          storageArea: localStorage,
+        }));
+      } catch {}
       setDeliveredModal(null);
       setSelected(prev => prev ? { ...prev, _deliveredBags: actualBags } : prev);
       await loadInventory();
@@ -1261,7 +1279,7 @@ export default function SeedInventory() {
                                     color: card.alloc_status === 'CONFIRMED' ? '#166534' : '#854d0e',
                                     border: `1px solid ${card.alloc_status === 'CONFIRMED' ? '#bbf7d0' : '#fde68a'}`,
                                   }}>
-                                    {card.alloc_status === 'CONFIRMED' ? '✓ Confirmed' : '⏳ Pending'}
+                                    {card.alloc_status === 'CONFIRMED' ? '✓ Confirmed' : ' Pending'}
                                   </span>
                                 )}
                                 <div style={{ display: 'flex', gap: '0.375rem', marginTop: '0.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
