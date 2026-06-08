@@ -301,24 +301,18 @@ def brgy_beneficiary_allocation_view(request):
                 'batch_number': batch.batch_number,
             })
 
-    from apps.seed_poll.models import FinalSeed
-    final_seed_obj = FinalSeed.objects.order_by('-created_at').first()
-
     for brgy in brgy_map.values():
         brgy['total_hectares'] = round(brgy['total_hectares'], 2)
 
-        if final_seed_obj:
-            existing_alloc = BrgyAllocation.objects.filter(
-                barangay=brgy['barangay'],
-                delivery__seed_type_id=brgy['seed_type_id'],
-                delivery__season=final_seed_obj.season,
-                delivery__year=final_seed_obj.year,
-            ).first()
-            brgy['alloc_status'] = existing_alloc.status if existing_alloc else 'PENDING'
-            brgy['alloc_id'] = existing_alloc.id if existing_alloc else None
-        else:
-            brgy['alloc_status'] = 'PENDING'
-            brgy['alloc_id'] = None
+        existing_alloc = BrgyAllocation.objects.filter(
+            barangay=brgy['barangay'],
+            delivery__seed_type_id=brgy['seed_type_id'],
+            delivery__season=brgy['season'],
+            delivery__year=brgy['year'],
+        ).first()
+        brgy['alloc_status'] = existing_alloc.status if existing_alloc else 'PENDING'
+        brgy['alloc_id'] = existing_alloc.id if existing_alloc else None
+        brgy['already_confirmed'] = existing_alloc.status == 'CONFIRMED' if existing_alloc else False
 
     return Response(list(brgy_map.values()))
 
@@ -337,7 +331,7 @@ def brgy_my_seed_allocation_view(request):
     if not barangay:
         return Response([])
 
-    final_seed = FinalSeed.objects.order_by('-created_at').first()
+    final_seed = FinalSeed.objects.order_by('-confirmed_at').first()
     if not final_seed:
         return Response([])
 
@@ -347,7 +341,7 @@ def brgy_my_seed_allocation_view(request):
     delivered_deliveries = SeedDelivery.objects.filter(
         season=season,
         year=year,
-        status='DELIVERED',
+        total_bags__gt=0,
     ).select_related('seed_type', 'variety')
 
     if not delivered_deliveries.exists():
@@ -432,7 +426,7 @@ def brgy_confirm_allocation_view(request):
     if not all([barangay, delivery_id, allocated_bags is not None]):
         return Response({'error': 'Missing required fields.'}, status=400)
 
-    delivery = get_object_or_404(SeedDelivery, pk=delivery_id, status='DELIVERED')
+    delivery = get_object_or_404(SeedDelivery, pk=delivery_id)
 
     existing = BrgyAllocation.objects.filter(delivery=delivery, barangay=barangay).first()
     if existing:
@@ -489,7 +483,7 @@ def brgy_schedule_notification_view(request):
     if not barangay:
         return Response([])
 
-    final_seed = FinalSeed.objects.order_by('-created_at').first()
+    final_seed = FinalSeed.objects.order_by('-confirmed_at').first()
     if not final_seed:
         return Response([])
 
@@ -499,7 +493,7 @@ def brgy_schedule_notification_view(request):
     deliveries = SeedDelivery.objects.filter(
         season=season,
         year=year,
-        status='DELIVERED',
+        total_bags__gt=0,
     ).select_related('seed_type', 'variety').order_by('-delivery_date')
 
     result = []

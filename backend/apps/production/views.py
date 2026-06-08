@@ -583,9 +583,11 @@ class BrgyReportPDFView(APIView):
 
     def post(self, request):
         try:
-            from weasyprint import HTML
+            from xhtml2pdf import pisa
         except ImportError:
-            return Response({'error': 'WeasyPrint is not installed. Run: pip install weasyprint'}, status=500)
+            return Response({'error': 'xhtml2pdf is not installed. Run: pip install xhtml2pdf'}, status=500)
+
+        from io import BytesIO
 
         poll_id = request.data.get('poll_id')
         charts = request.data.get('charts', {}) or {}
@@ -607,54 +609,65 @@ class BrgyReportPDFView(APIView):
 <meta charset=\"UTF-8\" />
 <style>
   @page {{ size: A4; margin: 15mm 12mm; }}
-  body {{ font-family: Arial, sans-serif; font-size: 10pt; color: #111827; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #111827; }}
   .header {{ text-align: center; border-bottom: 2px solid #166534; padding-bottom: 8px; margin-bottom: 10px; }}
-  .title {{ font-size: 13pt; font-weight: 800; color: #166534; }}
+  .title {{ font-size: 13pt; font-weight: bold; color: #166534; }}
   .subtitle {{ font-size: 9pt; color: #374151; margin-top: 2px; }}
-  .badge {{ display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-size: 8pt; font-weight: 700; margin-top: 4px; }}
-  .grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }}
-  .card {{ border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; background: #f8fafc; }}
-  .card .label {{ font-size: 7pt; text-transform: uppercase; color: #64748b; }}
-  .card .value {{ font-size: 12pt; font-weight: 800; color: #14532d; margin-top: 4px; }}
-  .chart-row {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }}
-  .chart-box {{ border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }}
+  .badge {{ display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-size: 8pt; font-weight: bold; margin-top: 4px; }}
+  .metric-table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; }}
+  .metric-table td {{ width: 33.33%; padding: 6px; border: 1px solid #e2e8f0; background: #f8fafc; vertical-align: top; }}
+  .metric-label {{ font-size: 7pt; text-transform: uppercase; color: #64748b; }}
+  .metric-value {{ font-size: 11pt; font-weight: bold; color: #14532d; margin-top: 2px; }}
+  .chart-table {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
+  .chart-table td {{ width: 50%; padding: 6px; border: 1px solid #e2e8f0; vertical-align: top; }}
   .chart-box img {{ width: 100%; height: auto; border-radius: 6px; }}
   table {{ width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 10px; }}
   th {{ text-align: left; background: #14532d; color: white; padding: 5px; font-size: 7.5pt; text-transform: uppercase; }}
   td {{ padding: 5px; border-bottom: 1px solid #e5e7eb; color: #374151; }}
-  .right {{ text-align: right; }}
-  .insight {{ display: flex; gap: 6px; margin-bottom: 4px; font-size: 8.5pt; color: #374151; }}
-  .dot {{ width: 6px; height: 6px; border-radius: 999px; background: #166534; margin-top: 4px; flex-shrink: 0; }}
+  .insight {{ margin-bottom: 4px; font-size: 8.5pt; color: #374151; }}
 </style>
 </head>
 <body>
 <div class=\"header\">
   <div class=\"title\">LUCBAN MUNICIPAL AGRICULTURE OFFICE</div>
-  <div class=\"subtitle\">Barangay {report_data['barangay']} — Harvesting Accomplishment Report</div>
-  <div class=\"badge\">{season_label}</div>
+  <div class=\"subtitle\">Barangay {report_data['barangay']} — Report</div>
+  <div class=\"badge\">{season_label}</div> 
 </div>
-<div class=\"grid\">
-  <div class=\"card\"><div class=\"label\">Farmers Harvested</div><div class=\"value\">{summary.get('total_farmers', 0)}</div></div>
-  <div class=\"card\"><div class=\"label\">Beneficiaries</div><div class=\"value\">{summary.get('total_beneficiaries', 0)}</div></div>
-  <div class=\"card\"><div class=\"label\">Area Harvested</div><div class=\"value\">{summary.get('total_area_ha', 0)} ha</div></div>
-  <div class=\"card\"><div class=\"label\">Total Production</div><div class=\"value\">{summary.get('total_production_mt', 0)} MT</div></div>
-  <div class=\"card\"><div class=\"label\">Avg Yield</div><div class=\"value\">{summary.get('avg_yield_t_ha', 0)} t/ha</div></div>
-  <div class=\"card\"><div class=\"label\">Achievement</div><div class=\"value\">{summary.get('avg_util_pct', 0)}%</div></div>
-</div>
-{chart_row}
-{gap_chart_html}
+<table class=\"metric-table\">
+  <tr>
+    <td><div class=\"metric-label\">Farmers Harvested</div><div class=\"metric-value\">{summary.get('total_farmers', 0)}</div></td>
+    <td><div class=\"metric-label\">Beneficiaries</div><div class=\"metric-value\">{summary.get('total_beneficiaries', 0)}</div></td>
+    <td><div class=\"metric-label\">Area Harvested</div><div class=\"metric-value\">{summary.get('total_area_ha', 0)} ha</div></td>
+  </tr>
+  <tr>
+    <td><div class=\"metric-label\">Total Production</div><div class=\"metric-value\">{summary.get('total_production_mt', 0)} MT</div></td>
+    <td><div class=\"metric-label\">Avg Yield</div><div class=\"metric-value\">{summary.get('avg_yield_t_ha', 0)} t/ha</div></td>
+    <td><div class=\"metric-label\">Achievement</div><div class=\"metric-value\">{summary.get('avg_util_pct', 0)}%</div></td>
+  </tr>
+</table>
+<table class=\"chart-table\">
+  <tr>
+    <td class=\"chart-box\">{chart_row}</td>
+    <td class=\"chart-box\">{gap_chart_html}</td>
+  </tr>
+</table>
 <div style=\"margin-top: 8px;\"><strong>Key Insights</strong></div>
 {insights_html}
 </body>
 </html>
 """
 
+        buffer = BytesIO()
         try:
-            pdf_bytes = HTML(string=html_content).write_pdf()
+            pisa_status = pisa.CreatePDF(html_content, dest=buffer)
         except Exception as exc:
             return Response({'error': 'Failed to generate PDF report.', 'detail': str(exc)}, status=500)
 
-        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        if pisa_status.err:
+            return Response({'error': 'Failed to generate PDF report.'}, status=500)
+
+        buffer.seek(0)
+        response = HttpResponse(buffer.read(), content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="BrgyReport_{report_data["barangay"].replace(" ", "_")}.pdf"'
         return response
 
