@@ -975,7 +975,7 @@ const GisMap = () => {
     L.control.zoom({ position: 'topleft' }).addTo(map);
     const allLayer = L.geoJSON(BRGY_FEATURES);
     const bounds   = allLayer.getBounds();
-    if (bounds.isValid()) { map.fitBounds(bounds, { padding: [20, 20], animate: false }); map.setMinZoom(map.getZoom()); }
+    if (bounds.isValid()) { map.fitBounds(bounds, { padding: [5, 5], animate: false }); map.setMinZoom(map.getZoom()); }
     leafletMap.current = map;
     setL(L);
   }, [L]);
@@ -1185,7 +1185,7 @@ const GisMap = () => {
   };
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#f8fafc', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, padding: '1rem',  overflow: 'hidden' }}>
       <style>{`
         @keyframes gis-pop { 0%{opacity:0;transform:translateX(-50%) scale(0.88)} 70%{transform:translateX(-50%) scale(1.03)} 100%{opacity:1;transform:translateX(-50%) scale(1)} }
         @keyframes gis-fadeSlide { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
@@ -1204,15 +1204,15 @@ const GisMap = () => {
       <Toast toast={toast} />
 
       {!isMobile && (
-        <div style={{ padding: '0.5rem 1rem 0', flexShrink: 0 }}>
-          <p style={{ margin: 0, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#16a34a' }}>GIS map overview · Lucban crop monitoring & utilization</p>
+        <div style={{ padding: '0 0 0.5rem 0', flexShrink: 0 }}>
+          <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#16a34a' }}>GIS map overview · Lucban crop monitoring & utilization</p>
         </div>
       )}
 
       {!isMobile && (
-        <div className='gis-map-wrap' style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', padding: '0.4rem 0.75rem 1.5rem', gap: '0.65rem', position: 'relative' }}>
+        <div className='gis-map-wrap' style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden', gap: '0.65rem', position: 'relative' }}>
           {/* MAP */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0, marginRight: 'clamp(300px, 24vw, 350px)' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
             {/* Toolbar */}
             <div style={{ padding: '0.55rem 0.875rem', borderBottom: '1px solid #f1f5f9', display: 'flex', gap: '0.35rem', alignItems: 'center', overflowX: 'auto', flexShrink: 0 }} className='gis-toolbar-row'>
               <div style={{ display: 'flex', backgroundColor: '#f1f5f9', borderRadius: '0.625rem', padding: '0.175rem', gap: '0.175rem', flexShrink: 0 }}>
@@ -1301,7 +1301,7 @@ const GisMap = () => {
           </div>
 
           {/* PANEL SIDE */}
-          <div className='gis-panel-side' style={{ position: 'absolute', top: 0, right: 0, bottom: '1.5rem', width: 'clamp(280px, 22vw, 330px)', flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0 }}>
+          <div className='gis-panel-side' style={{ width: 'clamp(280px, 22vw, 330px)', flexShrink: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'white', borderRadius: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 8px 32px rgba(15,23,42,0.08)', overflow: 'hidden', minHeight: 0, height: '100%' }}>
             <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
               {activeTab === 'utilization' ? <TrendingUp size={15} color='#1a4d1a' /> : <Activity size={15} color='#1a4d1a' />}
               <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0f172a' }}>

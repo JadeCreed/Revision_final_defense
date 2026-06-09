@@ -153,7 +153,7 @@ const DashboardLayout = () => {
         </header>
 
         {/* ── PAGE CONTENT — this is the ONLY part that changes on navigation ── */}
-        <main className="dashboard-content">
+        <main className="dashboard-content" style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           {/* <Outlet /> renders whatever page the current route maps to */}
           {/* e.g. /admin → AdminDashboard, /admin/users → UserManagement */}
           <Outlet />
