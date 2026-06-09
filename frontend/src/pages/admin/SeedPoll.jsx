@@ -1111,7 +1111,7 @@ const SeedPoll = () => {
             </div>
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={labelStyle}>End Date & Time * <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: '0.72rem' }}>(auto-closes after this)</span></label>
-              <input type="datetime-local" value={form.end_date} onChange={e => handleField('end_date', e.target.value)} style={inputStyle(!!formErrors.end_date)} min={new Date().toISOString().slice(0, 16)} />
+              <input type="datetime-local" value={form.end_date} onChange={e => handleField('end_date', e.target.value)} style={inputStyle(!!formErrors.end_date)} />
               {formErrors.end_date && <span style={{ fontSize: '0.72rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>{formErrors.end_date}</span>}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>

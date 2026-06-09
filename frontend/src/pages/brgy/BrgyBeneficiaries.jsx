@@ -197,9 +197,10 @@ const BrgyBeneficiaries = () => {
   const [editEntry, setEditEntry]     = useState(null); // entry being edited
 
   // ── CONTEXT ──
-  const [myBarangay, setMyBarangay]   = useState('');
+  const [myBarangay, setMyBarangay]     = useState('');
   const [totalFarmers, setTotalFarmers] = useState(0);
-  const [finalSeeds, setFinalSeeds]   = useState([]);
+  const [finalSeeds, setFinalSeeds]     = useState([]);
+  const [activePollSeason, setActivePollSeason] = useState(null); // { season, year }
 
   // ── DATA ──
   const [events, setEvents]           = useState([]);
@@ -303,6 +304,10 @@ const BrgyBeneficiaries = () => {
       setTotalFarmers(ctxRes.data.total_approved_farmers || 0);
       setEvents(evRes.data || []);
       setFinalSeeds(fsRes.data || []);
+      // Store active poll season from context
+      if (ctxRes.data.current_season) {
+        setActivePollSeason(ctxRes.data.current_season);
+      }
     } catch {
       showToast('error', 'Failed to load data.');
     } finally {
@@ -399,6 +404,26 @@ const BrgyBeneficiaries = () => {
   // OPEN PROGRAM
   // ─────────────────────────────────────────
   const openProgram = async (event) => {
+    // ── SEASON GUARD ──
+    const activeSeason = activePollSeason?.season || finalSeeds[0]?.season || null;
+    const activeYear   = activePollSeason?.year   || finalSeeds[0]?.year   || null;
+    const activeDisplay = activePollSeason?.season_display
+      || finalSeeds[0]?.season_display
+      || `${activeSeason} ${activeYear}`;
+
+    const isPastSeason =
+      activeSeason && activeYear &&
+      (event.season !== activeSeason || String(event.year) !== String(activeYear));
+
+    if (isPastSeason) {
+      showToast(
+        'error',
+        `Past season program (${event.season_display} ${event.year}). ` +
+        `To encode, create a new program for ${activeDisplay}.`
+      );
+      return;
+    }
+
     setCurrentEvent(event);
     setFarmerSearch('');
     setFarmerResults([]);

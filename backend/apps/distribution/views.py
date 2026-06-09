@@ -201,17 +201,18 @@ class FarmerSearchView(APIView):
             elif event_id:
                 entry_qs = entry_qs.filter(batch__event_id=event_id)
             else:
-                # Filter by current active poll season/year
                 from apps.seed_poll.models import Poll
-                active_poll = (
-                    Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-                    or Poll.objects.order_by('-created_at').first()
-                )
+                # Strict: OPEN lang, hindi fallback sa latest closed/old poll
+                active_poll = Poll.objects.filter(status='OPEN').order_by('-created_at').first()
                 if active_poll:
                     entry_qs = entry_qs.filter(
                         batch__event__season=active_poll.season,
                         batch__event__year=active_poll.year,
+                        batch__event__barangay=barangay,
                     )
+                else:
+                    # Walang OPEN poll — walang dapat lumabas sa distribution search
+                    entry_qs = entry_qs.none()
 
             approved_farmer_ids = entry_qs.values_list('farmer_id', flat=True).distinct()
             qs = qs.filter(id__in=approved_farmer_ids)

@@ -190,6 +190,29 @@ class AdminPollListCreateView(APIView):
                          f"Please lock or close it before creating a new one."
             }, status=status.HTTP_400_BAD_REQUEST)
 
+        # ── CHECK: duplicate season/year ──
+        # Prevent creating same season + year poll that already exists
+        season = request.data.get('season')
+        year   = request.data.get('year')
+        if season and year:
+            try:
+                year_int = int(year)
+            except Exception:
+                year_int = None
+            if year_int is not None:
+                duplicate = Poll.objects.filter(
+                    season=season,
+                    year=year_int,
+                ).first()
+                if duplicate:
+                    return Response({
+                        "error": (
+                            f"A poll for {duplicate.get_season_display()} {year} already exists "
+                            f"(status: {duplicate.get_status_display()}). "
+                            f"You cannot create duplicate season/year polls."
+                        )
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = PollSerializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             poll = serializer.save(created_by=request.user, status='OPEN')
