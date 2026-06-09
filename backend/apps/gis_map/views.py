@@ -307,6 +307,10 @@ class GISPlotsView(APIView):
                     batch__status='APPROVED',
                     qty_bags__isnull=False,
                     farmer_id__in=farmer_ids,
+                    **({
+                        'batch__event__season': poll_season,
+                        'batch__event__year': poll_year,
+                    } if poll_year and poll_season else {})
                 ).values_list('farmer_id', flat=True)
             )
             for data in seen.values():
