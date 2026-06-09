@@ -100,20 +100,13 @@ def get_latest_per_farmer(qs):
     return seen
 
 
-def filter_harvest_by_poll(qs, poll):
+def filter_harvest_by_poll(qs, poll, distributed_farmer_ids=None):
+    """Poll-direct filter. Mas accurate kaysa date-range."""
     if not poll:
         return qs
-    if poll.season == 'WET':
-        return qs.filter(
-            harvest_date__year=poll.year,
-            harvest_date__month__gte=6,
-            harvest_date__month__lte=10,
-        )
-    elif poll.season == 'DRY':
-        return qs.filter(
-            Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
-            Q(harvest_date__year=poll.year,     harvest_date__month__lte=5)
-        )
+    qs = qs.filter(poll=poll)
+    if distributed_farmer_ids is not None:
+        qs = qs.filter(farmer_id__in=distributed_farmer_ids)
     return qs
 
 
@@ -169,6 +162,24 @@ class AdminDashboardAnalyticsView(APIView):
             dist_qs.aggregate(s=Sum('farm_area_ha'))['s'] or 0
         )
         barangays_covered = dist_qs.values('farmer__barangay').distinct().count()
+
+        # ── Scoped pipeline counts — filtered by current poll only ──
+        pipeline_dist_qs = DistributionEntry.objects.filter(
+            batch__status='APPROVED',
+            date_received__isnull=False,
+        )
+        if poll:
+            pipeline_dist_qs = pipeline_dist_qs.filter(
+                batch__event__season=poll.season,
+                batch__event__year=poll.year,
+            )
+        pipeline_distributed_ids = set(pipeline_dist_qs.values_list('farmer_id', flat=True))
+        pipeline_monitored_ids   = set(r.farmer_id for r in latest_records)
+        pipeline_harvested_ids   = set(r.farmer_id for r in harvest_list)
+
+        pipeline_total_dist    = len(pipeline_distributed_ids)
+        pipeline_total_monitor = len(pipeline_monitored_ids)
+        pipeline_total_harvest = len(pipeline_harvested_ids)
 
         total_dry_kg   = sum(dry_weight_kg(r) for r in harvest_list)
         total_mt       = total_dry_kg / 1000
@@ -330,19 +341,19 @@ class AdminDashboardAnalyticsView(APIView):
 
         pipeline = {
             'beneficiaries': {
-                'count': total_beneficiaries,
+                'count': pipeline_total_dist,
                 'label': 'Distributed',
             },
             'monitored': {
-                'count': total_monitored,
-                'total': total_beneficiaries,
-                'pct':   round(total_monitored / total_beneficiaries * 100, 1) if total_beneficiaries > 0 else 0,
+                'count': pipeline_total_monitor,
+                'total': pipeline_total_dist,
+                'pct':   round(pipeline_total_monitor / pipeline_total_dist * 100, 1) if pipeline_total_dist > 0 else 0,
                 'label': 'Monitored',
             },
             'harvested': {
-                'count': total_harvested,
-                'total': total_monitored,
-                'pct':   round(total_harvested / total_monitored * 100, 1) if total_monitored > 0 else 0,
+                'count': pipeline_total_harvest,
+                'total': pipeline_total_monitor,
+                'pct':   round(pipeline_total_harvest / pipeline_total_monitor * 100, 1) if pipeline_total_monitor > 0 else 0,
                 'label': 'Harvest Encoded',
             },
         }

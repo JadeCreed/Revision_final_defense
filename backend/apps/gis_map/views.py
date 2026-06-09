@@ -235,6 +235,8 @@ class GISPlotsView(APIView):
             harvest_qs = HarvestRecord.objects.select_related('farmer').order_by('farmer_id', 'seed_source', '-harvest_date', '-created_at')
             if barangay_filter:
                 harvest_qs = harvest_qs.filter(barangay__iexact=barangay_filter)
+            if active_poll:
+                harvest_qs = harvest_qs.filter(poll=active_poll)
 
             harvest_seen = set()
             for rec in harvest_qs:

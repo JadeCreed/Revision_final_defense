@@ -48,6 +48,14 @@ class HarvestRecord(models.Model):
         blank=True,
         related_name='harvest_records_encoded',
     )
+    poll = models.ForeignKey(
+        'seed_poll.Poll',
+        on_delete=models.PROTECT,
+        related_name='harvest_records',
+        null=True,
+        blank=True,
+        help_text='The season poll this harvest record belongs to.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

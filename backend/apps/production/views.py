@@ -700,27 +700,63 @@ class HarvestRecordListCreateView(ListCreateAPIView):
             try:
                 from apps.seed_poll.models import Poll
                 poll = Poll.objects.get(id=poll_id)
-                if poll.season == 'WET':
-                    qs = qs.filter(
-                        harvest_date__year=poll.year,
-                        harvest_date__month__gte=6,
-                        harvest_date__month__lte=10,
-                    )
-                elif poll.season == 'DRY':
-                    from django.db.models import Q
-                    qs = qs.filter(
-                        Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
-                        Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
-                    )
+                qs = qs.filter(poll=poll)
             except Poll.DoesNotExist:
                 pass
+        else:
+            # Default: active poll only
+            from apps.seed_poll.models import Poll
+            active_poll = (
+                Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+                or Poll.objects.order_by('-created_at').first()
+            )
+            if active_poll:
+                qs = qs.filter(poll=active_poll)
 
         return qs
 
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError
+        from apps.seed_poll.models import Poll
+
         user = self.request.user
         barangay = getattr(user, 'barangay', 'Unknown')
-        serializer.save(encoded_by=user, barangay=barangay)
+
+        farmer_id = serializer.validated_data.get('farmer').id
+        seed_source = serializer.validated_data.get('seed_source')
+
+        # Get active poll
+        active_poll = (
+            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
+            or Poll.objects.order_by('-created_at').first()
+        )
+
+        # Duplicate check — poll-scoped (simple and accurate)
+        dup_qs = HarvestRecord.objects.filter(
+            farmer_id=farmer_id,
+            seed_source=seed_source,
+            barangay=barangay,
+        )
+        if active_poll:
+            dup_qs = dup_qs.filter(poll=active_poll)
+
+        if dup_qs.exists():
+            existing = dup_qs.first()
+            seed_labels = {
+                'HYBRID':   'Hybrid seeds',
+                'INBRED':   'Certified seeds',
+                'OWN_SEED': 'Farmer saved seeds',
+            }
+            raise ValidationError({
+                'duplicate':    True,
+                'existing_id':  existing.id,
+                'detail': (
+                    f"A {seed_labels.get(seed_source, seed_source)} harvest record for this farmer "
+                    f"already exists this season (encoded {existing.harvest_date})."
+                )
+            })
+
+        serializer.save(encoded_by=user, barangay=barangay, poll=active_poll)
 
 
 class HarvestRecordDetailView(RetrieveUpdateDestroyAPIView):
@@ -848,16 +884,7 @@ class BrgyHarvestHistoryView(APIView):
             barangay=barangay
         ).select_related('farmer', 'encoded_by')
 
-        if poll.season == 'WET':
-            qs = qs.filter(
-                harvest_date__year=poll.year,
-                harvest_date__month__range=(6, 10),
-            )
-        elif poll.season == 'DRY':
-            qs = qs.filter(
-                Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
-                Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
-            )
+        qs = qs.filter(poll=poll)
 
         if search:
             qs = qs.filter(

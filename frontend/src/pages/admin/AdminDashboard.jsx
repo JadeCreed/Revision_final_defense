@@ -610,9 +610,11 @@ export default function AdminDashboard() {
           <Section title="Data Pipeline Status" delay={660}>
             {loading ? Array(3).fill(0).map((_, i) => <Skeleton key={i} h={40} />) : (() => {
               const pipe = data?.pipeline || {};
+              const totalBeneficiaries = pipe.beneficiaries?.count ?? 0;
               const steps = [
                 { key: 'beneficiaries', label: 'Seed Distributed', color: '#15803d',
-                  count: pipe.beneficiaries?.count ?? 0, total: pipe.beneficiaries?.count ?? 0, pct: 100 },
+                  count: totalBeneficiaries, total: totalBeneficiaries,
+                  pct: totalBeneficiaries > 0 ? 100 : 0 },
                 { key: 'monitored', label: 'Crop Monitored', color: '#0369a1',
                   count: pipe.monitored?.count ?? 0, total: pipe.monitored?.total ?? 0, pct: pipe.monitored?.pct ?? 0 },
                 { key: 'harvested', label: 'Harvest Encoded', color: '#ea580c',
