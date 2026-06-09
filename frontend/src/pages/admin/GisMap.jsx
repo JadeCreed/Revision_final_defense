@@ -944,28 +944,9 @@ const GisMap = () => {
 
   useEffect(() => {
     loadAll();
-    const interval = setInterval(async () => {
-      const pollId = selectedPoll?.poll_id || activePoll?.poll_id;
-      const [plotsRes, sumRes, brgyRes, harvestRes] = await Promise.allSettled([
-        getGisPlots({ poll_id: pollId }),
-        getMapSummary({ poll_id: pollId }),
-        getGisBarangays(),
-        getHarvestRecords({ poll_id: pollId }),
-      ]);
-      if (plotsRes.status === 'fulfilled') {
-        const d = plotsRes.value.data;
-        if (Array.isArray(d)) setPlots(d);
-        else if (d && typeof d === 'object') { setPlots(d.plots || []); setApprovedCounts(d.approved_counts || {}); }
-      }
-      if (sumRes.status === 'fulfilled')  setSummary(sumRes.value.data);
-      if (brgyRes.status === 'fulfilled') setBarangays(brgyRes.value.data || []);
-      if (harvestRes.status === 'fulfilled') {
-        const d = harvestRes.value.data;
-        setHarvestRecords(Array.isArray(d) ? d : (d?.results || []));
-      }
-    }, 30000);
+    const interval = setInterval(loadAll, 30000);
     return () => clearInterval(interval);
-  }, [loadAll, selectedPoll, activePoll]);
+  }, [loadAll]);
 
   // ── INIT MAP ──
   useEffect(() => {
@@ -1230,7 +1211,15 @@ const GisMap = () => {
                   <select
                     value={selectedPoll?.season || ''}
                     onChange={e => {
-                      const matched = polls.find(p => p.season === e.target.value);
+                      const newSeason = e.target.value;
+                      const currentYear = selectedPoll?.year;
+                      const sameYear = polls.find(
+                        p => p.season === newSeason && p.year === currentYear
+                      );
+                      const fallback = polls
+                        .filter(p => p.season === newSeason)
+                        .sort((a, b) => b.year - a.year)[0];
+                      const matched = sameYear || fallback;
                       if (matched) setSelectedPollId(matched.poll_id);
                     }}
                     style={{ padding: '0.3rem 0.55rem', border: '1px solid #dbe3ec', borderRadius: '0.5rem', backgroundColor: 'white', color: '#111827', fontSize: '0.73rem', fontWeight: 600, minWidth: 90, maxWidth: 115 }}
