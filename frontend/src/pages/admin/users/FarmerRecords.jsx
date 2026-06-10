@@ -310,7 +310,7 @@ const FarmerAccountsTab = () => {
       {confirmModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '400px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}>{confirmModal.action === 'APPROVED' ? '✅ Approve' : '❌ Reject'} Farmer</h3>
+            <h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}>{confirmModal.action === 'APPROVED' ? ' Approve' : '❌ Reject'} Farmer</h3>
             <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
               Are you sure you want to <strong>{confirmModal.action === 'APPROVED' ? 'approve' : 'reject'}</strong> <strong>{confirmModal.farmerName}</strong>?
             </p>
@@ -742,7 +742,7 @@ const FarmerMasterlistTab = () => {
             {resetSuccess ? (
               <div>
                 <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '1rem', borderRadius: '0.75rem', marginBottom: '1.25rem', fontSize: '0.875rem', fontWeight: '600', lineHeight: 1.6 }}>
-                  ✅ {resetSuccess}
+                   {resetSuccess}
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button onClick={() => { setResetModal(null); setResetMode(''); setResetSuccess(''); }} style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}>

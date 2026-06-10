@@ -15,13 +15,6 @@ class HarvestRecord(models.Model):
         (SEED_SOURCE_OWN_SEED, 'Own Seed'),
     ]
 
-    WEIGHT_TYPE_FRESH = 'FRESH'
-    WEIGHT_TYPE_DRIED = 'DRIED'
-    WEIGHT_TYPE_CHOICES = [
-        (WEIGHT_TYPE_FRESH, 'Fresh / Wet'),
-        (WEIGHT_TYPE_DRIED, 'Dried'),
-    ]
-
     farmer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -34,12 +27,6 @@ class HarvestRecord(models.Model):
     harvest_bags = models.PositiveIntegerField()
     seed_bags_received = models.PositiveIntegerField(blank=True, null=True)
     harvest_date = models.DateField()
-    weight_type = models.CharField(
-        max_length=10,
-        choices=WEIGHT_TYPE_CHOICES,
-        default=WEIGHT_TYPE_FRESH,
-    )
-    moisture_content_pct = models.PositiveSmallIntegerField(default=12)
     notes = models.TextField(blank=True)
     encoded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -66,34 +53,19 @@ class HarvestRecord(models.Model):
         farmer_name = self.farmer.get_full_name() if self.farmer else 'Unknown'
         return f'Harvest #{self.id} — {farmer_name}'
 
-    # ── HARVEST WEIGHT CALCULATIONS ──
     @property
-    def harvest_kg_fresh(self):
-        """Fresh/wet weight: harvest_bags × 50 kg/bag"""
+    def harvest_kg(self):
+        """1 bag = 50 kg. Simple. No moisture."""
         return Decimal(self.harvest_bags or 0) * Decimal(50)
 
     @property
-    def harvest_kg_dry(self):
-        """Dry weight: fresh × (1 - moisture%) [DA standard: 12% moisture]"""
-        fresh = self.harvest_kg_fresh
-        moisture_factor = Decimal(1) - (Decimal(self.moisture_content_pct or 12) / Decimal(100))
-        return fresh * moisture_factor
-
-    @property
-    def harvest_kg(self):
-        """Legacy: returns fresh weight for backward compatibility"""
-        return self.harvest_kg_fresh
-
-    @property
     def harvest_mt(self):
-        """MT in dry weight (for comparisons with standard yields)"""
-        return self.harvest_kg_dry / Decimal(1000)
+        return self.harvest_kg / Decimal(1000)
 
     @property
     def yield_t_ha(self):
-        """Yield in t/ha using dry weight"""
         if self.harvest_area_ha and self.harvest_area_ha > 0:
-            return self.harvest_kg_dry / Decimal(self.harvest_area_ha) / Decimal(1000)
+            return self.harvest_kg / Decimal(self.harvest_area_ha) / Decimal(1000)
         return Decimal('0')
 
     # ── SEED-BASED CALCULATIONS ──
@@ -125,13 +97,13 @@ class HarvestRecord(models.Model):
     def productivity_ratio(self):
         """Productivity: kg of paddy produced per 1 kg of seed implied"""
         if self.seed_implied_planted_kg and self.seed_implied_planted_kg > 0:
-            return self.harvest_kg_dry / self.seed_implied_planted_kg
+            return self.harvest_kg / self.seed_implied_planted_kg
         return Decimal(0)
 
     # ── YIELD-BASED UTILIZATION (MAIN METRIC) ──
     @property
     def standard_yield_kg_ha(self):
-        """DA standard yield for this seed type (dry weight)"""
+        """DA standard yield for this seed type"""
         from django.conf import settings
         yields = settings.STANDARD_YIELDS
         return Decimal(yields.get(self.seed_source, 2000))
@@ -145,10 +117,10 @@ class HarvestRecord(models.Model):
 
     @property
     def utilization_pct(self):
-        """MAIN METRIC: Utilization = (actual dry weight / expected yield) × 100"""
+        """MAIN METRIC: Utilization = (actual weight / expected yield) × 100"""
         expected = self.expected_harvest_kg
         if expected and expected > 0:
-            return (self.harvest_kg_dry / expected) * Decimal(100)
+            return (self.harvest_kg / expected) * Decimal(100)
         return None
 
     @property

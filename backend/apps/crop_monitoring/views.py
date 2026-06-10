@@ -11,6 +11,7 @@ from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import FinalSeed
+from apps.seed_poll.utils import get_current_poll
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
@@ -71,11 +72,7 @@ class ATFarmerListView(APIView):
         qs = qs.order_by('barangay', 'last_name', 'first_name')
         phase_filter = request.query_params.get('phase', '')
 
-        from apps.seed_poll.models import Poll
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll()
 
         # For each farmer, get their latest monitoring record
         results = []
@@ -140,6 +137,32 @@ class ATFarmerListView(APIView):
                 'distributed_variety': distributed_variety,
                 'distributed_seed_type': distributed_seed_type,
             })
+
+            # Build per-seed-type distribution map
+            distribution_by_seed_type = {}
+            for entry in DistributionEntry.objects.filter(
+                farmer=farmer,
+                batch__status='APPROVED'
+            ).select_related('variety', 'batch__event__seed_type').order_by('-batch__approved_at'):
+                seed_type_obj = entry.batch.event.seed_type
+                if not seed_type_obj:
+                    continue
+                seed_type_upper = seed_type_obj.name.upper()
+                if 'HYBRID' in seed_type_upper:
+                    key = 'HYBRID'
+                elif 'INBRED' in seed_type_upper:
+                    key = 'INBRED'
+                else:
+                    continue
+                if key not in distribution_by_seed_type:
+                    distribution_by_seed_type[key] = {
+                        'seed_type_name': seed_type_obj.name,
+                        'variety_name': entry.variety.name if entry.variety else (
+                            entry.batch.event.variety.name if entry.batch.event.variety else ''
+                        ),
+                    }
+
+            results[-1]['distribution_by_seed_type'] = distribution_by_seed_type
 
         if phase_filter:
             results = [r for r in results if r.get('latest_phase') == phase_filter]
@@ -305,12 +328,7 @@ class ATCropMonitoringCreateView(APIView):
         if not date_observed:
             return Response({'error': 'Date observed is required.'}, status=400)
 
-        from apps.seed_poll.models import Poll
-
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll()
         if not active_poll:
             return Response(
                 {'error': 'No active season found. Admin must open a poll first.'},
@@ -598,12 +616,7 @@ class ATDashboardStatsView(APIView):
             role='FARMER', status='APPROVED', is_active=True,
             barangay__in=assigned_barangays
         ).count()
-
-        from apps.seed_poll.models import Poll
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll()
 
         monitored_farmers = CropMonitoringRecord.objects.filter(
             barangay__in=assigned_barangays,

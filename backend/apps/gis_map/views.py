@@ -9,6 +9,7 @@ from apps.accounts.models import User
 from apps.distribution.models import DistributionEntry
 from apps.crop_monitoring.models import CropMonitoringRecord
 from apps.production.models import HarvestRecord
+from apps.seed_poll.utils import get_current_poll
 
 logger = logging.getLogger(__name__)
 
@@ -46,12 +47,7 @@ class GISPlotsView(APIView):
         poll_id_param = request.query_params.get('poll_id', None)
 
         # ── SEASON/YEAR FILTER from selected poll ──
-        from apps.seed_poll.models import Poll
-
-        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll(poll_id=poll_id_param)
         poll_year = active_poll.year if active_poll else None
         poll_season = active_poll.season if active_poll else None
 
@@ -376,14 +372,10 @@ class GISMapSummaryView(APIView):
 
     def get(self, request):
         from django.utils import timezone
-        from apps.seed_poll.models import Poll
         poll_id_param = request.query_params.get('poll_id', None)
         from django.db.models import Q
 
-        active_poll = Poll.objects.filter(id=poll_id_param).first() if poll_id_param else (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll(poll_id=poll_id_param)
         poll_year = active_poll.year if active_poll else None
         poll_season = active_poll.season if active_poll else None
 

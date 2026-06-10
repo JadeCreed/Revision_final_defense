@@ -117,6 +117,29 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
     date_observed:     editRecord?.date_observed || new Date().toISOString().split('T')[0],
   });
   const [errors, setErrors] = useState({});
+  const [modalToast, setModalToast] = useState(null);
+  const modalToastTimer = useRef(null);
+
+  const showModalToast = (type, message) => {
+    setModalToast({ type, message });
+    if (modalToastTimer.current) clearTimeout(modalToastTimer.current);
+    modalToastTimer.current = setTimeout(() => setModalToast(null), 3500);
+  };
+
+  // Auto-fill area_monitored_ha from crop establishment record when phase is not ESTABLISHMENT
+  useEffect(() => {
+    if (
+      form.seed_source &&
+      form.crop_phase &&
+      form.crop_phase !== 'ESTABLISHMENT'
+    ) {
+      const establishmentArea = farmer.seed_records?.[form.seed_source]?.area_monitored_ha;
+      if (establishmentArea && !form.area_monitored_ha) {
+        setForm(p => ({ ...p, area_monitored_ha: String(establishmentArea) }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.seed_source, form.crop_phase]);
 
   const seedRecords = farmer.seed_records || {};
   const currentPhaseForSeed = getCurrentPhase(seedRecords, form.seed_source);
@@ -181,9 +204,20 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
           </div>
         </div>
         <div style={{ marginTop: '0.9rem', color: '#475569', fontSize: '0.82rem' }}>
-          {farmer.distributed_variety || farmer.distributed_seed_type
-            ? `Distributed: ${farmer.distributed_seed_type ? `${farmer.distributed_seed_type}${farmer.distributed_variety ? ' — ' : ''}` : ''}${farmer.distributed_variety || ''}`
-            : 'Distributed variety not confirmed yet.'}
+          {(() => {
+            if (!form.seed_source) {
+              return 'Select a seed type to view distribution info.';
+            }
+            if (form.seed_source === 'OWN_SEED') {
+              return 'Own Seed — no distribution record needed.';
+            }
+            // For HYBRID or INBRED — look up distribution data per seed type
+            const distInfo = farmer.distribution_by_seed_type?.[form.seed_source];
+            if (distInfo) {
+              return `Distributed: ${distInfo.seed_type_name} — ${distInfo.variety_name}`;
+            }
+            return `No seed distribution record found for ${form.seed_source === 'HYBRID' ? 'Hybrid' : 'Inbred'}.`;
+          })()}
         </div>
       </div>
 
@@ -195,10 +229,37 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
           {SEED_SOURCES.map(opt => {
             const sel = form.seed_source === opt.key;
+            // Own Seed is always enabled
+            // Hybrid/Inbred — disabled if farmer has no distribution data for that seed type
+            const isOwnSeed = opt.key === 'OWN_SEED';
+            const hasDistData = isOwnSeed
+              ? true
+              : !!(farmer.distribution_by_seed_type?.[opt.key]);
+            const isDisabled = !isOwnSeed && !hasDistData;
+
             return (
               <button key={opt.key} type="button"
-                onClick={() => { setForm(p => ({ ...p, seed_source: opt.key, crop_phase: '' })); setErrors(p => ({ ...p, seed_source: '', crop_phase: '' })); }}
-                style={{ border: `2px solid ${sel ? '#16a34a' : '#e2e8f0'}`, borderRadius: '1rem', backgroundColor: sel ? '#ecfdf5' : 'white', color: sel ? '#166534' : '#334155', fontWeight: 700, padding: '0.95rem 0.85rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+                onClick={() => {
+                  if (isDisabled) {
+                    showModalToast('error', `No seed distribution record for ${opt.label}. Cannot encode crop phase.`);
+                    return;
+                  }
+                  setForm(p => ({ ...p, seed_source: opt.key, crop_phase: '' }));
+                  setErrors(p => ({ ...p, seed_source: '', crop_phase: '' }));
+                }}
+                title={isDisabled ? `No distribution data for ${opt.label}` : ''}
+                style={{
+                  border: `2px solid ${sel ? '#16a34a' : isDisabled ? '#f3f4f6' : '#e2e8f0'}`,
+                  borderRadius: '1rem',
+                  backgroundColor: sel ? '#ecfdf5' : isDisabled ? '#f9fafb' : 'white',
+                  color: sel ? '#166534' : isDisabled ? '#d1d5db' : '#334155',
+                  fontWeight: 700,
+                  padding: '0.95rem 0.85rem',
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.2s',
+                  opacity: isDisabled ? 0.6 : 1,
+                  position: 'relative',
+                }}>
                 {opt.label}
               </button>
             );
@@ -267,9 +328,9 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
                   });
                   setErrors(p => ({ ...p, crop_phase: '', crop_establishment: '' }));
                 }}
-                style={{ minHeight: 68, border: `2px solid ${sel ? phase.color : isCurrent ? phase.color : isCompleted ? '#e5e7eb' : isNext ? '#16a34a' : '#e5e7eb'}`, borderRadius: '1rem', backgroundColor: sel ? phase.bg : isCurrent ? phase.bg : isCompleted ? '#f9fafb' : isNext ? '#f0fdf4' : '#f9fafb', cursor: isClickable ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.9rem', transition: 'all 0.2s', opacity: isFuture ? 0.45 : 1, boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none' }}>
-                <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: isCompleted ? '#d1d5db' : isCurrent ? phase.color : isNext ? '#16a34a' : isFuture ? '#e5e7eb' : phase.color, flexShrink: 0 }} />
-                <span style={{ fontWeight: 600, fontSize: '0.92rem', flex: 1, textAlign: 'left', color: isCompleted ? '#9ca3af' : isCurrent ? phase.color : isNext ? '#166534' : isFuture ? '#d1d5db' : '#334155' }}>
+                style={{ minHeight: 68, border: `2px solid ${sel ? phase.color : isCurrent ? phase.color : isCompleted ? '#e5e7eb' : isNext ? '#16a34a' : !form.seed_source ? '#e5e7eb' : '#e5e7eb'}`, borderRadius: '1rem', backgroundColor: sel ? phase.bg : isCurrent ? phase.bg : isCompleted ? '#f9fafb' : isNext ? '#f0fdf4' : !form.seed_source ? '#f9fafb' : '#f9fafb', cursor: isClickable ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.9rem', transition: 'all 0.2s', opacity: isFuture ? 0.45 : 1, boxShadow: sel ? '0 10px 22px rgba(37,99,235,0.08)' : 'none' }}>
+                <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: isCompleted ? '#d1d5db' : isCurrent ? phase.color : isNext ? '#16a34a' : isFuture ? '#e5e7eb' : !form.seed_source ? '#d1d5db' : phase.color, flexShrink: 0 }} />
+                <span style={{ fontWeight: 600, fontSize: '0.92rem', flex: 1, textAlign: 'left', color: isCompleted ? '#9ca3af' : isCurrent ? phase.color : isNext ? '#166534' : isFuture ? '#d1d5db' : !form.seed_source ? '#9ca3af' : '#334155' }}>
                   {phase.label}
                 </span>
                 {isCompleted && !sel && <span style={{ marginLeft: 'auto', fontSize: '0.6rem', fontWeight: 700, color: '#9ca3af', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '999px', padding: '0.1rem 0.4rem', flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}><CheckCircle size={10} /> Done</span>}
@@ -386,6 +447,14 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         style={{ width: '100%', padding: '1rem', backgroundColor: saving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '1rem', fontWeight: 800, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: saving ? 'none' : `0 10px 24px ${GREEN.primary}40`, transition: 'all 0.2s' }}>
         {saving ? 'Saving...' : <><CheckCircle size={18} /> {editRecord ? 'Update Record' : 'Save Observation'}</>}
       </button>
+
+      {/* In-modal toast — center bottom, fixed sa loob ng modal */}
+      {modalToast && (
+        <div style={{ position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)', zIndex: 900, backgroundColor: modalToast.type === 'success' ? GREEN.primary : '#991b1b', color: 'white', padding: '0.75rem 1.5rem', borderRadius: '0.875rem', fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 8px 24px rgba(0,0,0,0.2)', animation: 'modalToastIn 0.25s ease-out forwards' }}>
+          {modalToast.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+          {modalToast.message}
+        </div>
+      )}
     </div>
   );
 };
@@ -781,6 +850,7 @@ const CropMonitoring = () => {
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { transform: translateY(10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes slideInBottom { 0% { transform: translateY(120%); opacity: 0; } 70% { transform: translateY(-8px); opacity: 1; } 100% { transform: translateY(0); opacity: 1; } }
+        @keyframes modalToastIn { 0% { transform: translateX(-50%) translateY(20px); opacity: 0; } 70% { transform: translateX(-50%) translateY(-4px); opacity: 1; } 100% { transform: translateX(-50%) translateY(0); opacity: 1; } }
         .farmer-row:hover { background-color: ${GREEN.light} !important; }
       `}</style>
 

@@ -168,7 +168,12 @@ const HarvestForm = ({
   const [farmerId, setFarmerId]             = useState(editData?.farmer_id || '');
   const [farmerSearch, setFarmerSearch]     = useState('');
   const [showFarmerList, setShowFarmerList] = useState(false);
-  const [activeTab, setActiveTab]           = useState(editData?.seed_source || 'HYBRID');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (editData?.seed_source) return editData.seed_source;
+    // Auto-select first harvesting seed type if available
+    if (harvestingFarmers.length === 0) return 'HYBRID';
+    return 'HYBRID'; // will be overridden when farmer is selected
+  });
 
   const [tabForms, setTabForms] = useState(() => {
     const base = {
@@ -197,7 +202,9 @@ const HarvestForm = ({
   const [pendingSubmit, setPendingSubmit]             = useState(null);
 
   // Selected farmer object from harvestingFarmers
-  const selectedFarmer = harvestingFarmers.find(f => String(f.id) === String(farmerId));
+  const selectedFarmer = farmerId
+    ? harvestingFarmers.find(f => String(f.id) === String(farmerId))
+    : null;
 
   // Which seed types are in HARVESTING for selected farmer
   const harvestingSeedTypes = selectedFarmer?.harvesting_seed_types || [];
@@ -271,12 +278,13 @@ const HarvestForm = ({
   }, [harvestingFarmers, farmerSearch]);
 
   const selectFarmer = (farmer) => {
-    setFarmerId(farmer.id);
+    setFarmerId(String(farmer.id));
     setFarmerSearch(`${farmer.last_name}, ${farmer.first_name} · ${farmer.rsbsa_number || 'No RSBSA'}`);
     setShowFarmerList(false);
     // Auto-switch to first available harvesting seed type
-    if (farmer.harvesting_seed_types?.length > 0) {
-      setActiveTab(farmer.harvesting_seed_types[0]);
+    const firstAllowed = farmer.harvesting_seed_types?.[0];
+    if (firstAllowed) {
+      setActiveTab(firstAllowed);
     }
   };
 
@@ -405,7 +413,7 @@ const HarvestForm = ({
           <input
             type='text'
             value={farmerSearch}
-            onChange={e => { setFarmerSearch(e.target.value); setFarmerId(''); setShowFarmerList(true); }}
+            onChange={e => { setFarmerSearch(e.target.value); setFarmerId(''); setShowFarmerList(true); setActiveTab('HYBRID'); }}
             onFocus={() => setShowFarmerList(true)}
             onBlur={() => setTimeout(() => setShowFarmerList(false), 130)}
             placeholder='Search by name or RSBSA'
@@ -1194,7 +1202,10 @@ const BrgyHarvest = () => {
         setRecords(Array.isArray(d) ? d : (d?.results || []));
       }
       if (harvestingRes.status === 'fulfilled') {
-        setHarvestingFarmers(harvestingRes.value.data?.farmers || []);
+        const hData = harvestingRes.value.data;
+        setHarvestingFarmers(hData?.farmers || []);
+        // Debug: tanggalin mo ito kapag okay na
+        console.log('[HarvestingFarmers] poll:', hData?.poll_id, '| count:', hData?.farmers?.length);
       }
       if (finalSeedsRes.status === 'fulfilled') {
         setFinalSeeds(finalSeedsRes.value.data || []);
@@ -1215,15 +1226,13 @@ const BrgyHarvest = () => {
     setSaving(true);
     try {
       const payload = {
-        farmer:               Number(formData.farmer_id),
-        seed_source:          formData.seed_source,
-        variety:              formData.variety,
-        harvest_area_ha:      parseFloat(formData.harvest_area_ha),
-        harvest_bags:         parseInt(formData.harvest_bags, 10),
-        harvest_date:         formData.harvest_date,
-        notes:                formData.notes || '',
-        weight_type:          'DRIED',
-        moisture_content_pct: 12,
+        farmer:          Number(formData.farmer_id),
+        seed_source:     formData.seed_source,
+        variety:         formData.variety,
+        harvest_area_ha: parseFloat(formData.harvest_area_ha),
+        harvest_bags:    parseInt(formData.harvest_bags, 10),
+        harvest_date:    formData.harvest_date,
+        notes:           formData.notes || '',
       };
       if (formData.seed_source !== 'OWN_SEED' && formData.seed_bags_received) {
         payload.seed_bags_received = parseInt(formData.seed_bags_received, 10) || null;

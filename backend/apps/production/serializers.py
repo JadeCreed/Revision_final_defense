@@ -13,8 +13,6 @@ class HarvestRecordSerializer(serializers.ModelSerializer):
     encoded_by_name = serializers.SerializerMethodField(read_only=True)
     
     # Weight calculations
-    harvest_kg_fresh = serializers.SerializerMethodField(read_only=True)
-    harvest_kg_dry = serializers.SerializerMethodField(read_only=True)
     harvest_kg = serializers.SerializerMethodField(read_only=True)
     harvest_mt = serializers.SerializerMethodField(read_only=True)
     yield_t_ha = serializers.SerializerMethodField(read_only=True)
@@ -37,11 +35,10 @@ class HarvestRecordSerializer(serializers.ModelSerializer):
             'id', 'farmer', 'farmer_name', 'farmer_rsbsa', 'barangay',
             'seed_source', 'seed_source_label', 'variety',
             'harvest_area_ha', 'harvest_bags', 'harvest_date',
-            'weight_type', 'moisture_content_pct',
             'seed_bags_received', 'notes',
             'encoded_by', 'encoded_by_name', 'created_at', 'updated_at',
             # Weight calculations
-            'harvest_kg_fresh', 'harvest_kg_dry', 'harvest_kg', 'harvest_mt', 'yield_t_ha',
+            'harvest_kg', 'harvest_mt', 'yield_t_ha',
             # Seed-based metrics
             'seeding_density_kg_ha', 'seed_implied_planted_kg', 'seed_efficiency_pct', 'productivity_ratio',
             # Yield-based metrics
@@ -51,7 +48,7 @@ class HarvestRecordSerializer(serializers.ModelSerializer):
             'id', 'barangay', 'encoded_by', 'encoded_by_name',
             'created_at', 'updated_at',
             # Computed fields
-            'harvest_kg_fresh', 'harvest_kg_dry', 'harvest_kg', 'harvest_mt', 'yield_t_ha',
+            'harvest_kg', 'harvest_mt', 'yield_t_ha',
             'seeding_density_kg_ha', 'seed_implied_planted_kg', 'seed_efficiency_pct', 'productivity_ratio',
             'standard_yield_kg_ha', 'expected_harvest_kg', 'utilization_pct', 'utilization_status',
             'farmer_name', 'farmer_rsbsa', 'seed_source_label',
@@ -99,12 +96,6 @@ class HarvestRecordSerializer(serializers.ModelSerializer):
         if obj.encoded_by:
             return f"{obj.encoded_by.first_name} {obj.encoded_by.last_name}"
         return ''
-
-    def get_harvest_kg_fresh(self, obj):
-        return float(obj.harvest_kg_fresh) if obj.harvest_kg_fresh else None
-
-    def get_harvest_kg_dry(self, obj):
-        return float(obj.harvest_kg_dry) if obj.harvest_kg_dry else None
 
     def get_harvest_kg(self, obj):
         return float(obj.harvest_kg) if obj.harvest_kg else None

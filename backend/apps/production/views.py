@@ -13,6 +13,7 @@ from decimal import Decimal
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
 from .models import HarvestRecord
 from .serializers import HarvestRecordSerializer
+from apps.seed_poll.utils import get_current_poll
 
 # DA official constants — kept in shared settings for consistency
 SEEDING_DENSITY    = settings.SEEDING_DENSITY
@@ -24,25 +25,20 @@ SEED_LABELS        = {
 }
 
 
-def dry_weight_kg(record):
-    """Convert harvest to dry weight kg based on weight_type and moisture."""
-    bags     = float(record.harvest_bags or 0)
-    raw_kg   = bags * 50
-    if getattr(record, 'weight_type', 'FRESH') == 'DRIED':
-        return raw_kg
-    moisture = float(getattr(record, 'moisture_content_pct', 12) or 12)
-    return raw_kg * (1 - moisture / 100)
+def harvest_kg(record):
+    """Simple: 1 bag = 50 kg. No moisture adjustment."""
+    return float(record.harvest_bags or 0) * 50
 
 
 def utilization_pct(record):
-    """Utilization = (actual dry kg / expected kg) × 100."""
+    """Utilization = (actual kg / expected kg) × 100."""
     area     = float(record.harvest_area_ha or 0)
     src      = record.seed_source or 'OWN_SEED'
     standard = STANDARD_YIELD_KG.get(src, 2000)
     expected = area * standard
     if expected == 0:
         return None
-    return (dry_weight_kg(record) / expected) * 100
+    return (harvest_kg(record) / expected) * 100
 
 
 def get_tier_label(pct):
@@ -75,8 +71,8 @@ class ProductionSummaryView(APIView):
         total_farmers = records.count()
         total_area    = float(records.aggregate(s=Sum('harvest_area_ha'))['s'] or 0)
 
-        total_dry_kg  = sum(dry_weight_kg(r) for r in records)
-        total_mt      = total_dry_kg / 1000
+        total_kg      = sum(harvest_kg(r) for r in records)
+        total_mt      = total_kg / 1000
         avg_yield     = (total_mt / total_area) if total_area > 0 else 0
 
         util_values   = [utilization_pct(r) for r in records]
@@ -121,8 +117,8 @@ class ProductionBySeedTypeView(APIView):
                 continue
 
             total_area = sum(float(r.harvest_area_ha or 0) for r in group)
-            total_dry  = sum(dry_weight_kg(r) for r in group)
-            total_mt   = total_dry / 1000
+            total_kg   = sum(harvest_kg(r) for r in group)
+            total_mt   = total_kg / 1000
             avg_yield  = (total_mt / total_area) if total_area > 0 else 0
 
             util_vals  = [utilization_pct(r) for r in group]
@@ -185,8 +181,8 @@ class ProductionByBarangayView(APIView):
         result = []
         for brgy, records in sorted(groups.items()):
             total_area = sum(float(r.harvest_area_ha or 0) for r in records)
-            total_dry  = sum(dry_weight_kg(r) for r in records)
-            total_mt   = total_dry / 1000
+            total_kg   = sum(harvest_kg(r) for r in records)
+            total_mt   = total_kg / 1000
             avg_yield  = (total_mt / total_area) if total_area > 0 else 0
 
             util_vals = [utilization_pct(r) for r in records]
@@ -228,7 +224,7 @@ class ProductionLowPerformersView(APIView):
             src      = r.seed_source or 'OWN_SEED'
             standard = STANDARD_YIELD_KG.get(src, 2000)
             expected = area * standard
-            actual   = dry_weight_kg(r)
+            actual   = harvest_kg(r)
             gap      = expected - actual
 
             farmer = r.farmer
@@ -283,8 +279,8 @@ class ProductionGISSummaryView(APIView):
         result = []
         for brgy, records in groups.items():
             total_area = sum(float(r.harvest_area_ha or 0) for r in records)
-            total_dry  = sum(dry_weight_kg(r) for r in records)
-            total_mt   = total_dry / 1000
+            total_kg   = sum(harvest_kg(r) for r in records)
+            total_mt   = total_kg / 1000
             avg_yield  = (total_mt / total_area) if total_area > 0 else 0
 
             util_vals = [utilization_pct(r) for r in records]
@@ -390,10 +386,7 @@ def _build_brgy_report_data(user, poll_id=None):
         if poll_id:
             poll = Poll.objects.get(id=poll_id)
         else:
-            poll = (
-                Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-                or Poll.objects.order_by('-created_at').first()
-            )
+            poll = get_current_poll()
     except Exception:
         poll = None
 
@@ -705,11 +698,7 @@ class HarvestRecordListCreateView(ListCreateAPIView):
                 pass
         else:
             # Default: active poll only
-            from apps.seed_poll.models import Poll
-            active_poll = (
-                Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-                or Poll.objects.order_by('-created_at').first()
-            )
+            active_poll = get_current_poll()
             if active_poll:
                 qs = qs.filter(poll=active_poll)
 
@@ -717,7 +706,6 @@ class HarvestRecordListCreateView(ListCreateAPIView):
 
     def perform_create(self, serializer):
         from rest_framework.exceptions import ValidationError
-        from apps.seed_poll.models import Poll
 
         user = self.request.user
         barangay = getattr(user, 'barangay', 'Unknown')
@@ -726,10 +714,7 @@ class HarvestRecordListCreateView(ListCreateAPIView):
         seed_source = serializer.validated_data.get('seed_source')
 
         # Get active poll
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        active_poll = get_current_poll()
 
         # Duplicate check — poll-scoped (simple and accurate)
         dup_qs = HarvestRecord.objects.filter(
@@ -797,11 +782,10 @@ class BrgyHarvestingFarmersView(APIView):
         if not barangay:
             return Response({'farmers': []})
 
-        # Get active poll
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-            or Poll.objects.order_by('-created_at').first()
-        )
+        # Allow optional poll_id override for historical views
+        poll_id = request.query_params.get('poll_id')
+        active_poll = get_current_poll(poll_id=int(poll_id) if poll_id else None)
+
         if not active_poll:
             return Response({'farmers': []})
 
@@ -829,11 +813,15 @@ class BrgyHarvestingFarmersView(APIView):
             seed_key = rec.seed_source  # HYBRID, INBRED, OWN_SEED
             if seed_key and seed_key not in farmer_map[fid]['harvesting_seed_types']:
                 farmer_map[fid]['harvesting_seed_types'].append(seed_key)
-            # Store area_monitored_ha per seed type for auto-fill
             if seed_key and rec.area_monitored_ha:
                 farmer_map[fid]['area_by_seed_type'][seed_key] = float(rec.area_monitored_ha)
 
-        return Response({'farmers': list(farmer_map.values())})
+        return Response({
+            'farmers': list(farmer_map.values()),
+            'poll_id': active_poll.id,
+            'season': active_poll.season,
+            'year': active_poll.year,
+        })
 
 
 class BrgyHarvestHistoryView(APIView):
@@ -852,9 +840,7 @@ class BrgyHarvestHistoryView(APIView):
             return Response({'records': [], 'polls': []})
 
         # All polls for the dropdown (excluding current active)
-        active_poll = (
-            Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-        )
+        active_poll = get_current_poll()
         all_polls = Poll.objects.order_by('-created_at')
         polls_data = []
         for p in all_polls:
