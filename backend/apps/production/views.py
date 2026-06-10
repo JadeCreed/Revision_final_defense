@@ -13,7 +13,7 @@ from decimal import Decimal
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
 from .models import HarvestRecord
 from .serializers import HarvestRecordSerializer
-from apps.seed_poll.utils import get_current_poll
+from apps.seed_poll.utils import get_current_poll, get_encoding_poll
 
 # DA official constants — kept in shared settings for consistency
 SEEDING_DENSITY    = settings.SEEDING_DENSITY
@@ -713,8 +713,14 @@ class HarvestRecordListCreateView(ListCreateAPIView):
         farmer_id = serializer.validated_data.get('farmer').id
         seed_source = serializer.validated_data.get('seed_source')
 
-        # Get active poll
-        active_poll = get_current_poll()
+        # Get encoding-enabled poll (encoding gate)
+        active_poll = get_encoding_poll()
+        if not active_poll:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({
+                'encoding_blocked': True,
+                'detail': 'Encoding is not allowed at this time. Admin must finalize seeds before encoding.'
+            })
 
         # Duplicate check — poll-scoped (simple and accurate)
         dup_qs = HarvestRecord.objects.filter(
@@ -784,9 +790,34 @@ class BrgyHarvestingFarmersView(APIView):
 
         # Allow optional poll_id override for historical views
         poll_id = request.query_params.get('poll_id')
-        active_poll = get_current_poll(poll_id=int(poll_id) if poll_id else None)
+
+        # If a specific poll_id is requested, resolve it for historical view
+        if poll_id:
+            active_poll = get_current_poll(poll_id=int(poll_id))
+            encoding_poll = get_encoding_poll()
+            encoding_allowed = bool(encoding_poll)
+        else:
+            # For live encoding flows, use the encoding poll (must be CLOSED+finalized)
+            active_poll = get_encoding_poll()
+            encoding_poll = active_poll
+            encoding_allowed = bool(encoding_poll)
 
         if not active_poll:
+            # If no encoding poll and this is a live encoding request, surface block
+            if not poll_id:
+                latest = Poll.objects.order_by('-created_at').first()
+                if not latest:
+                    reason = 'No poll configured.'
+                elif latest.status != 'CLOSED':
+                    reason = 'Latest poll is not closed yet.'
+                else:
+                    from apps.seed_poll.models import FinalSeed
+                    if not FinalSeed.objects.filter(season=latest.season, year=latest.year).exists():
+                        reason = 'Final seeds not finalized for latest poll.'
+                    else:
+                        reason = 'Encoding not allowed for current poll.'
+                return Response({'farmers': [], 'encoding_allowed': False, 'encoding_blocked_reason': reason})
+            # historical view with poll_id provided but poll not found
             return Response({'farmers': []})
 
         # Get all HARVESTING records for this barangay in active poll
@@ -816,12 +847,19 @@ class BrgyHarvestingFarmersView(APIView):
             if seed_key and rec.area_monitored_ha:
                 farmer_map[fid]['area_by_seed_type'][seed_key] = float(rec.area_monitored_ha)
 
-        return Response({
+        resp = {
             'farmers': list(farmer_map.values()),
             'poll_id': active_poll.id,
             'season': active_poll.season,
             'year': active_poll.year,
-        })
+        }
+        # Include encoding metadata so frontend can decide encode vs report mode
+        resp['encoding_allowed'] = encoding_allowed
+        if not encoding_allowed:
+            resp['encoding_blocked_reason'] = (
+                'Encoding is currently disabled for this season.'
+            )
+        return Response(resp)
 
 
 class BrgyHarvestHistoryView(APIView):

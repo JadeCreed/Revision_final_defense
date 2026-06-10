@@ -11,7 +11,7 @@ from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import FinalSeed
-from apps.seed_poll.utils import get_current_poll
+from apps.seed_poll.utils import get_current_poll, get_encoding_poll
 from .models import CropMonitoringRecord, BarangayCropSummary
 
 
@@ -328,10 +328,22 @@ class ATCropMonitoringCreateView(APIView):
         if not date_observed:
             return Response({'error': 'Date observed is required.'}, status=400)
 
-        active_poll = get_current_poll()
+        # Encoding is allowed only when get_encoding_poll() returns a Poll
+        active_poll = get_encoding_poll()
         if not active_poll:
+            latest = None
+            from apps.seed_poll.models import Poll, FinalSeed
+            latest = Poll.objects.order_by('-created_at').first()
+            if not latest:
+                reason = 'No poll configured.'
+            elif latest.status != 'CLOSED':
+                reason = 'Latest poll is not closed yet.'
+            elif not FinalSeed.objects.filter(season=latest.season, year=latest.year).exists():
+                reason = 'Final seeds not finalized for latest poll.'
+            else:
+                reason = 'Encoding is currently disabled.'
             return Response(
-                {'error': 'No active season found. Admin must open a poll first.'},
+                {'error': f'Encoding not allowed: {reason}'},
                 status=400
             )
 

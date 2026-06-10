@@ -570,10 +570,11 @@ class BrgyDistributionContextView(APIView):
         ).count()
 
         from apps.seed_poll.models import Poll
-        from apps.seed_poll.utils import get_current_poll
+        from apps.seed_poll.utils import get_current_poll, get_encoding_poll
         from django.utils import timezone as tz
         Poll.objects.filter(status='OPEN', end_date__lte=tz.now()).update(status='CLOSED')
         current_poll = get_current_poll()
+        encoding_poll = get_encoding_poll()
 
         current_season = None
         if current_poll:
@@ -583,10 +584,36 @@ class BrgyDistributionContextView(APIView):
                 'year':           current_poll.year,
             }
 
+        encoding_allowed = bool(encoding_poll)
+        encoding_season = None
+        encoding_blocked_reason = None
+        if encoding_allowed:
+            encoding_season = {
+                'season':         encoding_poll.season,
+                'season_display': encoding_poll.get_season_display(),
+                'year':           encoding_poll.year,
+            }
+        else:
+            # Determine why encoding is blocked for clearer frontend messaging
+            latest = Poll.objects.order_by('-created_at').first()
+            if not latest:
+                encoding_blocked_reason = 'No poll configured.'
+            elif latest.status != 'CLOSED':
+                encoding_blocked_reason = 'Latest poll is not closed yet.'
+            else:
+                from apps.seed_poll.models import FinalSeed
+                if not FinalSeed.objects.filter(season=latest.season, year=latest.year).exists():
+                    encoding_blocked_reason = 'Final seeds not finalized for latest poll.'
+                else:
+                    encoding_blocked_reason = 'Encoding not allowed for current poll.'
+
         return Response({
             'barangay':               barangay,
             'total_approved_farmers': total_farmers,
             'current_season':         current_season,
+            'encoding_allowed':       encoding_allowed,
+            'encoding_season':        encoding_season,
+            'encoding_blocked_reason': encoding_blocked_reason,
         })
 
 

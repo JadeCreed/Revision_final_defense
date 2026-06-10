@@ -10,7 +10,7 @@ from collections                import Counter
 
 from apps.accounts.permissions  import IsAdminUserRole
 from apps.accounts.models       import User
-from apps.seed_poll.utils         import get_current_poll
+from apps.seed_poll.utils         import get_current_poll, get_encoding_poll
 
 from .models import (
     DistributionEvent,
@@ -152,13 +152,10 @@ class FarmerSearchView(APIView):
             elif event_id:
                 entry_qs = entry_qs.filter(batch__event_id=event_id)
             else:
-                # ── BUG FIX ──
-                # Dati: OPEN poll lang ang ginagamit, kaya kapag nag-create
-                # ng bagong season walang lalabas.
-                # Ayos: gamitin ang pinaka-latest poll — OPEN man o CLOSED/LOCKED —
-                # para makita ng distribution menu ang mga farmer na naka-approve
-                # sa beneficiaries ng current season kahit closed na ang poll.
-                active_poll = get_current_poll()
+                # Use the encoding poll (only allow approved listings for the
+                # season that is currently open for encoding). This ensures
+                # distribution menus match the encoding gate.
+                active_poll = get_encoding_poll()
 
                 if not active_poll:
                     return Response([])
@@ -206,7 +203,7 @@ class FarmerDistributionDetailView(APIView):
             if farmer.barangay != barangay:
                 return Response({"error": "Access denied."}, status=403)
 
-        active_poll = get_current_poll()
+        active_poll = get_encoding_poll()
 
         entries_filter = dict(farmer=farmer, batch__status='APPROVED')
         if active_poll:
