@@ -55,7 +55,6 @@ class ATFarmerListView(APIView):
             barangay__in=assigned_barangays,
         )
 
-        # Search by name or RSBSA
         search = request.query_params.get('search', '')
         if search:
             qs = qs.filter(
@@ -64,7 +63,6 @@ class ATFarmerListView(APIView):
                 Q(rsbsa_number__icontains=search)
             )
 
-        # Filter by barangay
         brgy = request.query_params.get('barangay', '')
         if brgy:
             qs = qs.filter(barangay=brgy)
@@ -72,23 +70,28 @@ class ATFarmerListView(APIView):
         qs = qs.order_by('barangay', 'last_name', 'first_name')
         phase_filter = request.query_params.get('phase', '')
 
-        active_poll = get_current_poll()
+        # Use encoding poll for current season data
+        active_poll = get_encoding_poll()
 
-        # For each farmer, get their latest monitoring record
         results = []
         for farmer in qs:
+            # Latest monitoring record for THIS season only
+            latest_filter = {'farmer': farmer}
+            if active_poll:
+                latest_filter['poll'] = active_poll
+
             latest = CropMonitoringRecord.objects.filter(
-                farmer=farmer,
-                poll=active_poll,
+                **latest_filter
             ).order_by('-date_observed', '-encoded_at').first()
 
-            # Get one record per seed source for this farmer
+            # Per-seed-source records for THIS season only
             seed_records = {}
             for seed_key in ['HYBRID', 'INBRED', 'OWN_SEED']:
+                rec_filter = {'farmer': farmer, 'seed_source': seed_key}
+                if active_poll:
+                    rec_filter['poll'] = active_poll
                 rec = CropMonitoringRecord.objects.filter(
-                    farmer=farmer,
-                    seed_source=seed_key,
-                    poll=active_poll,
+                    **rec_filter
                 ).order_by('-date_observed', '-encoded_at').first()
                 if rec:
                     seed_records[seed_key] = {
@@ -118,13 +121,21 @@ class ATFarmerListView(APIView):
                 'seed_records': seed_records,
             })
 
-            dist_entry = DistributionEntry.objects.filter(
+            # Distribution info — filter by encoding poll (current season only)
+            dist_entry_qs = DistributionEntry.objects.filter(
                 farmer=farmer,
-                batch__status='APPROVED'
-            ).select_related(
-                'variety', 'batch__event__variety', 'batch__event__seed_type'
-            ).order_by('-batch__approved_at').first()
+                batch__status='APPROVED',
+            ).select_related('variety', 'batch__event__seed_type', 'batch__event__variety')
 
+            if active_poll:
+                dist_entry_qs = dist_entry_qs.filter(
+                    batch__event__season=active_poll.season,
+                    batch__event__year=active_poll.year,
+                )
+
+            dist_entry_qs = dist_entry_qs.order_by('-batch__approved_at')
+
+            dist_entry = dist_entry_qs.first()
             distributed_variety = ''
             distributed_seed_type = ''
             if dist_entry:
@@ -138,12 +149,9 @@ class ATFarmerListView(APIView):
                 'distributed_seed_type': distributed_seed_type,
             })
 
-            # Build per-seed-type distribution map
+            # Per-seed-type distribution map — current season only
             distribution_by_seed_type = {}
-            for entry in DistributionEntry.objects.filter(
-                farmer=farmer,
-                batch__status='APPROVED'
-            ).select_related('variety', 'batch__event__seed_type').order_by('-batch__approved_at'):
+            for entry in dist_entry_qs:
                 seed_type_obj = entry.batch.event.seed_type
                 if not seed_type_obj:
                     continue
