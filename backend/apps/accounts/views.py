@@ -1721,3 +1721,45 @@ class AdminProfileUpdateView(APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=400)
         return Response({'message': 'Profile updated successfully.'})
+    
+    
+
+class MeView(APIView):
+    """
+    GET /api/accounts/me/
+    Returns current user's profile data including assigned barangays.
+    Used by GIS maps to determine scope.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        data = {
+            'id':             user.id,
+            'first_name':     user.first_name,
+            'last_name':      user.last_name,
+            'email':          user.email,
+            'contact_number': user.contact_number,
+            'role':           user.role,
+            'barangay':       user.barangay or '',
+            'rsbsa_number':   getattr(user, 'rsbsa_number', '') or '',
+            'assigned_barangays': [],
+        }
+
+        # AT: get assigned barangays from at_profile
+        if user.role == 'AT':
+            try:
+                assigned = list(user.at_profile.barangays.values_list('name', flat=True))
+                data['assigned_barangays'] = assigned
+            except Exception:
+                data['assigned_barangays'] = []
+
+        # BRGY: single barangay from user.barangay
+        elif user.role == 'BRGY':
+            data['assigned_barangays'] = [user.barangay] if user.barangay else []
+
+        # FARMER: barangay from user.barangay
+        elif user.role == 'FARMER':
+            data['assigned_barangays'] = [user.barangay] if user.barangay else []
+
+        return Response(data)

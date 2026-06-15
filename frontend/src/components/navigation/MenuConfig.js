@@ -35,6 +35,7 @@ export const MENU_CONFIG = {
     { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
     { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
     { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
+    { label: 'Map',     path: '/farmer/gis',           icon: Map         },
     { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
   ],
 
@@ -43,6 +44,7 @@ export const MENU_CONFIG = {
     { label: 'News',    path: '/at/announcements',     icon: Megaphone   },
     { label: 'Farmers', path: '/at/farmers',           icon: Tractor     },
     { label: 'Monitor', path: '/at/crop-monitoring',   icon: Wheat       },
+    { label: 'GIS Map', path: '/at/gis',               icon: Map         },
     { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
   ],
 
@@ -53,6 +55,7 @@ export const MENU_CONFIG = {
     { label: 'Farmers',         path: '/brgy/farmers',         icon: Tractor     },
     { label: 'Beneficiaries',   path: '/brgy/beneficiaries',   icon: Package     },
     { label: 'Distribution',    path: '/brgy/distribution',    icon: Truck       },
+    { label: 'GIS Map',       path: '/brgy/gis',             icon: Map         },
     { label: 'Harvest',         path: '/brgy/harvest',         icon: BarChart3   },
     { label: 'Reports',         path: '/brgy/reports',         icon: ClipboardList },
   ],

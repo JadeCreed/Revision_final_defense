@@ -587,7 +587,7 @@ const SeedPoll = () => {
                   <XCircle size={16} />
                   {actionLoading[currentPoll.id] === 'close' ? 'Closing...' : 'Close Poll'}
                 </button>
-                {(currentPoll.status === 'LOCKED' || currentPoll.status === 'CLOSED') && (
+                {(currentPoll.status === 'LOCKED' || currentPoll.status === 'CLOSED') && finalSeeds.length === 0 && (
                   <div style={{ width: '100%', marginTop: '1rem' }}>
                     <div style={{
                       backgroundColor: '#f0fdf4',
@@ -643,7 +643,7 @@ const SeedPoll = () => {
           )}
 
           {/* Finalize button when no current poll but past closed polls exist */}
-          {!currentPoll && canFinalize && (
+          {!currentPoll && canFinalize && finalSeeds.length === 0 && (
             <div style={{ marginBottom: '1.5rem', backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '2px dashed #bbf7d0' }}>
               <div style={{
                 backgroundColor: '#f0fdf4',
@@ -696,10 +696,6 @@ const SeedPoll = () => {
                     Visible on all user home pages · Used as choices in Beneficiaries
                   </p>
                 </div>
-                <button onClick={handleOpenFinalize}
-                  style={{ padding: '0.375rem 0.875rem', backgroundColor: 'white', color: '#166534', border: '1.5px solid #bbf7d0', borderRadius: '0.5rem', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <Edit2 size={13} /> Edit
-                </button>
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                 {finalSeeds.map(fs => {

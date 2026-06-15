@@ -110,7 +110,7 @@ class PollSerializer(serializers.ModelSerializer):
 
     def validate_year(self, value):
         current_year = timezone.now().year
-        if value < current_year or value > current_year + 5:
+        if value < current_year - 10 or value > current_year + 10:
             raise serializers.ValidationError(
                 f"Year must be between {current_year} and {current_year + 5}."
             )

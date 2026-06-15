@@ -10,6 +10,7 @@ import {
   FileText,
   Package,
   Truck,
+  Map,  
 } from 'lucide-react';
 
 // ── FARMER: 5 nav items ──
@@ -19,6 +20,7 @@ const FARMER_NAV = [
   { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
   { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
   { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
+  { label: 'Map',     path: '/farmer/gis',           icon: Map         },
   { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
 ];
 
@@ -29,6 +31,7 @@ const AT_NAV = [
   { label: 'News',    path: '/at/announcements',     icon: Megaphone   }, 
   { label: 'Farmers', path: '/at/farmers',           icon: Users       },
   { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor     },
+  { label: 'GIS Map', path: '/at/gis',               icon: Map         },
   { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
 ];
 
@@ -41,6 +44,7 @@ const BRGY_NAV = [
   { label: 'Farmers',       path: '/brgy/farmers',         icon: Users       },
   { label: 'Beneficiaries', path: '/brgy/beneficiaries',   icon: Package     },
   { label: 'Distribution',  path: '/brgy/distribution',    icon: Truck       },
+  { label: 'GIS Map',       path: '/brgy/gis',             icon: Map         },
   { label: 'Harvest',       path: '/brgy/harvest',         icon: Wheat       },
   { label: 'Reports',       path: '/brgy/reports',         icon: FileText    },
 ];

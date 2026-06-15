@@ -45,6 +45,7 @@ import FarmerProfile        from '../pages/farmer/FarmerProfile';
 import YieldEncode          from '../pages/farmer/YieldEncode';
 import FarmerAnnouncements  from '../pages/farmer/FarmerAnnouncements';
 import FarmerPoll           from '../pages/farmer/FarmerPoll';
+import FarmerGisMap from '../pages/farmer/FarmerGisMap';
 
 // ── AT pages ──
 import ATDashboard      from '../pages/at/ATDashboard';
@@ -61,7 +62,7 @@ import BrgyFarmers       from '../pages/brgy/BrgyFarmers';
 import BrgyHarvest       from '../pages/brgy/BrgyHarvest';
 import BrgyBeneficiaries from '../pages/brgy/BrgyBeneficiaries'; 
 import BrgyDistribution  from '../pages/brgy/BrgyDistribution';
-import BrgyCropPhase     from '../pages/brgy/BrgyCropPhase';
+import BrgyGisMap     from '../pages/brgy/BrgyGisMap';
 import BrgyAnnouncements from '../pages/brgy/BrgyAnnouncements';
 import BrgyReports       from '../pages/brgy/BrgyReports';
 import BrgyPoll          from '../pages/brgy/BrgyPoll';
@@ -124,6 +125,7 @@ const AppRoutes = () => (
           <Route path="/farmer/harvest"       element={<YieldEncode />} />
           <Route path="/farmer/announcements" element={<FarmerAnnouncements />} />
           <Route path="/farmer/poll"          element={<FarmerPoll />} />
+          <Route path="/farmer/gis" element={<FarmerGisMap />} />
           <Route path="/farmer/announcements/:id" element={<AnnouncementDetail />} />
         </Route>
       </Route>
@@ -138,7 +140,7 @@ const AppRoutes = () => (
         <Route path="/at/reports"          element={<ATReports />} />
         <Route path="/at/announcements"    element={<ATAnnouncements />} />
         <Route path="/at/announcements/:id" element={<AnnouncementDetail />} />
-        <Route path="/at/profile" element={<ATProfile />} />
+        <Route path="/at/profile"          element={<ATProfile />} />
       </Route>
     </Route>
 
@@ -150,12 +152,13 @@ const AppRoutes = () => (
         <Route path="/brgy/farmers"              element={<BrgyFarmers />} />
         <Route path="/brgy/beneficiaries"        element={<BrgyBeneficiaries />} />
         <Route path="/brgy/distribution"         element={<BrgyDistribution />} />
-        <Route path="/brgy/crop-phase"           element={<BrgyCropPhase />} />
+        <Route path="/brgy/brgygismap"           element={<BrgyGisMap />} />
         <Route path="/brgy/announcements"        element={<BrgyAnnouncements />} />
         <Route path="/brgy/reports"              element={<BrgyReports />} />
+        <Route path="/brgy/gis"                  element={<BrgyGisMap />} />
         <Route path="/brgy/announcements/:id"    element={<AnnouncementDetail />} />
         <Route path="/brgy/poll"                 element={<BrgyPoll />} /> 
-        <Route path="/brgy/profile" element={<BPProfile />} />
+        <Route path="/brgy/profile"              element={<BPProfile />} />
         
       </Route>
     </Route>
