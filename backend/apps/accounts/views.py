@@ -11,6 +11,7 @@ from .rate_limit import LoginRateLimiter
 from django.db.models import Q, Case, When, IntegerField
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import Sum
 import secrets
 import string
 import re
@@ -1763,3 +1764,55 @@ class MeView(APIView):
             data['assigned_barangays'] = [user.barangay] if user.barangay else []
 
         return Response(data)
+    
+class PublicStatsView(APIView):
+    """
+    GET /api/accounts/public-stats/
+    Returns registered farmer count and total hectares for landing page.
+    No authentication required.
+    """
+    def get(self, request):
+        approved_farmers = User.objects.filter(
+            role='FARMER',
+            status='APPROVED',
+            is_active=True
+        )
+
+        total_hectares = FarmerProfile.objects.filter(
+            user__in=approved_farmers
+        ).aggregate(total=Sum('hectares'))['total'] or 0
+
+        return Response({
+            'registered_farmers': approved_farmers.count(),
+            'total_hectares': float(total_hectares),
+        })
+    
+
+class PublicSeasonView(APIView):
+    """
+    GET /api/accounts/public-season/
+    Returns the current active season for the landing page season bar.
+    No authentication required.
+    Uses get_current_poll() logic from seed_poll utils.
+    """
+    def get(self, request):
+        try:
+            from apps.seed_poll.utils import get_current_poll
+            poll = get_current_poll()
+            if not poll:
+                return Response({
+                    'season_display': 'Dry Season',
+                    'year': None,
+                    'status': None,
+                })
+            return Response({
+                'season_display': poll.get_season_display(),
+                'year': poll.year,
+                'status': poll.status,
+            })
+        except Exception:
+            return Response({
+                'season_display': 'Dry Season',
+                'year': None,
+                'status': None,
+            })

@@ -40,6 +40,8 @@ from .views import (
     BPProfileUpdateView,
     AdminProfileUpdateView,
     MeView,
+    PublicStatsView,
+    PublicSeasonView,
 
 )
 
@@ -80,7 +82,9 @@ urlpatterns = [
     path('admin/profile/', AdminProfileUpdateView.as_view(), name='admin-profile'),
     
     path('me/', MeView.as_view(), name='accounts-me'),
-
+    path('public-stats/', PublicStatsView.as_view()),
+    path('public-season/', PublicSeasonView.as_view()),
+    
     path('admin-reset-request/', AdminResetRequestView.as_view(), name='admin-reset-request'),
     path('admin/users/<int:user_id>/cancel-reset-request/', AdminCancelResetRequestView.as_view(), name='cancel-reset-request'),
     path('admin-create-user/', AdminCreateUserView.as_view()),

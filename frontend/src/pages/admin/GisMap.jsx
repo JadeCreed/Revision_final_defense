@@ -59,10 +59,6 @@ const getPhasesForSeedType = (seedKey) => {
 };
 
 // ─── UTILIZATION HELPERS ──────────────────────────────────────
-// Must match BrgyHarvest.jsx computeMetrics exactly:
-// harvest_kg = harvest_bags * 50  (all bags are 50kg fixed)
-// expected_kg = area * target_yield_kg_ha
-// util_pct = (harvest_kg / expected_kg) * 100
 const computeUtilPct = (rec) => {
   const bags     = parseFloat(rec.harvest_bags) || 0;
   const area     = parseFloat(rec.harvest_area_ha) || 0;
@@ -82,6 +78,8 @@ const UTIL_TIERS = [
   { key: 'Below Target',    min: 50,     color: '#b45309', bg: '#fefce8', border: '#fde68a', label: 'Below Target'    },
   { key: 'Critical',        min: 0,      color: '#b91c1c', bg: '#fef2f2', border: '#fecaca', label: 'Critical'        },
 ];
+// Priority order for tiebreaking (index 0 = highest priority)
+const UTIL_TIER_PRIORITY = ['Exceeded Target', 'Achieved Target', 'Near Target', 'Below Target', 'Critical'];
 const NO_DATA_COLOR = '#1E293B';
 
 const getUtilTier = (pct) => {
@@ -142,56 +140,227 @@ const buildSeedTypeBreakdown = (plots) => {
   return result;
 };
 
+// ─── GET DOMINANT PHASE FOR A BRGY (CROP MONITORING) ─────────
+const getDominantPhaseForBrgy = (brgyPlots) => {
+  if (!brgyPlots || brgyPlots.length === 0) return null;
+  const phaseCounts = {};
+  brgyPlots.forEach(p => {
+    const phase = normalizePhase(p.land_type);
+    phaseCounts[phase] = (phaseCounts[phase] || 0) + 1;
+  });
+  const sorted = Object.entries(phaseCounts).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+  });
+  return sorted[0]?.[0] || null;
+};
+
+// ─── GET AGGREGATE DOMINANT PHASE ACROSS ALL BRGYS ───────────
+const getAggregateDominantPhase = (plots) => {
+  if (!plots || plots.length === 0) return null;
+  const phaseCounts = {};
+  // dedupe per farmer+seed so each combo counts once
+  const seen = new Set();
+  plots.forEach(p => {
+    const key = `${p.farmer}::${p.seed_source}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const phase = normalizePhase(p.land_type);
+    phaseCounts[phase] = (phaseCounts[phase] || 0) + 1;
+  });
+  const sorted = Object.entries(phaseCounts).sort((a, b) => {
+    if (b[1] !== a[1]) return b[1] - a[1];
+    return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+  });
+  return sorted[0]?.[0] || null;
+};
+
 // ─── BUILD PER-BARANGAY UTILIZATION FROM HARVEST RECORDS ──────
-// This computes everything client-side using the same formula as BrgyHarvest
-// so the map colors and panel data are always consistent
-const buildBrgyUtilFromHarvest = (harvestRecords) => {
-  const result = {};
+// NEW LOGIC:
+// - totalUniqueFarmersWithHarvesting = unique farmer IDs that have ANY
+//   crop monitoring record with HARVESTING phase (from plots data)
+//   passed in separately; if not available, fall back to unique harvest encoders
+// - Per seed type: tier counts = unique farmers with that tier in that seed type
+// - Dominant color = sum percentages across all seed types, tiebreak by priority
+const buildBrgyUtilData = (harvestRecords, plots) => {
+  // Build harvesting-phase farmer set per brgy from plots (AT monitoring data)
+  const brgyHarvestingFarmers = {}; // brgy -> Set of farmer IDs with harvesting phase
+  plots.forEach(p => {
+    const phase = normalizePhase(p.land_type);
+    if (phase === 'Harvesting') {
+      const brgy = ALLOWED_BRGYS.find(b => normalizeBrgy(b) === normalizeBrgy(p.barangay)) || p.barangay;
+      if (!brgy) return;
+      if (!brgyHarvestingFarmers[brgy]) brgyHarvestingFarmers[brgy] = new Set();
+      brgyHarvestingFarmers[brgy].add(p.farmer);
+    }
+  });
+
+  // Also collect all farmers who have a harvest record (encoded by BRGY)
+  // They count in the harvesting set too
+  const brgyEncodedFarmers = {}; // brgy -> Set of farmer IDs with harvest records
   harvestRecords.forEach(rec => {
     const rawBrgy = rec.barangay;
     if (!rawBrgy) return;
-
-    const canonicalBrgy = ALLOWED_BRGYS.find(
-      b => normalizeBrgy(b) === normalizeBrgy(rawBrgy)
-    ) || rawBrgy;
-
-    const util = computeUtilPct(rec);
-    const area = parseFloat(rec.harvest_area_ha) || 0;
-    const bags = parseFloat(rec.harvest_bags) || 0;
-    const mt   = (bags * 50) / 1000;
-
-    if (!result[canonicalBrgy]) {
-      result[canonicalBrgy] = {
-        barangay: canonicalBrgy,
-        farmer_ids: new Set(),
-        util_vals: [],
-        total_area_ha: 0,
-        total_production_mt: 0,
-        avg_utilization_pct: null,
-        avg_yield_t_ha: 0,
-        farmer_count: 0,
-      };
-    }
-
-    result[canonicalBrgy].farmer_ids.add(rec.farmer);
-    result[canonicalBrgy].total_area_ha += area;
-    result[canonicalBrgy].total_production_mt += mt;
-    if (util !== null) result[canonicalBrgy].util_vals.push(util);
+    const brgy = ALLOWED_BRGYS.find(b => normalizeBrgy(b) === normalizeBrgy(rawBrgy)) || rawBrgy;
+    if (!brgyEncodedFarmers[brgy]) brgyEncodedFarmers[brgy] = new Set();
+    brgyEncodedFarmers[brgy].add(rec.farmer);
+    // Also add to harvesting set (encoded = was in harvesting phase)
+    if (!brgyHarvestingFarmers[brgy]) brgyHarvestingFarmers[brgy] = new Set();
+    brgyHarvestingFarmers[brgy].add(rec.farmer);
   });
 
-  Object.values(result).forEach(b => {
-    b.farmer_count = b.farmer_ids.size;
-    if (b.util_vals.length > 0) {
-      b.avg_utilization_pct = b.util_vals.reduce((a, v) => a + v, 0) / b.util_vals.length;
+  const result = {};
+
+  // Process each brgy that has any harvesting farmer
+  const allBrgys = new Set([
+    ...Object.keys(brgyHarvestingFarmers),
+    ...harvestRecords.map(r => {
+      const rawBrgy = r.barangay;
+      return ALLOWED_BRGYS.find(b => normalizeBrgy(b) === normalizeBrgy(rawBrgy)) || rawBrgy;
+    }).filter(Boolean),
+  ]);
+
+  allBrgys.forEach(brgy => {
+    const totalUnique = brgyHarvestingFarmers[brgy]?.size || 0;
+    const encodedCount = brgyEncodedFarmers[brgy]?.size || 0;
+
+    // Gather harvest records for this brgy
+    const brgyRecs = harvestRecords.filter(r => {
+      const b = ALLOWED_BRGYS.find(b2 => normalizeBrgy(b2) === normalizeBrgy(r.barangay)) || r.barangay;
+      return b === brgy;
+    });
+
+    // Per seed type: track which farmers have which tier
+    // farmer can appear in multiple seed types but counts as 1 unique farmer total
+    // tierCounts[seedType][tierKey] = Set of farmer IDs
+    const seedTierFarmerSets = {};
+    SEED_TYPES.forEach(st => {
+      seedTierFarmerSets[st.key] = {};
+      UTIL_TIERS.forEach(t => { seedTierFarmerSets[st.key][t.key] = new Set(); });
+    });
+
+    brgyRecs.forEach(rec => {
+      const seed = rec.seed_source || 'OWN_SEED';
+      const util = computeUtilPct(rec);
+      const tier = getUtilTier(util);
+      if (!tier) return;
+      if (!seedTierFarmerSets[seed]) {
+        seedTierFarmerSets[seed] = {};
+        UTIL_TIERS.forEach(t => { seedTierFarmerSets[seed][t.key] = new Set(); });
+      }
+      seedTierFarmerSets[seed][tier.key].add(rec.farmer);
+    });
+
+    // Convert Sets to counts, compute percentages (denominator = totalUnique)
+    const seedTierCounts = {};
+    SEED_TYPES.forEach(st => {
+      seedTierCounts[st.key] = { tierCounts: {}, total: 0 };
+      UTIL_TIERS.forEach(t => {
+        const count = seedTierFarmerSets[st.key][t.key]?.size || 0;
+        if (count > 0) {
+          seedTierCounts[st.key].tierCounts[t.key] = count;
+          seedTierCounts[st.key].total += count;
+        }
+      });
+    });
+
+    // Compute dominant color: sum percentages across all seed types
+    // pct for each tier in each seed type = count / totalUnique * 100
+    // then sum across seed types, tiebreak by UTIL_TIER_PRIORITY
+    const tierSumPct = {};
+    if (totalUnique > 0) {
+      SEED_TYPES.forEach(st => {
+        UTIL_TIERS.forEach(t => {
+          const count = seedTierFarmerSets[st.key]?.[t.key]?.size || 0;
+          if (count > 0) {
+            const pct = (count / totalUnique) * 100;
+            tierSumPct[t.key] = (tierSumPct[t.key] || 0) + pct;
+          }
+        });
+      });
     }
-    if (b.total_area_ha > 0) {
-      b.avg_yield_t_ha = b.total_production_mt / b.total_area_ha;
-    }
-    delete b.farmer_ids;
-    delete b.util_vals;
+
+    // Find dominant tier by highest sumPct, tiebreak by priority
+    let dominantTierKey = null;
+    let maxPct = -1;
+    UTIL_TIER_PRIORITY.forEach(tierKey => {
+      const pct = tierSumPct[tierKey] || 0;
+      if (pct > maxPct) {
+        maxPct = pct;
+        dominantTierKey = tierKey;
+      }
+    });
+    const dominantTier = dominantTierKey
+      ? UTIL_TIERS.find(t => t.key === dominantTierKey) || null
+      : null;
+
+    // Compute area/production totals
+    const totalAreaHa = brgyRecs.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
+    const totalProductionMt = brgyRecs.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
+
+    result[brgy] = {
+      barangay: brgy,
+      totalUniqueHarvestingFarmers: totalUnique,
+      encodedFarmerCount: encodedCount,
+      seedTierCounts,       // { HYBRID: { tierCounts: {}, total }, INBRED: ..., OWN_SEED: ... }
+      tierSumPct,           // { 'Achieved Target': 66, 'Critical': 33, ... }
+      dominantTier,         // the winning UTIL_TIER object
+      total_area_ha: totalAreaHa,
+      total_production_mt: totalProductionMt,
+      farmer_count: encodedCount,
+    };
   });
 
   return result;
+};
+
+// ─── GLOBAL UTIL SEED TIER COUNTS (for overview panel) ────────
+// Same logic but across all brgys combined
+const buildGlobalUtilSeedTierCounts = (harvestRecords, plots) => {
+  // Total unique farmers with harvesting phase (globally)
+  const harvestingFarmerIds = new Set();
+  plots.forEach(p => {
+    if (normalizePhase(p.land_type) === 'Harvesting') {
+      harvestingFarmerIds.add(p.farmer);
+    }
+  });
+  harvestRecords.forEach(r => harvestingFarmerIds.add(r.farmer));
+  const totalUnique = harvestingFarmerIds.size;
+
+  // Per seed type: farmer -> tier (take latest/only record per farmer per seed type)
+  // Since harvestRecords may have multiple per farmer per seed type, we take the first
+  // (they're already the records as-is from backend)
+  const seedTierFarmerSets = {};
+  SEED_TYPES.forEach(st => {
+    seedTierFarmerSets[st.key] = {};
+    UTIL_TIERS.forEach(t => { seedTierFarmerSets[st.key][t.key] = new Set(); });
+  });
+
+  harvestRecords.forEach(rec => {
+    const seed = rec.seed_source || 'OWN_SEED';
+    const util = computeUtilPct(rec);
+    const tier = getUtilTier(util);
+    if (!tier) return;
+    if (!seedTierFarmerSets[seed]) {
+      seedTierFarmerSets[seed] = {};
+      UTIL_TIERS.forEach(t => { seedTierFarmerSets[seed][t.key] = new Set(); });
+    }
+    seedTierFarmerSets[seed][tier.key].add(rec.farmer);
+  });
+
+  const result = {};
+  SEED_TYPES.forEach(st => {
+    result[st.key] = { tierCounts: {}, total: 0 };
+    UTIL_TIERS.forEach(t => {
+      const count = seedTierFarmerSets[st.key][t.key]?.size || 0;
+      if (count > 0) {
+        result[st.key].tierCounts[t.key] = count;
+        result[st.key].total += count;
+      }
+    });
+  });
+
+  return { seedTierCounts: result, totalUnique };
 };
 
 // ─── LEAFLET LOADER ───────────────────────────────────────────
@@ -322,12 +491,11 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers, totalApprov
 };
 
 // ─── UTIL SEED TYPE CARD (CROP UTILIZATION) ───────────────────
-// Shows tier breakdown (Master Farmer / Exceptional / Normal etc)
-// for one seed type in one barangay (or all brgys for overview)
-const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers, totalApprovedFarmers }) => {
+// tierCounts: { 'Achieved Target': count, 'Critical': count, ... }
+// totalUniqueFarmers: the shared denominator (unique farmers with harvesting phase)
+const UtilSeedTypeCard = ({ seedKey, tierCounts, totalUniqueFarmers, animate }) => {
   const cfg = SEED_TYPE_MAP[seedKey] || { label: seedKey, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' };
   const [animated, setAnimated] = useState(false);
-  const displayDenominator = totalApprovedFarmers > 0 ? totalApprovedFarmers : total;
 
   useEffect(() => {
     setAnimated(false);
@@ -335,14 +503,21 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers,
     return () => window.clearTimeout(t);
   }, [tierCounts]);
 
+  // percentage = count / totalUniqueFarmers * 100
   const tierList = UTIL_TIERS
     .map(tier => ({
       ...tier,
       count:   tierCounts[tier.key] || 0,
-      percent: displayDenominator > 0 ? Math.round(((tierCounts[tier.key] || 0) / displayDenominator) * 100) : 0,
+      percent: totalUniqueFarmers > 0
+        ? Math.round(((tierCounts[tier.key] || 0) / totalUniqueFarmers) * 100)
+        : 0,
     }))
     .filter(t => t.count > 0)
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      // sort by percent desc, tiebreak by tier priority
+      if (b.percent !== a.percent) return b.percent - a.percent;
+      return UTIL_TIER_PRIORITY.indexOf(a.key) - UTIL_TIER_PRIORITY.indexOf(b.key);
+    });
 
   const dominant = tierList[0] || null;
   const others   = tierList.slice(1);
@@ -372,7 +547,6 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers,
         <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Harvest breakdown</span>
       </div>
 
-      {/* DOMINANT — big font */}
       {dominant && (
         <div style={{ backgroundColor: dominant.bg, border: `1px solid ${dominant.border}`, borderRadius: '0.75rem', padding: '0.75rem 0.875rem', marginBottom: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
@@ -381,34 +555,23 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, animate, encodedFarmers,
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: dominant.color }}>{dominant.label}</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>
-              {totalApprovedFarmers > 0
-                ? `${Math.round((encodedFarmers / totalApprovedFarmers) * 100)}%`
-                : `${dominant.percent}%`}
-            </span>
+            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>{dominant.percent}%</span>
           </div>
           <div style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-            <div
-              style={{
-                height: '100%',
-                width: animated ? `${totalApprovedFarmers > 0
-                  ? Math.max(2, Math.round((encodedFarmers / totalApprovedFarmers) * 100))
-                  : Math.max(2, dominant.percent)}%` : '0%',
-                backgroundColor: dominant.color,
-                borderRadius: '999px',
-                transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)',
-              }}
-            />
+            <div style={{
+              height: '100%',
+              width: animated ? `${Math.max(2, dominant.percent)}%` : '0%',
+              backgroundColor: dominant.color,
+              borderRadius: '999px',
+              transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)',
+            }} />
           </div>
           <p style={{ margin: '0.4rem 0 0', fontSize: '0.65rem', color: '#64748b' }}>
-            {totalApprovedFarmers > 0
-              ? `${encodedFarmers} of ${totalApprovedFarmers} approved farmers encoded`
-              : `${dominant.count} of ${total} farmer${total !== 1 ? 's' : ''}`}
+            {dominant.count} of {totalUniqueFarmers} farmer{totalUniqueFarmers !== 1 ? 's' : ''}
           </p>
         </div>
       )}
 
-      {/* OTHER TIERS — smaller */}
       {others.map(tier => (
         <div key={tier.key} style={{ marginBottom: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
@@ -458,12 +621,17 @@ const PanelFooter = ({ activeTab }) => {
 };
 
 // ─── MONITORING OVERVIEW PANEL ────────────────────────────────
+// CHANGED: Removed LIVE badge, added aggregate dominant phase label
 const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMonitoringTab }) => {
   const currentFarmers = summary?.current_farmers ?? new Set(plots.map(p => p.farmer)).size;
   const totalApproved  = summary?.total_approved_farmers ?? currentFarmers;
   const currentBrgys   = summary?.current_active_barangays ?? new Set(plots.map(p => p.barangay).filter(Boolean)).size;
   const totalBrgys     = summary?.total_active_barangays ?? currentBrgys;
   const seedBreakdown  = useMemo(() => buildSeedTypeBreakdown(plots), [plots]);
+
+  // Aggregate dominant phase across all barangays
+  const aggregateDominant = useMemo(() => getAggregateDominantPhase(plots), [plots]);
+  const dominantPhaseCfg  = aggregateDominant ? PHASE_MAP[aggregateDominant] : null;
 
   return (
     <>
@@ -472,7 +640,26 @@ const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMo
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
             <Activity size={15} color='rgba(255,255,255,0.8)' />
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Lucban crop monitoring</span>
-            <span style={{ marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.62rem', fontWeight: 700 }}>LIVE</span>
+            {/* CHANGED: replaced LIVE badge with dominant phase label */}
+            {dominantPhaseCfg && (
+              <span style={{
+                marginLeft: 'auto',
+                backgroundColor: dominantPhaseCfg.color + '33',
+                border: `1px solid ${dominantPhaseCfg.color}88`,
+                borderRadius: '999px',
+                padding: '0.15rem 0.6rem',
+                fontSize: '0.62rem',
+                fontWeight: 700,
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.3rem',
+                whiteSpace: 'nowrap',
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dominantPhaseCfg.color, display: 'inline-block', flexShrink: 0 }} />
+                {aggregateDominant}
+              </span>
+            )}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <div>
@@ -530,34 +717,23 @@ const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMo
 };
 
 // ─── UTILIZATION OVERVIEW PANEL ───────────────────────────────
-const UtilizationOverviewPanel = ({ harvestRecords, summary, animate, utilizationTab, setUtilizationTab }) => {
-  // Compute everything from harvestRecords using our formula (same as BrgyHarvest)
-  const brgyUtil = useMemo(() => buildBrgyUtilFromHarvest(harvestRecords), [harvestRecords]);
-  const haData   = harvestRecords.length > 0;
+const UtilizationOverviewPanel = ({ harvestRecords, plots, summary, animate, utilizationTab, setUtilizationTab }) => {
+  const haData = harvestRecords.length > 0;
 
-  const totalFarmers  = useMemo(() => [...new Set(harvestRecords.map(r => r.farmer))].length, [harvestRecords]);
-  const totalMT       = useMemo(() => harvestRecords.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0), [harvestRecords]);
-  const totalArea     = useMemo(() => harvestRecords.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0), [harvestRecords]);
+  // CHANGED: use new logic — totalUnique = unique farmers with harvesting phase
+  const { seedTierCounts: globalSeedTierCounts, totalUnique } = useMemo(
+    () => buildGlobalUtilSeedTierCounts(harvestRecords, plots),
+    [harvestRecords, plots]
+  );
 
-  // Global seed type tier breakdown (all brgys combined)
-  const globalSeedTierCounts = useMemo(() => {
-    const result = {};
-    SEED_TYPES.forEach(st => { result[st.key] = { tierCounts: {}, total: 0 }; });
-    harvestRecords.forEach(rec => {
-      const seed = rec.seed_source || 'OWN_SEED';
-      const util = computeUtilPct(rec);
-      const tier = getUtilTier(util);
-      const key  = tier ? tier.key : 'Needs attention';
-      if (!result[seed]) result[seed] = { tierCounts: {}, total: 0 };
-      result[seed].tierCounts[key] = (result[seed].tierCounts[key] || 0) + 1;
-      result[seed].total += 1;
-    });
-    return result;
-  }, [harvestRecords]);
+  const totalMT   = useMemo(() => harvestRecords.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0), [harvestRecords]);
+  const totalArea = useMemo(() => harvestRecords.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0), [harvestRecords]);
+
+  // CHANGED: farmer tile = encoded/totalUnique (not just encoded count)
+  const encodedFarmers = useMemo(() => [...new Set(harvestRecords.map(r => r.farmer))].length, [harvestRecords]);
 
   return (
     <>
-      {/* FIXED HEADER */}
       <div style={{ padding: '0 1.25rem 1rem', flexShrink: 0 }}>
         <div style={{ background: 'linear-gradient(135deg, #1a4d1a 0%, #166534 100%)', borderRadius: '1.25rem', padding: '1.25rem', color: 'white', animation: animate ? 'gis-fadeSlide 0.35s ease' : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -565,8 +741,11 @@ const UtilizationOverviewPanel = ({ harvestRecords, summary, animate, utilizatio
             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Harvest utilization</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem' }}>
+            {/* CHANGED: Farmers tile shows encoded/totalUnique */}
             <div>
-              <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'white', lineHeight: 1 }}>{haData ? totalFarmers : '—'}</p>
+              <p style={{ margin: 0, fontSize: '1.3rem', fontWeight: 800, color: 'white', lineHeight: 1 }}>
+                {haData ? `${encodedFarmers}/${totalUnique}` : '—'}
+              </p>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.65rem', color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>Farmers</p>
             </div>
             <div>
@@ -613,10 +792,8 @@ const UtilizationOverviewPanel = ({ harvestRecords, summary, animate, utilizatio
                   key={activeKey}
                   seedKey={activeKey}
                   tierCounts={globalSeedTierCounts[activeKey]?.tierCounts || {}}
-                  total={globalSeedTierCounts[activeKey]?.total || 0}
+                  totalUniqueFarmers={totalUnique}
                   animate={animate}
-                  encodedFarmers={harvestRecords ? [...new Set(harvestRecords.map(r => r.farmer))].length : 0}
-                  totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
                 />
               );
             })()
@@ -644,44 +821,47 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
     });
     return Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
   }, [brgyPlots]);
-  const seedBreakdown   = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);
+  const seedBreakdown = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);
 
-  const brgyHarvest = useMemo(() => (harvestRecords || []).filter(r => r.barangay === barangayName), [harvestRecords, barangayName]);
-  const encodedCount = useMemo(() => [...new Set(brgyHarvest.map(r => r.farmer))].length, [brgyHarvest]);
-  const harvestArea  = useMemo(() => brgyHarvest.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0), [brgyHarvest]);
-  const harvestMT    = useMemo(() => brgyHarvest.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0), [brgyHarvest]);
+  const brgyHarvest  = useMemo(() => (harvestRecords || []).filter(r => {
+    const b = ALLOWED_BRGYS.find(b2 => normalizeBrgy(b2) === normalizeBrgy(r.barangay)) || r.barangay;
+    return b === barangayName;
+  }), [harvestRecords, barangayName]);
 
-  const brgyUtilVals = useMemo(() => brgyHarvest.map(r => computeUtilPct(r)).filter(v => v !== null), [brgyHarvest]);
-  const brgyAvgUtil  = brgyUtilVals.length > 0 ? brgyUtilVals.reduce((a, v) => a + v, 0) / brgyUtilVals.length : null;
-  const utilTier     = getUtilTier(brgyAvgUtil);
+  const harvestArea = useMemo(() => brgyHarvest.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0), [brgyHarvest]);
+  const harvestMT   = useMemo(() => brgyHarvest.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0), [brgyHarvest]);
 
-  const brgySeedTierCounts = useMemo(() => {
-    const result = {};
-    SEED_TYPES.forEach(st => { result[st.key] = { tierCounts: {}, total: 0 }; });
-    brgyHarvest.forEach(rec => {
-      const seed = rec.seed_source || 'OWN_SEED';
-      const util = computeUtilPct(rec);
-      const tier = getUtilTier(util);
-      const key  = tier ? tier.key : 'Critical';
-      if (!result[seed]) result[seed] = { tierCounts: {}, total: 0 };
-      result[seed].tierCounts[key] = (result[seed].tierCounts[key] || 0) + 1;
-      result[seed].total += 1;
-    });
-    return result;
-  }, [brgyHarvest]);
+  // CHANGED: use new brgyUtilData logic
+  const brgyUtil = useMemo(() => {
+    const data = buildBrgyUtilData(brgyHarvest, brgyPlots);
+    return data[barangayName] || null;
+  }, [brgyHarvest, brgyPlots, barangayName]);
+
+  // CHANGED: totalUniqueHarvestingFarmers = unique farmers with harvesting phase in this brgy
+  const totalUniqueHarvestingFarmers = brgyUtil?.totalUniqueHarvestingFarmers || 0;
+  const encodedCount = brgyUtil?.encodedFarmerCount || 0;
+  const brgySeedTierCounts = brgyUtil?.seedTierCounts || {};
 
   const totalApprovedInBrgy = approvedCounts?.[barangayName] || 0;
-  const encodingProgressPct = totalApprovedInBrgy > 0 ? Math.round((encodedCount / totalApprovedInBrgy) * 100) : 0;
+
+  // ── CROP MONITORING: dominant phase for this brgy ──
+  const dominantPhase    = useMemo(() => getDominantPhaseForBrgy(brgyPlots), [brgyPlots]);
+  const dominantPhaseCfg = dominantPhase ? PHASE_MAP[dominantPhase] : null;
+
+  // CHANGED: header badge
+  // monitoring tab → show "Dominant: [phase]" instead of "X/X farmers"
+  // utilization tab → keep existing encoding progress
+  const headerBadgeContent = activeTab === 'utilization'
+    ? (totalUniqueHarvestingFarmers > 0
+        ? `${encodedCount}/${totalUniqueHarvestingFarmers} farmers · ${Math.round((encodedCount / totalUniqueHarvestingFarmers) * 100)}% encoded`
+        : encodedCount > 0 ? `${encodedCount} farmers encoded` : 'No harvest data')
+    : (dominantPhase
+        ? `Dominant: ${dominantPhase}`
+        : `${farmerCount}${totalApproved ? `/${totalApproved}` : ''} farmers`);
 
   const headerBadgeColor = activeTab === 'utilization'
-    ? (utilTier?.color || '#94a3b8')
-    : '#94a3b8';
-
-  const headerBadgeLabel = activeTab === 'utilization'
-    ? (totalApprovedInBrgy > 0
-        ? `${encodedCount}/${totalApprovedInBrgy} farmers · ${encodingProgressPct}% encoded`
-        : encodedCount > 0 ? `${encodedCount} farmers encoded` : 'No harvest data')
-    : `${farmerCount}${totalApproved ? `/${totalApproved}` : ''} farmers`;
+    ? (brgyUtil?.dominantTier?.color || '#94a3b8')
+    : (dominantPhaseCfg?.color || '#94a3b8');
 
   const activeSeedKey = seedTab || 'HYBRID';
 
@@ -693,8 +873,11 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
           <button onClick={onBack} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '0.5rem', color: 'white', padding: '0.35rem 0.55rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', fontWeight: 600 }}>
             <ChevronLeft size={14} /> Back
           </button>
-          <span style={{ marginLeft: 'auto', backgroundColor: headerBadgeColor + '33', border: `1px solid ${headerBadgeColor}66`, borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>
-            {headerBadgeLabel}
+          <span style={{ marginLeft: 'auto', backgroundColor: headerBadgeColor + '33', border: `1px solid ${headerBadgeColor}66`, borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            {activeTab === 'monitoring' && dominantPhaseCfg && (
+              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: dominantPhaseCfg.color, display: 'inline-block', flexShrink: 0 }} />
+            )}
+            {headerBadgeContent}
           </span>
         </div>
 
@@ -720,7 +903,8 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
                 </div>
               ))
             : [
-                { label: 'Farmers encoded', value: totalApprovedInBrgy > 0 ? `${encodedCount}/${totalApprovedInBrgy}` : `${encodedCount}` },
+                // CHANGED: farmers tile = encoded/totalUniqueHarvestingFarmers
+                { label: 'Farmers encoded', value: totalUniqueHarvestingFarmers > 0 ? `${encodedCount}/${totalUniqueHarvestingFarmers}` : `${encodedCount}` },
                 { label: 'Production',      value: harvestMT > 0 ? `${fmtNum(harvestMT)} MT` : '—' },
                 { label: 'Area harvested',  value: harvestArea > 0 ? `${fmtNum(harvestArea)} ha` : '—' },
               ].map(item => (
@@ -733,7 +917,7 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
         </div>
       </div>
 
-      {/* SEED TYPE TABS — same style as overview panels */}
+      {/* SEED TYPE TABS */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', padding: '0 1.25rem', flexShrink: 0 }}>
         {SEED_TYPES.map((st) => {
           const isActive = activeSeedKey === st.key;
@@ -761,7 +945,6 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
                 <p style={{ margin: 0, fontSize: '0.82rem' }}>No monitoring data yet.</p>
               </div>
             )}
-
             {brgyPlots.length > 0 && (
               <SeedTypeBreakdownCard
                 key={activeSeedKey}
@@ -784,10 +967,8 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
             key={activeSeedKey}
             seedKey={activeSeedKey}
             tierCounts={brgySeedTierCounts[activeSeedKey]?.tierCounts || {}}
-            total={brgySeedTierCounts[activeSeedKey]?.total || 0}
+            totalUniqueFarmers={totalUniqueHarvestingFarmers}
             animate={animate}
-            encodedFarmers={encodedCount}
-            totalApprovedFarmers={totalApprovedInBrgy}
           />
         )}
       </div>
@@ -879,8 +1060,8 @@ const GisMap = () => {
     toastRef.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // Compute per-brgy utilization from harvest records using our formula
-  const brgyUtilData = useMemo(() => buildBrgyUtilFromHarvest(harvestRecords), [harvestRecords]);
+  // CHANGED: use new buildBrgyUtilData (needs plots too)
+  const brgyUtilData = useMemo(() => buildBrgyUtilData(harvestRecords, plots), [harvestRecords, plots]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900);
@@ -968,7 +1149,7 @@ const GisMap = () => {
     if (polygonRef.current) map.removeLayer(polygonRef.current);
     if (outlineRef.current)  map.removeLayer(outlineRef.current);
 
-    // Build dominant phase per brgy (for monitoring tab)
+    // ── CROP MONITORING polygon logic (unchanged) ──
     const brgyAllPhaseCounts = {};
     plots.forEach(p => {
       if (!p.barangay) return;
@@ -987,11 +1168,12 @@ const GisMap = () => {
       return phaseColor(sorted[0]?.[0]) || NO_DATA_COLOR;
     };
 
-    // For utilization: color comes from our client-computed brgyUtilData
+    // ── CROP UTILIZATION polygon color — CHANGED: use dominantTier from new logic ──
     const getPolygonColor = (name) => {
       if (activeTab === 'utilization') {
         const util = brgyUtilData[name];
-        return util?.avg_utilization_pct != null ? getUtilColor(util.avg_utilization_pct) : NO_DATA_COLOR;
+        if (!util || !util.dominantTier) return NO_DATA_COLOR;
+        return util.dominantTier.color;
       }
       return getDominantPhaseColor(name);
     };
@@ -999,18 +1181,19 @@ const GisMap = () => {
     const getTooltipContent = (name) => {
       if (activeTab === 'utilization') {
         const util = brgyUtilData[name];
-        if (!util || util.avg_utilization_pct == null) {
+        if (!util || !util.dominantTier) {
           return `<div style="font-size:0.82rem;font-weight:800;color:#0f172a;">${name}</div><div style="font-size:0.72rem;color:#94a3b8;margin-top:0.2rem;">No harvest data yet</div>`;
         }
-        const tier  = getUtilTier(util.avg_utilization_pct);
-        const color = tier?.color || '#64748b';
+        const tier  = util.dominantTier;
+        const color = tier.color;
+        const pct   = util.tierSumPct[tier.key] || 0;
         return `
           <div style="font-size:0.82rem;font-weight:800;color:#0f172a;margin-bottom:0.25rem;">${name}</div>
           <div style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.2rem;">
             <span style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>
-            <span style="font-size:0.72rem;font-weight:700;color:${color};">${fmtNum(util.avg_utilization_pct, 1)}% · ${tier?.label}</span>
+            <span style="font-size:0.72rem;font-weight:700;color:${color};">${Math.round(pct)}% · ${tier.label}</span>
           </div>
-          <div style="font-size:0.68rem;color:#64748b;">${fmtNum(util.total_production_mt)} MT · ${fmtNum(util.farmer_count)} farmer${util.farmer_count !== 1 ? 's' : ''}</div>
+          <div style="font-size:0.68rem;color:#64748b;">${fmtNum(util.total_production_mt)} MT · ${util.encodedFarmerCount}/${util.totalUniqueHarvestingFarmers} farmer${util.totalUniqueHarvestingFarmers !== 1 ? 's' : ''}</div>
         `;
       } else {
         const counts = brgyAllPhaseCounts[name];
@@ -1042,8 +1225,8 @@ const GisMap = () => {
         return { color: isActive ? 'white' : 'rgba(255,255,255,0.55)', fillColor: color, fillOpacity: isActive ? 0.88 : 0.68, weight: isActive ? 2.5 : 1.2, opacity: 1 };
       },
       onEachFeature: (feature, layer) => {
-        const name = feature.properties.ADM4_EN;
-        layer.bindTooltip(`<div style="font-family:inherit;padding:0.15rem 0.1rem;">${getTooltipContent(name)}</div>`, { permanent: false, direction: 'top', className: 'gis-tooltip', offset: [0, -6] });
+        const name = feature.properties.ADM4_EN;                      // ── label sa gis map ${getTooltipContent(name)} ──                          
+        layer.bindTooltip(`<div style="font-family:inherit;padding:0.15rem 0.1rem;font-size:0.82rem;font-weight:800;color:#0f172a;">${name}</div>`, { permanent: false, direction: 'top', className: 'gis-tooltip', offset: [0, -6] });
         layer.on('click', () => {
           if (lastClickedBrgy === name) {
             setActiveBarangay(null); setLastClickedBrgy(null);
@@ -1075,14 +1258,17 @@ const GisMap = () => {
     });
 
     // Show utilization % labels on polygons when in utilization tab
+    // CHANGED: show dominant tier sumPct instead of avg_utilization_pct
     if (activeTab === 'utilization') {
       BRGY_FEATURES.forEach(feature => {
         const name = feature.properties.ADM4_EN;
         const util = brgyUtilData[name];
-        if (!util?.avg_utilization_pct) return;
+        if (!util?.dominantTier) return;
+        const pct = util.tierSumPct[util.dominantTier.key] || 0;
+        if (pct <= 0) return;
         const center = L.geoJSON(feature).getBounds().getCenter();
         L.marker([center.lat - 0.005, center.lng], {
-          icon: L.divIcon({ html: `<div style="font-size:0.78rem;font-weight:800;color:white;text-shadow:0 1px 6px rgba(0,0,0,0.9);white-space:nowrap;pointer-events:none;text-align:center;">${Math.round(util.avg_utilization_pct)}%</div>`, className: '', iconAnchor: [20, 4] }),
+          icon: L.divIcon({ html: `<div style="font-size:0.78rem;font-weight:800;color:white;text-shadow:0 1px 6px rgba(0,0,0,0.9);white-space:nowrap;pointer-events:none;text-align:center;">${Math.round(pct)}%</div>`, className: '', iconAnchor: [20, 4] }),
           interactive: false,
         }).addTo(map);
       });
@@ -1149,7 +1335,7 @@ const GisMap = () => {
   const PanelBody = () => {
     if (!activeBarangay) {
       return activeTab === 'utilization'
-        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} summary={summary} animate={panelAnimate} utilizationTab={utilizationTab} setUtilizationTab={setUtilizationTab} />
+        ? <UtilizationOverviewPanel harvestRecords={harvestRecords} plots={plots} summary={summary} animate={panelAnimate} utilizationTab={utilizationTab} setUtilizationTab={setUtilizationTab} />
         : <MonitoringOverviewPanel plots={filteredPlots} summary={summary} animate={panelAnimate} monitoringTab={monitoringTab} setMonitoringTab={setMonitoringTab} />;
     }
     return (
@@ -1213,12 +1399,8 @@ const GisMap = () => {
                     onChange={e => {
                       const newSeason = e.target.value;
                       const currentYear = selectedPoll?.year;
-                      const sameYear = polls.find(
-                        p => p.season === newSeason && p.year === currentYear
-                      );
-                      const fallback = polls
-                        .filter(p => p.season === newSeason)
-                        .sort((a, b) => b.year - a.year)[0];
+                      const sameYear = polls.find(p => p.season === newSeason && p.year === currentYear);
+                      const fallback = polls.filter(p => p.season === newSeason).sort((a, b) => b.year - a.year)[0];
                       const matched = sameYear || fallback;
                       if (matched) setSelectedPollId(matched.poll_id);
                     }}

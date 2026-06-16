@@ -738,15 +738,11 @@ class BrgyReportPDFView(APIView):
             'RIPENING': 'Ripening',               'HARVESTING': 'Harvesting',
         }
         phase_rows_html = ''
-        total_monitored = crop_phase.get('total_monitored', 0) or 1
         for ph, cnt in crop_phase.get('phase_counts', {}).items():
-            pct = round(cnt / total_monitored * 100)
             phase_rows_html += f"""
             <tr>
               <td>{phase_display.get(ph, ph)}</td>
               <td style="text-align:center">{cnt}</td>
-              <td style="text-align:center">{pct}%</td>
-              <td></td>
             </tr>"""
 
         # ── Insights ──────────────────────────────────────────────
@@ -805,14 +801,12 @@ class BrgyReportPDFView(APIView):
   body {{ font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111827; margin:0; padding:0; }}
 
   /* ── HEADER (centered) ── */
-  .header {{ text-align:center; padding-bottom:10px; border-bottom:2.5px solid #166534; margin-bottom:12px; }}
+  .header {{ text-align:center; padding-bottom:12px; border-bottom:2.5px solid #166534; margin-bottom:12px; }}
   .header-logo {{ margin-bottom:6px; }}
-  .header-logo img {{ width:70px; height:70px; border-radius:50%; object-fit:cover; }}
-  .header-logo-fallback {{ width:70px; height:70px; border-radius:50%; background:#166534; display:inline-block; line-height:70px; color:white; font-size:10pt; font-weight:bold; text-align:center; }}
-  .header-agency {{ font-size:7.5pt; color:#166534; font-weight:bold; text-transform:uppercase; }}
-  .header-title  {{ font-size:14pt; font-weight:bold; color:#0f172a; line-height:1.3; margin:3px 0; }}
-  .header-sub    {{ font-size:8pt; color:#475569; margin-top:2px; }}
-  .season-badge  {{ display:inline-block; padding:3px 12px; border-radius:999px; background:#f0fdf4; border:1.5px solid #86efac; color:#166534; font-size:8pt; font-weight:bold; margin-top:5px; }}
+  .header-agency {{ font-size:7.5pt; color:#166534; font-weight:bold; text-transform:uppercase; margin-top:4px; }}
+  .header-title  {{ font-size:14pt; font-weight:bold; color:#0f172a; line-height:1.3; margin:4px 0; }}
+  .header-sub    {{ font-size:8pt; color:#475569; margin-top:3px; line-height:1.6; }}
+  .season-badge  {{ display:inline-block; padding:3px 12px; border-radius:999px; background:#f0fdf4; border:1.5px solid #86efac; color:#166534; font-size:8pt; font-weight:bold; margin-top:6px; }}
 
   /* ── SECTION TITLES ── */
   .sec-title {{ font-size:8pt; font-weight:bold; color:#166534; text-transform:uppercase; margin:14px 0 6px; padding-bottom:3px; border-bottom:1.5px solid #166534; }}
@@ -868,11 +862,13 @@ class BrgyReportPDFView(APIView):
 <!-- ══ HEADER (CENTERED) ══════════════════════════════════════ -->
 <div class="header">
   <div class="header-logo">
-    {f'<img src="data:image/png;base64,{logo_b64}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;" />' if logo_b64 else '<span class="header-logo-fallback">MAO</span>'}
+    {f'<img src="data:image/png;base64,{logo_b64}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;" />' if logo_b64 else 'MAO'}
   </div>
   <div class="header-agency">Municipal Agriculture Office &mdash; Lucban, Quezon</div>
   <div class="header-title">Barangay {barangay} &mdash; Agricultural Season Report</div>
-  <div class="header-sub">Rice Program Management System (AGRICE) &nbsp;&middot;&nbsp; Prepared by: <strong>{brgy_president_name}</strong> &nbsp;&middot;&nbsp; {brgy_president_role}</div>
+  <div class="header-sub">Rice Program Management System (AGRICE)</div>
+  <div class="header-sub">Prepared by: <strong>{brgy_president_name}</strong></div>
+  <div class="header-sub">{brgy_president_role}</div>
   <span class="season-badge">{season_label}</span>
 </div>
 
@@ -975,26 +971,24 @@ class BrgyReportPDFView(APIView):
 <table class="data-table" style="margin-top:6px;margin-bottom:0; width:100%;">
   <thead>
     <tr>
-      <th style="text-align:left">Phase</th>
-      <th>Count</th>
-      <th>Share</th>
-      <th>Remark</th>
+      <th style="text-align:left">Crop Phase</th>
+      <th>Farmers</th>
     </tr>
   </thead>
   <tbody>
-    {phase_rows_html if phase_rows_html else '<tr><td colspan="4" style="color:#94a3b8;text-align:center">No monitoring data.</td></tr>'}
+    {phase_rows_html if phase_rows_html else '<tr><td colspan="2" style="color:#94a3b8;text-align:center">No monitoring data.</td></tr>'}
   </tbody>
 </table>
-<div style="display:flex;justify-content:space-between;margin-top:12px;gap:6px;">
-  <div style="flex:1;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center;">
+<div style="margin-top:12px;">
+  <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center;margin-bottom:8px;">
     <div style="font-size:22pt;font-weight:800;color:#b45309">{crop_phase.get('delayed_count', 0)}</div>
     <div style="font-size:7pt;font-weight:bold;color:#b45309;">Delayed</div>
   </div>
-  <div style="flex:1;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center;">
+  <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center;margin-bottom:8px;">
     <div style="font-size:22pt;font-weight:800;color:#b91c1c">{crop_phase.get('damaged_count', 0)}</div>
     <div style="font-size:7pt;font-weight:bold;color:#b91c1c;">Damaged</div>
   </div>
-  <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center;">
+  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center;">
     <div style="font-size:22pt;font-weight:800;color:#166534">{crop_phase.get('total_monitored', 0)}</div>
     <div style="font-size:7pt;font-weight:bold;color:#166534;">Total Monitored</div>
   </div>
@@ -1016,13 +1010,13 @@ class BrgyReportPDFView(APIView):
     </td>
     <td style="text-align:center">
       <span class="sig-space"></span>
-      <span class="sig-name">JOANNA LYNN P. GONZALES</span>
-      <span class="sig-role">OIC Municipal Agriculturist</span>
+      <span class="sig-name">{brgy_president_name}</span>
+      <span class="sig-role">Noted by &nbsp;&middot;&nbsp; Barangay President, Brgy. {barangay}</span>
     </td>
     <td style="text-align:right">
       <span class="sig-space"></span>
-      <span class="sig-name">{brgy_president_name}</span>
-      <span class="sig-role">Noted by &nbsp;&middot;&nbsp; Barangay President, Brgy. {barangay}</span>
+      <span class="sig-name">JOANNA LYNN P. GONZALES</span>
+      <span class="sig-role">OIC Municipal Agriculturist</span>
     </td>
   </tr>
 </table>

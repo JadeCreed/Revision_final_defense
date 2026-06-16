@@ -19,7 +19,7 @@ const FARMER_NAV = [
   { label: 'Home',    path: '/farmer',               icon: Home        },
   { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
   { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
-  { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
+  // { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
   { label: 'Map',     path: '/farmer/gis',           icon: Map         },
   { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
 ];
@@ -40,8 +40,8 @@ const AT_NAV = [
 const BRGY_NAV = [
   { label: 'Home',          path: '/brgy',                 icon: Home        },
   { label: 'News',          path: '/brgy/announcements',   icon: Megaphone   },
-  { label: 'Poll',          path: '/brgy/poll',            icon: Sprout      },
-  { label: 'Farmers',       path: '/brgy/farmers',         icon: Users       },
+  // { label: 'Poll',          path: '/brgy/poll',            icon: Sprout      },
+  // { label: 'Farmers',       path: '/brgy/farmers',         icon: Users       },
   { label: 'Beneficiaries', path: '/brgy/beneficiaries',   icon: Package     },
   { label: 'Distribution',  path: '/brgy/distribution',    icon: Truck       },
   { label: 'GIS Map',       path: '/brgy/gis',             icon: Map         },

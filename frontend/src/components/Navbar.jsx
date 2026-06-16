@@ -59,7 +59,7 @@ const Navbar = () => {
         <ul className={`navbar-links${menuOpen ? ' open' : ''}`}>
           <li style={{ textAlign: 'center' }}><a href="#home" onClick={(e) => { e.preventDefault(); scrollTo('home'); }}>Home</a></li>
           <li style={{ textAlign: 'center' }}><a href="#about" onClick={(e) => { e.preventDefault(); scrollTo('about'); }}>About MAO</a></li>
-          <li style={{ textAlign: 'center' }}><a href="#programs" onClick={(e) => { e.preventDefault(); scrollTo('programs'); }}>Programs</a></li>
+          <li style={{ textAlign: 'center' }}><a href="#gis" onClick={(e) => { e.preventDefault(); scrollTo('gis'); }}>GIS Map</a></li>
           <li style={{ textAlign: 'center' }}><a href="#announcements" onClick={(e) => { e.preventDefault(); scrollTo('announcements'); }}>Announcements</a></li>
           <li style={{ textAlign: 'center' }}><a href="#documentation" onClick={(e) => { e.preventDefault(); scrollTo('documentation'); }}>Documentation</a></li>
 
