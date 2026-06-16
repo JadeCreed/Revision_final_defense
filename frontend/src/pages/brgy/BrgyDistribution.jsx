@@ -997,28 +997,48 @@ const BrgyDistribution = () => {
               </div>
               <div style={{ overflowX: 'auto' }}>
                 {eventIsHybrid ? (
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '800px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem', minWidth: '1500px' }}>
                     <thead>
                       <tr style={{ backgroundColor: '#f9fafb' }}>
-                        {['No.','RSBSA No.','Name','Contact','Farm Area (ha)','QTY (bags)','Variety','Signature'].map((col, i) => (
-                          <th key={i} style={{ padding: '0.5rem', textAlign: 'center', fontWeight: 700, color: col === 'QTY (bags)' ? '#854d0e' : '#374151', whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb' }}>{col}</th>
+                        {[
+                          'No.','RSBSA No.','Last Name','First Name','Middle Name','Ext.',
+                          'Date of Birth','Res. Municipality','Res. Barangay',
+                          'Farm Municipality','Farm Barangay',
+                          'Gender','IP','Senior Citizen','PWD','ARBs','4Ps',
+                          'Farm Area (ha)','QTY (bags)','Contact No.','Signature'
+                        ].map((col, i) => (
+                          <th key={i} style={{ padding: '0.5rem 0.375rem', textAlign: 'center', fontWeight: 700, color: ['Res. Municipality','Res. Barangay','Farm Municipality','Farm Barangay','IP','Senior Citizen','PWD','ARBs','4Ps'].includes(col) ? '#dc2626' : (col === 'QTY (bags)' ? '#854d0e' : '#374151'), whiteSpace: 'nowrap', fontSize: '0.6rem', textTransform: 'uppercase', borderBottom: '2px solid #d1d5db', borderRight: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>{col}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {reportBatchData.entries.map((entry, idx) => {
-                        const td = { padding: '0.4375rem 0.5rem', color: '#374151', whiteSpace: 'nowrap', fontSize: '0.68rem', borderBottom: '1px solid #f3f4f6', borderRight: '1px solid #e5e7eb' };
+                        const fd = entry.farmer_detail || {};
+                        const td = { padding: '0.4375rem 0.375rem', color: '#374151', whiteSpace: 'nowrap', fontSize: '0.68rem', borderBottom: '1px solid #f3f4f6', borderRight: '1px solid #e5e7eb' };
                         return (
                           <tr key={entry.id} style={{ backgroundColor: !entry.qty_bags ? '#fffbeb' : idx % 2 === 0 ? 'white' : '#fafafa' }}>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.row_number}</td>
                             <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.63rem' }}>{entry.farmer_rsbsa || '—'}</td>
-                            <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name}</td>
-                            <td style={td}>{entry.farmer_contact || '—'}</td>
+                            <td style={{ ...td, fontWeight: 700 }}>{(entry.farmer_name || '').split(',')[0]?.trim()}</td>
+                            <td style={td}>{(entry.farmer_name || '').split(',')[1]?.trim() || '—'}</td>
+                            <td style={td}>{fd.middle_name || '—'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.ext_name || '—'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.date_of_birth ? new Date(fd.date_of_birth + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' }) : '—'}</td>
+                            <td style={td}>{fd.residency_municipality || '—'}</td>
+                            <td style={td}>{fd.residency_barangay || '—'}</td>
+                            <td style={td}>{fd.farm_municipality || '—'}</td>
+                            <td style={td}>{fd.farm_barangay || '—'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.gender ? fd.gender[0] : '—'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.ip ? 'Y' : 'N'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.senior_citizen ? 'Y' : 'N'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.pwd ? 'Y' : 'N'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.arbs ? 'Y' : 'N'}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>{fd.four_ps ? 'Y' : 'N'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.farm_area_ha || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>
                               {entry.qty_bags ? entry.qty_bags : <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700 }}>Pending</span>}
                             </td>
-                            <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
+                            <td style={td}>{entry.farmer_contact || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>
                               {entry.has_signature ? (
                                 <button onClick={() => getBatchDetail(reportBatchData.id).then(res => { const full = res.data.entries?.find(e => e.id === entry.id); if (full?.signature) setViewSig(full.signature); })}

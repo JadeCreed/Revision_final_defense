@@ -20,10 +20,94 @@ class FarmerMinimalSerializer(serializers.ModelSerializer):
             'contact_number', 'barangay', 'rsbsa_number',
         ]
 
+class FarmerDetailForReportSerializer(serializers.ModelSerializer):
+    """
+    Used by DistributionEntrySerializer.farmer_detail — supplies the full
+    profile fields needed by the Beneficiaries and Distribution Hybrid
+    reports (Middle Name, Ext., DOB, Res./Farm Municipality+Barangay,
+    Gender, IP, Senior Citizen, PWD, ARBs, 4Ps).
 
+    Read-only / GET-only. Does not touch encode, submit, or approve logic —
+    those views save directly to DistributionEntry/User models and never
+    instantiate this serializer.
+
+    residency_municipality and residency_barangay are already stored as
+    separate, clean DB columns on FarmerProfile (e.g. "Lucena City" and
+    "Gulang-Gulang") — no string parsing needed.
+    """
+    middle_name            = serializers.SerializerMethodField()
+    ext_name                = serializers.SerializerMethodField()
+    date_of_birth           = serializers.SerializerMethodField()
+    gender                  = serializers.SerializerMethodField()
+    residency_municipality  = serializers.SerializerMethodField()
+    residency_barangay      = serializers.SerializerMethodField()
+    farm_municipality       = serializers.SerializerMethodField()
+    farm_barangay            = serializers.SerializerMethodField()
+    ip                      = serializers.SerializerMethodField()
+    senior_citizen          = serializers.SerializerMethodField()
+    pwd                     = serializers.SerializerMethodField()
+    arbs                    = serializers.SerializerMethodField()
+    four_ps                 = serializers.SerializerMethodField()
+
+    class Meta:
+        model  = User
+        fields = [
+            'id', 'first_name', 'last_name',
+            'contact_number', 'barangay', 'rsbsa_number',
+            'middle_name', 'ext_name', 'date_of_birth', 'gender',
+            'residency_municipality', 'residency_barangay',
+            'farm_municipality', 'farm_barangay',
+            'ip', 'senior_citizen', 'pwd', 'arbs', 'four_ps',
+        ]
+
+    def _get_profile(self, obj):
+        try:
+            return obj.profile
+        except Exception:
+            return None
+
+    def get_middle_name(self, obj):
+        p = self._get_profile(obj); return p.middle_name if p else ''
+
+    def get_ext_name(self, obj):
+        p = self._get_profile(obj); return p.ext_name if p else ''
+
+    def get_date_of_birth(self, obj):
+        p = self._get_profile(obj); return p.date_of_birth if p else None
+
+    def get_gender(self, obj):
+        p = self._get_profile(obj); return p.gender if p else ''
+
+    def get_residency_municipality(self, obj):
+        p = self._get_profile(obj); return p.residency_municipality if p else ''
+
+    def get_residency_barangay(self, obj):
+        p = self._get_profile(obj); return p.residency_barangay if p else ''
+
+    def get_farm_municipality(self, obj):
+        p = self._get_profile(obj); return p.farm_municipality if p else ''
+
+    def get_farm_barangay(self, obj):
+        p = self._get_profile(obj); return p.farm_barangay if p else ''
+
+    def get_ip(self, obj):
+        p = self._get_profile(obj); return p.ip if p else False
+
+    def get_senior_citizen(self, obj):
+        p = self._get_profile(obj); return p.senior_citizen if p else False
+
+    def get_pwd(self, obj):
+        p = self._get_profile(obj); return p.pwd if p else False
+
+    def get_arbs(self, obj):
+        p = self._get_profile(obj); return p.arbs if p else False
+
+    def get_four_ps(self, obj):
+        p = self._get_profile(obj); return p.four_ps if p else False
+    
 class DistributionEntrySerializer(serializers.ModelSerializer):
     """Full entry with farmer info."""
-    farmer_detail = FarmerMinimalSerializer(source='farmer', read_only=True)
+    farmer_detail = FarmerDetailForReportSerializer(source='farmer', read_only=True)
     farmer_name = serializers.SerializerMethodField()
     farmer_rsbsa = serializers.SerializerMethodField()
     farmer_contact = serializers.SerializerMethodField()
