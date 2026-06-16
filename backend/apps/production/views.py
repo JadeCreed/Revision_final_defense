@@ -375,7 +375,12 @@ class SeedProductivityView(APIView):
         result.sort(key=lambda x: x['yield_gap_equiv_kg'], reverse=True)
         return Response(result)
 
+ 
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ── report menu of brgy president  ──
+# ═══════════════════════════════════════════════════════════════════════════
 def _build_brgy_report_data(user, poll_id=None):
     barangay = getattr(user, 'barangay', None)
     if not barangay:
@@ -400,55 +405,118 @@ def _build_brgy_report_data(user, poll_id=None):
             'status': poll.status,
         }
 
+    # ── HARVEST RECORDS scoped to barangay + poll ──────────────────
     qs = HarvestRecord.objects.filter(barangay=barangay).select_related('farmer')
     if poll:
-        if poll.season == 'WET':
-            qs = qs.filter(harvest_date__year=poll.year, harvest_date__month__gte=6, harvest_date__month__lte=10)
-        elif poll.season == 'DRY':
-            qs = qs.filter(
-                Q(harvest_date__year=poll.year - 1, harvest_date__month__gte=11) |
-                Q(harvest_date__year=poll.year, harvest_date__month__lte=5)
-            )
+        qs = qs.filter(poll=poll)
 
     harvest_records = list(qs)
 
     total_farmers = len(set(r.farmer_id for r in harvest_records))
-    total_area = sum(float(r.harvest_area_ha or 0) for r in harvest_records)
-    total_bags = sum(float(r.harvest_bags or 0) for r in harvest_records)
-    total_kg = total_bags * 50
-    total_mt = total_kg / 1000
-    avg_yield = (total_mt / total_area) if total_area > 0 else 0
+    total_area    = sum(float(r.harvest_area_ha or 0) for r in harvest_records)
+    total_bags    = sum(float(r.harvest_bags or 0) for r in harvest_records)
+    total_kg      = total_bags * 50
+    total_mt      = total_kg / 1000
+    avg_yield     = (total_mt / total_area) if total_area > 0 else 0
 
     util_vals = [utilization_pct(r) for r in harvest_records]
     util_vals = [v for v in util_vals if v is not None]
-    avg_util = sum(util_vals) / len(util_vals) if util_vals else None
+    avg_util  = sum(util_vals) / len(util_vals) if util_vals else None
 
+    # ── DISTRIBUTION: beneficiaries & bags scoped to poll ──────────
+    from apps.distribution.models import DistributionEntry
+    dist_filter = dict(
+        batch__status='APPROVED',
+        farmer__barangay=barangay,
+    )
+    if poll:
+        dist_filter['batch__event__season'] = poll.season
+        dist_filter['batch__event__year']   = poll.year
+
+    dist_entries = DistributionEntry.objects.filter(**dist_filter).select_related(
+        'farmer', 'batch__event__seed_type'
+    )
+
+    # Unique beneficiaries
+    total_beneficiaries = len(set(e.farmer_id for e in dist_entries))
+
+    # Bags received per seed type
+    hybrid_bags = inbred_bags = 0
+    hybrid_kg_total = inbred_kg_total = 0
+    for e in dist_entries:
+        seed_name = (getattr(e.batch.event.seed_type, 'name', '') or '').upper()
+        bags = int(e.qty_bags or 0)
+        if 'HYBRID' in seed_name:
+            hybrid_bags      += bags
+            hybrid_kg_total  += bags * 15
+        elif 'INBRED' in seed_name:
+            inbred_bags      += bags
+            inbred_kg_total  += bags * 20
+
+    total_dist_bags = hybrid_bags + inbred_bags
+    total_dist_kg   = hybrid_kg_total + inbred_kg_total
+
+    # ── BY SEED TYPE ───────────────────────────────────────────────
     by_seed_type = []
     for src in ['HYBRID', 'INBRED', 'OWN_SEED']:
-        group = [r for r in harvest_records if r.seed_source == src]
-        area = sum(float(r.harvest_area_ha or 0) for r in group)
-        mt = sum((float(r.harvest_bags or 0) * 50) / 1000 for r in group)
+        group  = [r for r in harvest_records if r.seed_source == src]
+        area   = sum(float(r.harvest_area_ha or 0) for r in group)
+        mt     = sum((float(r.harvest_bags or 0) * 50) / 1000 for r in group)
         u_vals = [utilization_pct(r) for r in group]
         u_vals = [v for v in u_vals if v is not None]
-        avg_u = sum(u_vals) / len(u_vals) if u_vals else None
-        seed_dist = sum(float(r.seed_bags_received or 0) * {'HYBRID': 15, 'INBRED': 20, 'OWN_SEED': 0}.get(src, 0) for r in group)
-        prod_equiv = seed_dist * ((avg_u or 0) / 100) if seed_dist > 0 else 0
-        yield_gap = max(0, seed_dist - prod_equiv)
+        avg_u  = sum(u_vals) / len(u_vals) if u_vals else None
+
+        # expected vs actual kg for this seed type
+        exp_kg_total = sum(
+            float(r.harvest_area_ha or 0) * STANDARD_YIELD_KG.get(src, 2000)
+            for r in group
+        )
+        act_kg_total = sum(harvest_kg(r) for r in group)
+
+        # seed distribution for this group (from dist_entries)
+        if src == 'HYBRID':
+            s_bags = hybrid_bags; s_kg = hybrid_kg_total
+        elif src == 'INBRED':
+            s_bags = inbred_bags; s_kg = inbred_kg_total
+        else:
+            s_bags = 0; s_kg = 0
+
+        prod_equiv = s_kg * ((avg_u or 0) / 100) if s_kg > 0 else 0
+        yield_gap  = max(0, s_kg - prod_equiv)
 
         by_seed_type.append({
-            'seed_source': src,
-            'label': SEED_LABELS.get(src, src),
-            'farmer_count': len(set(r.farmer_id for r in group)),
-            'total_area_ha': round(area, 2),
-            'total_mt': round(mt, 2),
-            'avg_yield_t_ha': round(mt / area, 2) if area > 0 else 0,
-            'avg_util_pct': round(avg_u, 1) if avg_u is not None else None,
-            'tier': get_tier_label(avg_u),
-            'seed_distributed_kg': round(seed_dist, 2),
-            'prod_seed_equiv_kg': round(prod_equiv, 2),
-            'yield_gap_equiv_kg': round(yield_gap, 2),
+            'seed_source':         src,
+            'label':               SEED_LABELS.get(src, src),
+            'farmer_count':        len(set(r.farmer_id for r in group)),
+            'total_area_ha':       round(area, 2),
+            'total_mt':            round(mt, 2),
+            'avg_yield_t_ha':      round(mt / area, 2) if area > 0 else 0,
+            'avg_util_pct':        round(avg_u, 1) if avg_u is not None else None,
+            'tier':                get_tier_label(avg_u),
+            'expected_kg':         round(exp_kg_total, 0),
+            'actual_kg':           round(act_kg_total, 0),
+            'seed_bags_received':  s_bags,
+            'seed_kg_received':    s_kg,
+            'prod_seed_equiv_kg':  round(prod_equiv, 2),
+            'yield_gap_equiv_kg':  round(yield_gap, 2),
         })
 
+    # ── CROP PHASE (poll-scoped) ───────────────────────────────────
+    from apps.crop_monitoring.models import CropMonitoringRecord
+    phase_qs = CropMonitoringRecord.objects.filter(barangay=barangay)
+    if poll:
+        phase_qs = phase_qs.filter(poll=poll)
+
+    phase_counts  = {}
+    delayed_count = damaged_count = 0
+    for rec in phase_qs:
+        phase = rec.crop_phase or 'Unknown'
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+        st = (getattr(rec, 'phase_status', '') or '').upper()
+        if st == 'DELAYED':  delayed_count += 1
+        if st == 'DAMAGED':  damaged_count += 1
+
+    # ── SEED PRODUCTIVITY (per farmer) ────────────────────────────
     seed_productivity = []
     for r in harvest_records:
         if r.seed_source == 'OWN_SEED':
@@ -457,105 +525,102 @@ def _build_brgy_report_data(user, poll_id=None):
         if util is None:
             continue
         bags_recv = float(r.seed_bags_received or 0)
-        kg_per_bag = {'HYBRID': 15, 'INBRED': 20, 'OWN_SEED': 0}.get(r.seed_source, 0)
-        seed_dist = bags_recv * kg_per_bag
-        if seed_dist == 0:
+        kg_per_bag = {'HYBRID': 15, 'INBRED': 20}.get(r.seed_source, 0)
+        s_dist = bags_recv * kg_per_bag
+        if s_dist == 0:
             continue
-        prod_equiv = seed_dist * (util / 100)
-        yield_gap = max(0, seed_dist - prod_equiv)
-        farmer = r.farmer
-        name = f"{farmer.last_name}, {farmer.first_name}" if farmer else str(r.farmer_id)
+        prod_eq  = s_dist * (util / 100)
+        yield_gap = max(0, s_dist - prod_eq)
+        farmer   = r.farmer
+        name     = f"{farmer.last_name}, {farmer.first_name}" if farmer else str(r.farmer_id)
         seed_productivity.append({
-            'farmer_name': name,
-            'seed_source': r.seed_source,
-            'seed_label': SEED_LABELS.get(r.seed_source, r.seed_source),
-            'seed_distributed_kg': round(seed_dist, 2),
-            'prod_seed_equiv_kg': round(prod_equiv, 2),
-            'yield_gap_equiv_kg': round(yield_gap, 2),
-            'utilization_pct': round(util, 1),
-            'tier': get_tier_label(util),
+            'farmer_name':         name,
+            'seed_source':         r.seed_source,
+            'seed_label':          SEED_LABELS.get(r.seed_source, r.seed_source),
+            'seed_distributed_kg': round(s_dist, 2),
+            'prod_seed_equiv_kg':  round(prod_eq, 2),
+            'yield_gap_equiv_kg':  round(yield_gap, 2),
+            'utilization_pct':     round(util, 1),
+            'tier':                get_tier_label(util),
         })
     seed_productivity.sort(key=lambda x: x['yield_gap_equiv_kg'], reverse=True)
 
-    from apps.distribution.models import DistributionEntry
-    beneficiary_qs = DistributionEntry.objects.filter(farmer__barangay=barangay).select_related('farmer')
-    if poll:
-        if poll.season == 'WET':
-            beneficiary_qs = beneficiary_qs.filter(
-                batch__event__season=poll.season,
-                batch__event__year=poll.year,
-            )
-        elif poll.season == 'DRY':
-            beneficiary_qs = beneficiary_qs.filter(
-                batch__event__season=poll.season,
-                batch__event__year=poll.year,
-            )
-    total_beneficiaries = beneficiary_qs.values('farmer').distinct().count()
+    # ── HARVEST PERFORMANCE: expected vs actual per farmer ─────────
+    harvest_performance = []
+    for r in harvest_records:
+        area     = float(r.harvest_area_ha or 0)
+        src      = r.seed_source or 'OWN_SEED'
+        standard = STANDARD_YIELD_KG.get(src, 2000)
+        exp_kg   = area * standard
+        act_kg   = harvest_kg(r)
+        util     = utilization_pct(r)
+        farmer   = r.farmer
+        name     = f"{farmer.last_name}, {farmer.first_name}" if farmer else str(r.farmer_id)
+        harvest_performance.append({
+            'farmer_name':     name,
+            'seed_source':     src,
+            'seed_label':      SEED_LABELS.get(src, src),
+            'area_ha':         round(area, 2),
+            'expected_kg':     round(exp_kg, 0),
+            'actual_kg':       round(act_kg, 0),
+            'utilization_pct': round(util, 1) if util is not None else None,
+            'tier':            get_tier_label(util),
+        })
 
-    phase_qs = CropMonitoringRecord.objects.filter(barangay=barangay)
-    if poll:
-        phase_qs = phase_qs.filter(poll=poll)
-
-    phase_counts = {}
-    delayed_count = 0
-    damaged_count = 0
-    for rec in phase_qs:
-        phase = rec.crop_phase or 'Unknown'
-        phase_counts[phase] = phase_counts.get(phase, 0) + 1
-        status = (getattr(rec, 'phase_status', '') or '').upper()
-        if status == 'DELAYED':
-            delayed_count += 1
-        if status == 'DAMAGED':
-            damaged_count += 1
-
+    # ── INSIGHTS ──────────────────────────────────────────────────
     insights = []
     if total_farmers > 0:
         insights.append(f"{total_farmers} farmer{'s' if total_farmers != 1 else ''} have harvest data in Barangay {barangay}.")
     if total_beneficiaries > 0:
-        insights.append(f"{total_beneficiaries} farmer{'s' if total_beneficiaries != 1 else ''} received seed distribution in this season.")
+        insights.append(f"{total_beneficiaries} farmer{'s' if total_beneficiaries != 1 else ''} received seed distribution — {total_dist_bags} bags ({total_dist_kg:,} kg total).")
     if avg_util is not None:
         insights.append(f"Overall yield achievement is {round(avg_util, 1)}% — {get_tier_label(avg_util)}.")
     if total_mt > 0:
         insights.append(f"Total production reached {round(total_mt, 2)} MT with an average yield of {round(avg_yield, 2)} t/ha.")
-
     best_seed = max(by_seed_type, key=lambda x: x['avg_yield_t_ha'] or 0, default=None)
     if best_seed and best_seed['avg_yield_t_ha'] > 0:
         insights.append(f"{best_seed['label']} recorded the highest average yield at {best_seed['avg_yield_t_ha']} t/ha.")
-
     total_gap = sum(s['yield_gap_equiv_kg'] for s in by_seed_type)
     if total_gap > 0:
-        insights.append(f"Potential unrealized productivity equivalent reached {round(total_gap, 1)} kg.")
-
+        insights.append(f"Potential unrealized productivity equivalent: {round(total_gap, 1)} kg.")
     if delayed_count > 0:
-        insights.append(f"{delayed_count} crop monitoring record{'s' if delayed_count != 1 else ''} were flagged as delayed.")
+        insights.append(f"{delayed_count} crop monitoring record{'s' if delayed_count != 1 else ''} flagged as delayed.")
+    if damaged_count > 0:
+        insights.append(f"{damaged_count} crop monitoring record{'s' if damaged_count != 1 else ''} flagged as damaged.")
 
     return {
-        'poll_info': poll_info,
-        'barangay': barangay,
+        'poll_info':    poll_info,
+        'barangay':     barangay,
         'summary': {
-            'total_farmers': total_farmers,
+            'total_farmers':       total_farmers,
             'total_beneficiaries': total_beneficiaries,
-            'total_area_ha': round(total_area, 2),
+            'total_dist_bags':     total_dist_bags,
+            'total_dist_kg':       total_dist_kg,
+            'hybrid_bags':         hybrid_bags,
+            'hybrid_kg':           hybrid_kg_total,
+            'inbred_bags':         inbred_bags,
+            'inbred_kg':           inbred_kg_total,
+            'total_area_ha':       round(total_area, 2),
             'total_production_mt': round(total_mt, 2),
-            'avg_yield_t_ha': round(avg_yield, 2),
-            'avg_util_pct': round(avg_util, 1) if avg_util is not None else None,
-            'overall_tier': get_tier_label(avg_util),
+            'avg_yield_t_ha':      round(avg_yield, 2),
+            'avg_util_pct':        round(avg_util, 1) if avg_util is not None else None,
+            'overall_tier':        get_tier_label(avg_util),
         },
-        'by_seed_type': by_seed_type,
-        'seed_productivity': seed_productivity,
+        'by_seed_type':        by_seed_type,
+        'seed_productivity':   seed_productivity,
+        'harvest_performance': harvest_performance,
         'crop_phase_summary': {
-            'phase_counts': phase_counts,
-            'delayed_count': delayed_count,
-            'damaged_count': damaged_count,
+            'phase_counts':    phase_counts,
+            'delayed_count':   delayed_count,
+            'damaged_count':   damaged_count,
             'total_monitored': sum(phase_counts.values()),
         },
         'insights': insights,
     }
 
-
 class BrgyReportDataView(APIView):
     """
-    GET /api/production/brgy-report/?poll_id=
+    GET /api/production/brgy-report/
     Returns report analytics for BRGY users.
     """
     permission_classes = [IsAuthenticated, IsBPUser]
@@ -568,102 +633,410 @@ class BrgyReportDataView(APIView):
 
 
 class BrgyReportPDFView(APIView):
-    """
-    POST /api/production/brgy-report/pdf/
-    Generates a PDF report for the BRGY dashboard.
-    """
     permission_classes = [IsAuthenticated, IsBPUser]
 
     def post(self, request):
         try:
             from xhtml2pdf import pisa
         except ImportError:
-            return Response({'error': 'xhtml2pdf is not installed. Run: pip install xhtml2pdf'}, status=500)
+            return Response({'error': 'xhtml2pdf is not installed.'}, status=500)
 
         from io import BytesIO
+        import base64, os
+        from django.conf import settings
 
-        poll_id = request.data.get('poll_id')
-        charts = request.data.get('charts', {}) or {}
+        poll_id     = request.data.get('poll_id')
+        charts      = request.data.get('charts', {}) or {}
         report_data = _build_brgy_report_data(request.user, poll_id)
         if 'error' in report_data:
             return Response({'error': report_data['error']}, status=400)
 
-        poll_info = report_data.get('poll_info', {})
-        summary = report_data.get('summary', {})
-        season_label = f"{poll_info.get('season_display', '')} {poll_info.get('year', '')}" if poll_info else 'All Seasons'
-        chart_row = f'''<div class="chart-row"><div class="chart-box"><img src="data:image/png;base64,{charts.get('production_chart', '')}" /></div><div class="chart-box"><img src="data:image/png;base64,{charts.get('yield_chart', '')}" /></div></div>''' if charts.get('production_chart') and charts.get('yield_chart') else ''
-        gap_chart_html = f'''<div class="chart-box" style="margin-bottom:10px;"><img src="data:image/png;base64,{charts.get('gap_chart', '')}" /></div>''' if charts.get('gap_chart') else ''
-        insights_html = ''.join(f'<div class="insight"><div class="dot"></div><div>{item}</div></div>' for item in report_data.get('insights', []))
+        poll_info    = report_data.get('poll_info', {})
+        summary      = report_data.get('summary', {})
+        by_seed      = report_data.get('by_seed_type', [])
+        harvest_perf = report_data.get('harvest_performance', [])
+        crop_phase   = report_data.get('crop_phase_summary', {})
+        insights     = report_data.get('insights', [])
+        barangay     = report_data.get('barangay', '')
+        season_label = (
+            f"{poll_info.get('season_display', '')} {poll_info.get('year', '')}"
+            if poll_info else 'All Seasons'
+        )
 
-        html_content = f"""
-<!DOCTYPE html>
+        # ── Logo as base64 ─────────────────────────────────────────
+        logo_b64 = ''
+        logo_paths = [
+            os.path.join(settings.BASE_DIR, '..', 'frontend', 'src', 'assets', 'logo.png'),
+            os.path.join(settings.BASE_DIR, 'static', 'logo.png'),
+        ]
+        for lp in logo_paths:
+            try:
+                with open(os.path.abspath(lp), 'rb') as f:
+                    logo_b64 = base64.b64encode(f.read()).decode('utf-8')
+                break
+            except Exception:
+                pass
+
+        logo_img = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'style="width:64px;height:64px;border-radius:50%;object-fit:cover;" />'
+            if logo_b64 else
+            '<div style="width:64px;height:64px;border-radius:50%;background:#166534;'
+            'display:flex;align-items:center;justify-content:center;'
+            'color:white;font-size:10pt;font-weight:bold;">MAO</div>'
+        )
+
+        # ── Chart images ──────────────────────────────────────────
+        def chart_img(key):
+            data = charts.get(key, '')
+            if not data:
+                return ''
+            return f'<img src="data:image/png;base64,{data}" style="width:100%;height:auto;" />'
+
+        # ── Seed type rows ────────────────────────────────────────
+        seed_rows_html = ''
+        for s in by_seed:
+            if s['farmer_count'] == 0:
+                continue
+            tier_color = {
+                'Exceeded Target': '#166534', 'Achieved Target': '#15803d',
+                'Near Target': '#0369a1',     'Below Target': '#b45309',
+                'Critical': '#b91c1c',
+            }.get(s['tier'], '#64748b')
+            seed_rows_html += f"""
+            <tr>
+              <td>{s['label']}</td>
+              <td style="text-align:center">{s['farmer_count']}</td>
+              <td style="text-align:center">{s['seed_bags_received']} bags<br/><span style="font-size:7pt;color:#64748b">({s['seed_kg_received']:,} kg)</span></td>
+              <td style="text-align:center">{s['total_area_ha']} ha</td>
+              <td style="text-align:center">{s['expected_kg']:,.0f} kg</td>
+              <td style="text-align:center;font-weight:bold">{s['actual_kg']:,.0f} kg</td>
+              <td style="text-align:center;font-weight:bold;color:{tier_color}">{s['avg_util_pct'] if s['avg_util_pct'] is not None else '—'}{'%' if s['avg_util_pct'] is not None else ''}</td>
+              <td style="text-align:center;color:{tier_color};font-weight:bold">{s['tier']}</td>
+            </tr>"""
+
+        # ── Harvest performance rows (top 15) ─────────────────────
+        perf_rows_html = ''
+        for i, p in enumerate(harvest_perf[:15]):
+            bg = '#f8fafc' if i % 2 == 0 else 'white'
+            tier_color = {
+                'Exceeded Target': '#166534', 'Achieved Target': '#15803d',
+                'Near Target': '#0369a1',     'Below Target': '#b45309',
+                'Critical': '#b91c1c',
+            }.get(p['tier'], '#64748b')
+            util_str = f"{p['utilization_pct']}%" if p['utilization_pct'] is not None else '—'
+            perf_rows_html += f"""
+            <tr style="background:{bg}">
+              <td>{p['farmer_name']}</td>
+              <td style="text-align:center">{p['seed_label']}</td>
+              <td style="text-align:center">{p['area_ha']} ha</td>
+              <td style="text-align:center">{p['expected_kg']:,.0f} kg</td>
+              <td style="text-align:center;font-weight:bold">{p['actual_kg']:,.0f} kg</td>
+              <td style="text-align:center;font-weight:bold;color:{tier_color}">{util_str}</td>
+              <td style="text-align:center;color:{tier_color};font-size:7pt;font-weight:bold">{p['tier']}</td>
+            </tr>"""
+
+        # ── Crop phase rows ────────────────────────────────────────
+        phase_display = {
+            'DISTRIBUTION': 'Seed Distribution', 'ESTABLISHMENT': 'Crop Establishment',
+            'TILLERING': 'Tillering',             'FLOWERING': 'Flowering',
+            'RIPENING': 'Ripening',               'HARVESTING': 'Harvesting',
+        }
+        phase_rows_html = ''
+        total_monitored = crop_phase.get('total_monitored', 0) or 1
+        for ph, cnt in crop_phase.get('phase_counts', {}).items():
+            pct = round(cnt / total_monitored * 100)
+            phase_rows_html += f"""
+            <tr>
+              <td>{phase_display.get(ph, ph)}</td>
+              <td style="text-align:center">{cnt}</td>
+              <td style="text-align:center">{pct}%</td>
+            </tr>"""
+
+        # ── Insights ──────────────────────────────────────────────
+        insights_html = ''.join(
+            f'<div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:5px;">'
+            f'<span style="min-width:6px;height:6px;width:6px;border-radius:50%;background:#166534;display:inline-block;margin-top:4px;"></span>'
+            f'<span style="font-size:8.5pt;color:#374151">{ins}</span></div>'
+            for ins in insights
+        )
+
+        # ── Bar chart HTML (production by seed type — inline, no canvas needed) ──
+        seed_chart_bars = ''
+        max_mt = max((s['total_mt'] for s in by_seed if s['farmer_count'] > 0), default=1) or 1
+        seed_colors = {'HYBRID': '#1a4d1a', 'INBRED': '#2563eb', 'OWN_SEED': '#b45309'}
+        for s in by_seed:
+            if s['farmer_count'] == 0:
+                continue
+            bar_w = max(2, round(s['total_mt'] / max_mt * 100))
+            color = seed_colors.get(s['seed_source'], '#64748b')
+            seed_chart_bars += f"""
+            <div style="margin-bottom:10px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                <span style="font-size:8pt;font-weight:600;color:#374151">{s['label']}</span>
+                <span style="font-size:8pt;font-weight:700;color:#0f172a">{s['total_mt']} MT</span>
+              </div>
+              <div style="height:10px;background:#f1f5f9;border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:{bar_w}%;background:{color};border-radius:99px;"></div>
+              </div>
+              <div style="font-size:7pt;color:#94a3b8;margin-top:2px">{s['farmer_count']} farmers · {s['tier']}</div>
+            </div>"""
+
+        # ── Achievement bar chart ──────────────────────────────────
+        achieve_bars = ''
+        for s in by_seed:
+            if s['farmer_count'] == 0 or s['avg_util_pct'] is None:
+                continue
+            bar_w   = min(100, max(2, round(s['avg_util_pct'])))
+            color   = seed_colors.get(s['seed_source'], '#64748b')
+            achieve_bars += f"""
+            <div style="margin-bottom:10px;">
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
+                <span style="font-size:8pt;font-weight:600;color:#374151">{s['label']}</span>
+                <span style="font-size:8pt;font-weight:700;color:{color}">{s['avg_util_pct']}%</span>
+              </div>
+              <div style="height:10px;background:#f1f5f9;border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:{bar_w}%;background:{color};border-radius:99px;"></div>
+              </div>
+            </div>"""
+
+        html_content = f"""<!DOCTYPE html>
 <html>
 <head>
-<meta charset=\"UTF-8\" />
+<meta charset="UTF-8" />
 <style>
-  @page {{ size: A4; margin: 15mm 12mm; }}
-  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #111827; }}
-  .header {{ text-align: center; border-bottom: 2px solid #166534; padding-bottom: 8px; margin-bottom: 10px; }}
-  .title {{ font-size: 13pt; font-weight: bold; color: #166534; }}
-  .subtitle {{ font-size: 9pt; color: #374151; margin-top: 2px; }}
-  .badge {{ display: inline-block; padding: 2px 8px; border-radius: 999px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-size: 8pt; font-weight: bold; margin-top: 4px; }}
-  .metric-table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; }}
-  .metric-table td {{ width: 33.33%; padding: 6px; border: 1px solid #e2e8f0; background: #f8fafc; vertical-align: top; }}
-  .metric-label {{ font-size: 7pt; text-transform: uppercase; color: #64748b; }}
-  .metric-value {{ font-size: 11pt; font-weight: bold; color: #14532d; margin-top: 2px; }}
-  .chart-table {{ width: 100%; border-collapse: collapse; margin-bottom: 10px; }}
-  .chart-table td {{ width: 50%; padding: 6px; border: 1px solid #e2e8f0; vertical-align: top; }}
-  .chart-box img {{ width: 100%; height: auto; border-radius: 6px; }}
-  table {{ width: 100%; border-collapse: collapse; font-size: 8pt; margin-bottom: 10px; }}
-  th {{ text-align: left; background: #14532d; color: white; padding: 5px; font-size: 7.5pt; text-transform: uppercase; }}
-  td {{ padding: 5px; border-bottom: 1px solid #e5e7eb; color: #374151; }}
-  .insight {{ margin-bottom: 4px; font-size: 8.5pt; color: #374151; }}
+  @page {{ size: A4; margin: 15mm 14mm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111827; }}
+
+  /* ── HEADER ── */
+  .header {{ display:flex; align-items:center; gap:14px; padding-bottom:10px;
+             border-bottom:2.5px solid #166534; margin-bottom:12px; }}
+  .header-text {{ flex:1; }}
+  .header-agency {{ font-size:7.5pt; color:#166534; font-weight:bold;
+                    text-transform:uppercase; letter-spacing:.04em; }}
+  .header-title  {{ font-size:13pt; font-weight:bold; color:#0f172a; line-height:1.2; }}
+  .header-sub    {{ font-size:8pt; color:#475569; margin-top:2px; }}
+  .season-badge  {{ display:inline-block; padding:3px 10px; border-radius:999px;
+                    background:#f0fdf4; border:1.5px solid #86efac;
+                    color:#166534; font-size:8pt; font-weight:bold; }}
+
+  /* ── SECTION TITLES ── */
+  .sec-title {{ font-size:8pt; font-weight:bold; color:#166534; text-transform:uppercase;
+                letter-spacing:.06em; margin:14px 0 6px; padding-bottom:3px;
+                border-bottom:1px solid #e2e8f0; }}
+
+  /* ── KPI GRID ── */
+  .kpi-grid {{ display:table; width:100%; border-collapse:collapse; }}
+  .kpi-cell {{ display:table-cell; width:16.6%; padding:8px 6px; border:1px solid #e2e8f0;
+               background:#f8fafc; text-align:center; vertical-align:middle; }}
+  .kpi-label {{ font-size:6.5pt; color:#94a3b8; text-transform:uppercase;
+                letter-spacing:.05em; font-weight:bold; }}
+  .kpi-value {{ font-size:13pt; font-weight:800; color:#14532d; margin-top:2px; line-height:1; }}
+  .kpi-sub   {{ font-size:6.5pt; color:#64748b; margin-top:1px; }}
+
+  /* ── CHARTS SIDE BY SIDE ── */
+  .chart-row  {{ display:table; width:100%; border-collapse:collapse; margin-bottom:12px; }}
+  .chart-cell {{ display:table-cell; width:50%; padding:10px;
+                 border:1px solid #e2e8f0; background:white; vertical-align:top; }}
+  .chart-title {{ font-size:8pt; font-weight:bold; color:#0f172a; margin-bottom:6px; }}
+  .chart-sub   {{ font-size:6.5pt; color:#94a3b8; margin-bottom:8px; }}
+
+  /* ── TABLES ── */
+  table {{ width:100%; border-collapse:collapse; font-size:7.5pt; margin-bottom:10px; }}
+  th {{ background:#14532d; color:white; padding:5px 6px; font-size:7pt;
+        text-transform:uppercase; letter-spacing:.04em; text-align:left; }}
+  td {{ padding:5px 6px; border-bottom:1px solid #f1f5f9; color:#374151; vertical-align:middle; }}
+  tr:nth-child(even) td {{ background:#f8fafc; }}
+
+  /* ── CROP PHASE ── */
+  .phase-badge {{ display:inline-block; padding:2px 7px; border-radius:99px;
+                  font-size:6.5pt; font-weight:bold; background:#f0fdf4;
+                  color:#166534; border:1px solid #bbf7d0; }}
+
+  /* ── INSIGHTS ── */
+  .insights-box {{ background:#f8fafc; border:1px solid #e2e8f0;
+                   border-radius:6px; padding:10px 12px; margin-top:10px; }}
+  .insights-title {{ font-size:7.5pt; font-weight:bold; color:#475569;
+                     text-transform:uppercase; letter-spacing:.06em; margin-bottom:7px; }}
+
+  /* ── FOOTER ── */
+  .footer {{ margin-top:18px; padding-top:8px; border-top:1px solid #e2e8f0;
+             display:flex; justify-content:space-between; }}
+  .sig-block {{ text-align:center; width:30%; }}
+  .sig-name  {{ font-size:8.5pt; font-weight:bold; text-decoration:underline; }}
+  .sig-role  {{ font-size:7pt; color:#64748b; margin-top:2px; }}
 </style>
 </head>
 <body>
-<div class=\"header\">
-  <div class=\"title\">LUCBAN MUNICIPAL AGRICULTURE OFFICE</div>
-  <div class=\"subtitle\">Barangay {report_data['barangay']} — Report</div>
-  <div class=\"badge\">{season_label}</div>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════ -->
+<div class="header">
+  {logo_img}
+  <div class="header-text">
+    <div class="header-agency">Municipal Agriculture Office — Lucban, Quezon</div>
+    <div class="header-title">Barangay {barangay} — Agricultural Season Report</div>
+    <div class="header-sub">Rice Program Management System (AGRICE) &nbsp;·&nbsp; Prepared by Barangay President</div>
+  </div>
+  <div><span class="season-badge">{season_label}</span></div>
 </div>
-<table class=\"metric-table\">
-  <tr>
-    <td><div class=\"metric-label\">Farmers Harvested</div><div class=\"metric-value\">{summary.get('total_farmers', 0)}</div></td>
-    <td><div class=\"metric-label\">Beneficiaries</div><div class=\"metric-value\">{summary.get('total_beneficiaries', 0)}</div></td>
-    <td><div class=\"metric-label\">Area Harvested</div><div class=\"metric-value\">{summary.get('total_area_ha', 0)} ha</div></td>
-  </tr>
-  <tr>
-    <td><div class=\"metric-label\">Total Production</div><div class=\"metric-value\">{summary.get('total_production_mt', 0)} MT</div></td>
-    <td><div class=\"metric-label\">Avg Yield</div><div class=\"metric-value\">{summary.get('avg_yield_t_ha', 0)} t/ha</div></td>
-    <td><div class=\"metric-label\">Achievement</div><div class=\"metric-value\">{summary.get('avg_util_pct', 0)}%</div></td>
-  </tr>
+
+<!-- ══ KPI TILES ════════════════════════════════════════════════ -->
+<div class="sec-title">Summary Overview</div>
+<div class="kpi-grid">
+  <div class="kpi-cell">
+    <div class="kpi-label">Farmers Harvested</div>
+    <div class="kpi-value">{summary.get('total_farmers', 0)}</div>
+    <div class="kpi-sub">With harvest records</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Beneficiaries</div>
+    <div class="kpi-value">{summary.get('total_beneficiaries', 0)}</div>
+    <div class="kpi-sub">Seed recipients</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Bags Received</div>
+    <div class="kpi-value">{summary.get('total_dist_bags', 0)}</div>
+    <div class="kpi-sub">{summary.get('total_dist_kg', 0):,} kg total</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Total Production</div>
+    <div class="kpi-value">{summary.get('total_production_mt', 0)} MT</div>
+    <div class="kpi-sub">All seed types</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Avg Yield</div>
+    <div class="kpi-value">{summary.get('avg_yield_t_ha', 0)} t/ha</div>
+    <div class="kpi-sub">Per hectare</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">Achievement</div>
+    <div class="kpi-value" style="color:{'#166534' if (summary.get('avg_util_pct') or 0) >= 80 else '#b45309'}">{summary.get('avg_util_pct', '—')}{'%' if summary.get('avg_util_pct') is not None else ''}</div>
+    <div class="kpi-sub">{summary.get('overall_tier', 'N/A')}</div>
+  </div>
+</div>
+
+<!-- ══ CHARTS: Production + Achievement ════════════════════════ -->
+<div class="sec-title">Production Analytics</div>
+<div class="chart-row">
+  <div class="chart-cell">
+    <div class="chart-title">Production by Seed Type (MT)</div>
+    <div class="chart-sub">Total harvest output per seed program</div>
+    {seed_chart_bars if seed_chart_bars else '<p style="color:#94a3b8;font-size:8pt">No harvest data yet.</p>'}
+  </div>
+  <div class="chart-cell">
+    <div class="chart-title">Yield Achievement by Seed Type (%)</div>
+    <div class="chart-sub">Achievement rate vs DA target yield</div>
+    {achieve_bars if achieve_bars else '<p style="color:#94a3b8;font-size:8pt">No harvest data yet.</p>'}
+  </div>
+</div>
+
+<!-- ══ SEED ANALYTICS TABLE ════════════════════════════════════ -->
+<div class="sec-title">Seed Program Analytics</div>
+<table>
+  <thead>
+    <tr>
+      <th>Seed Type</th><th>Farmers</th><th>Bags / Kg Received</th>
+      <th>Area (ha)</th><th>Expected (kg)</th><th>Actual (kg)</th>
+      <th>Achievement</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {seed_rows_html if seed_rows_html else '<tr><td colspan="8" style="text-align:center;color:#94a3b8">No data available.</td></tr>'}
+  </tbody>
 </table>
-<table class=\"chart-table\">
-  <tr>
-    <td class=\"chart-box\">{chart_row}</td>
-    <td class=\"chart-box\">{gap_chart_html}</td>
-  </tr>
+
+<!-- ══ HARVEST PERFORMANCE ══════════════════════════════════════ -->
+<div class="sec-title">Harvest Performance (Expected vs Actual)</div>
+<table>
+  <thead>
+    <tr>
+      <th>Farmer</th><th>Seed Type</th><th>Area (ha)</th>
+      <th>Expected (kg)</th><th>Actual (kg)</th>
+      <th>Achievement</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    {perf_rows_html if perf_rows_html else '<tr><td colspan="7" style="text-align:center;color:#94a3b8">No harvest records yet.</td></tr>'}
+  </tbody>
 </table>
-<div style=\"margin-top: 8px;\"><strong>Key Insights</strong></div>
-{insights_html}
+
+<!-- ══ CROP PHASE MONITORING ════════════════════════════════════ -->
+<div class="sec-title">Crop Phase Monitoring</div>
+<div class="chart-row">
+  <div class="chart-cell" style="width:40%">
+    <div class="chart-title">Phase Breakdown</div>
+    <table style="margin-bottom:0">
+      <thead><tr><th>Phase</th><th>Count</th><th>Share</th></tr></thead>
+      <tbody>
+        {phase_rows_html if phase_rows_html else '<tr><td colspan="3" style="color:#94a3b8;text-align:center">No monitoring data.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+  <div class="chart-cell" style="width:60%">
+    <div class="chart-title">Remarks</div>
+    <div style="display:flex;gap:12px;margin-top:6px;">
+      <div style="text-align:center;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 18px;">
+        <div style="font-size:18pt;font-weight:800;color:#b45309">{crop_phase.get('delayed_count', 0)}</div>
+        <div style="font-size:7pt;font-weight:bold;color:#b45309;text-transform:uppercase">Delayed</div>
+      </div>
+      <div style="text-align:center;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 18px;">
+        <div style="font-size:18pt;font-weight:800;color:#b91c1c">{crop_phase.get('damaged_count', 0)}</div>
+        <div style="font-size:7pt;font-weight:bold;color:#b91c1c;text-transform:uppercase">Damaged</div>
+      </div>
+      <div style="text-align:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 18px;">
+        <div style="font-size:18pt;font-weight:800;color:#166534">{crop_phase.get('total_monitored', 0)}</div>
+        <div style="font-size:7pt;font-weight:bold;color:#166534;text-transform:uppercase">Total Monitored</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ INSIGHTS ═════════════════════════════════════════════════ -->
+<div class="insights-box">
+  <div class="insights-title">Key Insights</div>
+  {insights_html if insights_html else '<p style="color:#94a3b8;font-size:8pt">No insights yet.</p>'}
+</div>
+
+<!-- ══ SIGNATORIES ══════════════════════════════════════════════ -->
+<div class="footer">
+  <div class="sig-block">
+    <div style="height:30px"></div>
+    <div class="sig-name">RANDY F. LEONIDO</div>
+    <div class="sig-role">Agricultural Technician</div>
+  </div>
+  <div class="sig-block">
+    <div style="height:30px"></div>
+    <div class="sig-name">JOANNA LYNN P. GONZALES</div>
+    <div class="sig-role">OIC Municipal Agriculturist</div>
+  </div>
+  <div class="sig-block">
+    <div style="height:30px"></div>
+    <div class="sig-name">Barangay President, Brgy. {barangay}</div>
+    <div class="sig-role">Noted by</div>
+  </div>
+</div>
+
 </body>
-</html>
-"""
+</html>"""
 
         buffer = BytesIO()
         try:
             pisa_status = pisa.CreatePDF(html_content, dest=buffer)
         except Exception as exc:
-            return Response({'error': 'Failed to generate PDF report.', 'detail': str(exc)}, status=500)
+            return Response({'error': 'PDF generation failed.', 'detail': str(exc)}, status=500)
 
         if pisa_status.err:
-            return Response({'error': 'Failed to generate PDF report.'}, status=500)
+            return Response({'error': 'PDF generation failed.'}, status=500)
 
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="BrgyReport_{report_data["barangay"].replace(" ", "_")}.pdf"'
+        safe_brgy = barangay.replace(' ', '_')
+        season_slug = (poll_info.get('season_display') or 'Season').replace(' ', '')
+        year_slug   = poll_info.get('year', '')
+        response['Content-Disposition'] = (
+            f'attachment; filename="BrgyReport_{safe_brgy}_{season_slug}{year_slug}.pdf"'
+        )
         return response
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ── HARVEST RECORD CRUD VIEWS ──

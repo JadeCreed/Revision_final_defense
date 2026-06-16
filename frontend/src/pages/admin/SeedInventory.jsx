@@ -1404,20 +1404,46 @@ export default function SeedInventory() {
           </div>
 
           {(() => {
-            const allAllocs = deliveries.flatMap(d =>
-              (d.allocations || []).map(a => ({
-                ...a,
-                seed_type_name: d.seed_type_name,
-                variety_name: d.variety_name,
-                season: d.season,
-                season_display: d.season_display,
-                year: d.year,
-              }))
+            const filteredDelivs = deliveries.filter(d => {
+              const matchSeason = !historyFilter.season || d.season === historyFilter.season;
+              const matchYear   = !historyFilter.year   || String(d.year) === String(historyFilter.year);
+              return matchSeason && matchYear;
+            });
+
+            const allAllocs = filteredDelivs.flatMap(d =>
+              (d.allocations && d.allocations.length > 0)
+                ? d.allocations.map(a => ({
+                    ...a,
+                    seed_type_name:  d.seed_type_name,
+                    variety_name:    d.variety_name,
+                    season:          d.season,
+                    season_display:  d.season_display,
+                    year:            d.year,
+                    total_bags:      d.total_bags,
+                    delivery_status: d.status,
+                  }))
+                : [{
+                    id:              null,
+                    barangay:        null,
+                    allocated_bags:  null,
+                    status:          null,
+                    date_allocated:  null,
+                    seed_type_name:  d.seed_type_name,
+                    variety_name:    d.variety_name,
+                    season:          d.season,
+                    season_display:  d.season_display,
+                    year:            d.year,
+                    total_bags:      d.total_bags,
+                    delivery_status: d.status,
+                  }]
             ).filter(a => {
-              const matchSeason = !historyFilter.season || a.season === historyFilter.season;
-              const matchYear = !historyFilter.year || String(a.year) === String(historyFilter.year);
-              const matchSearch = !historySearch || a.barangay?.toLowerCase().includes(historySearch.toLowerCase());
-              return matchSeason && matchYear && matchSearch;
+              if (!historySearch) return true;
+              const q = historySearch.toLowerCase();
+              return (
+                a.barangay?.toLowerCase().includes(q) ||
+                a.seed_type_name?.toLowerCase().includes(q) ||
+                a.variety_name?.toLowerCase().includes(q)
+              );
             });
 
             if (allAllocs.length === 0) {
@@ -1432,36 +1458,78 @@ export default function SeedInventory() {
 
             return (
               <div style={{ backgroundColor: 'white', borderRadius: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '0.5rem', padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', fontSize: '0.68rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>
-                  <span>Barangay</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.8fr 0.7fr 0.7fr 0.6fr', gap: '0.5rem', padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb', fontSize: '0.65rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase' }}>
                   <span>Seed Type / Variety</span>
+                  <span>Barangay</span>
                   <span>Season / Year</span>
-                  <span style={{ textAlign: 'center' }}>Bags</span>
+                  <span style={{ textAlign: 'center' }}>Total Bags</span>
+                  <span style={{ textAlign: 'center' }}>Allocated</span>
                   <span style={{ textAlign: 'center' }}>Status</span>
                 </div>
-                {allAllocs.map((a, idx) => (
-                  <div key={`${a.id || idx}-${a.barangay}`} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '0.5rem', padding: '0.875rem 1.25rem', borderBottom: idx < allAllocs.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center', animation: `slideUp ${0.3 + idx * 0.03}s ease` }} className="row-hover">
-                    <div>
-                      <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>Brgy. {a.barangay}</p>
-                      {a.date_allocated && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{new Date(a.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>}
+                {allAllocs.map((a, idx) => {
+                  const isHybrid = a.seed_type_name?.toUpperCase().includes('HYBRID');
+                  const typeColor  = isHybrid ? '#1e40af' : GREEN.primary;
+                  const typeBg     = isHybrid ? '#eff6ff' : GREEN.light;
+                  const typeBorder = isHybrid ? '#bfdbfe' : GREEN.border;
+                  return (
+                    <div key={`${a.id || 'noalloc'}-${idx}`}
+                      style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 0.8fr 0.7fr 0.7fr 0.6fr', gap: '0.5rem', padding: '0.875rem 1.25rem', borderBottom: idx < allAllocs.length - 1 ? '1px solid #f3f4f6' : 'none', alignItems: 'center' }}
+                      className="row-hover">
+                      <div>
+                        <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.25rem' }}>
+                          <span style={{ backgroundColor: typeBg, color: typeColor, border: `1px solid ${typeBorder}`, borderRadius: '999px', padding: '0.1rem 0.5rem', fontSize: '0.65rem', fontWeight: 700 }}>
+                            {a.seed_type_name}
+                          </span>
+                          {a.delivery_status && (
+                            <StatusBadge status={a.delivery_status} />
+                          )}
+                        </div>
+                        {a.variety_name && (
+                          <p style={{ fontSize: '0.72rem', color: '#374151', margin: 0, fontWeight: 600 }}>{a.variety_name}</p>
+                        )}
+                      </div>
+                      <div>
+                        {a.barangay ? (
+                          <>
+                            <p style={{ fontWeight: 700, fontSize: '0.82rem', color: '#1a1a1a', margin: 0 }}>Brgy. {a.barangay}</p>
+                            {a.date_allocated && (
+                              <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>
+                                {new Date(a.date_allocated + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '0.72rem', color: '#d1d5db', fontStyle: 'italic' }}>No allocation yet</span>
+                        )}
+                      </div>
+                      <div>
+                        <p style={{ fontSize: '0.75rem', color: '#374151', fontWeight: 600, margin: 0 }}>{a.season_display}</p>
+                        <p style={{ fontSize: '0.65rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{a.year}</p>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        <p style={{ fontSize: '1rem', fontWeight: 800, color: '#374151', margin: 0 }}>{a.total_bags ?? '—'}</p>
+                        <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: 0 }}>expected</p>
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        {a.allocated_bags != null ? (
+                          <>
+                            <p style={{ fontSize: '1rem', fontWeight: 800, color: GREEN.primary, margin: 0 }}>{a.allocated_bags}</p>
+                            <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: 0 }}>bags</p>
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '0.72rem', color: '#d1d5db' }}>—</span>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'center' }}>
+                        {a.status ? (
+                          <StatusBadge status={a.status} />
+                        ) : (
+                          <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontStyle: 'italic' }}>Pending</span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <p style={{ fontWeight: 600, fontSize: '0.8rem', color: '#374151', margin: 0 }}>{a.seed_type_name}</p>
-                      {a.variety_name && <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{a.variety_name}</p>}
-                    </div>
-                    <div>
-                      <p style={{ fontSize: '0.78rem', color: '#374151', fontWeight: 600, margin: 0 }}>{a.season_display}</p>
-                      <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.1rem 0 0' }}>{a.year}</p>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <p style={{ fontSize: '1.1rem', fontWeight: 800, color: GREEN.primary, margin: 0 }}>{a.allocated_bags}</p>
-                      <p style={{ fontSize: '0.6rem', color: '#9ca3af', margin: 0 }}>bags</p>
-                    </div>
-                    <div style={{ textAlign: 'center' }}>
-                      <StatusBadge status={a.status} />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })()}

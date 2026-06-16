@@ -466,7 +466,17 @@ class ATMonitoringHistoryView(APIView):
             )
 
         serializer = CropMonitoringRecordSerializer(qs[:200], many=True)
-        return Response({'records': serializer.data, 'total': qs.count()})
+
+        from apps.seed_poll.models import Poll as PollModel
+        available_polls = list(
+            PollModel.objects.order_by('-year', '-created_at')
+            .values('id', 'season', 'year', 'status')
+        )
+        season_map = {'WET': 'Wet Season', 'DRY': 'Dry Season'}
+        for p in available_polls:
+            p['season_display'] = season_map.get(p['season'], p['season'])
+
+        return Response({'records': serializer.data, 'total': qs.count(), 'available_polls': available_polls})
 
 
 class ATFarmerHistoryView(APIView):

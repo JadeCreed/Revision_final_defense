@@ -146,7 +146,16 @@ export default function AdminDashboard() {
   const uniqueSeasons = [...new Set(pollList.map(p => p.season))];
 
   useEffect(() => {
-    if (!yearFilter && !seasonFilter) { setPollId(''); return; }
+    if (!pollList.length) return;
+    if (!yearFilter && !seasonFilter) {
+      const activePoll = pollList.find(p => p.status === 'OPEN') || pollList[0];
+      if (activePoll) {
+        setSeasonFilter(activePoll.season);
+        setYearFilter(String(activePoll.year));
+        setPollId(String(activePoll.id));
+      }
+      return;
+    }
     const match = pollList.find(p =>
       (!yearFilter   || p.year   === parseInt(yearFilter)) &&
       (!seasonFilter || p.season === seasonFilter)
@@ -196,12 +205,10 @@ export default function AdminDashboard() {
         <div className="dash-fade" style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20, flexWrap:'wrap' }}>
           <select value={seasonFilter} onChange={e => setSeasonFilter(e.target.value)}
             style={{ border:'1px solid #d1d5db', borderRadius:10, padding:'7px 14px', fontSize:13, fontWeight:600, background:'#fff', color:'#374151', cursor:'pointer', outline:'none' }}>
-            <option value="">All Seasons</option>
             {uniqueSeasons.map(s => <option key={s} value={s}>{s==='WET'?'Wet Season':'Dry Season'}</option>)}
           </select>
           <select value={yearFilter} onChange={e => setYearFilter(e.target.value)}
             style={{ border:'1px solid #d1d5db', borderRadius:10, padding:'7px 14px', fontSize:13, fontWeight:600, background:'#fff', color:'#374151', cursor:'pointer', outline:'none' }}>
-            <option value="">All Years</option>
             {uniqueYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <div style={{ width:1, height:28, background:'#e2e8f0', margin:'0 4px' }}/>

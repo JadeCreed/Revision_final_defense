@@ -492,6 +492,7 @@ const CropMonitoring = () => {
   const [histSearchTerm,   setHistSearchTerm]   = useState('');
   const [histRecords,      setHistRecords]      = useState([]);
   const [histLoading,      setHistLoading]      = useState(false);
+  const [availablePolls,   setAvailablePolls]   = useState([]);
 
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
@@ -504,14 +505,13 @@ const CropMonitoring = () => {
   }, []);
 
   const loadHistory = useCallback(async (season, year, search) => {
-    if (!season && !year) {
-      setHistRecords([]);
-      return;
-    }
     setHistLoading(true);
     try {
       const res = await getATMonitoringHistory({ season, year, search });
       setHistRecords(res.data?.records || []);
+      if (res.data?.available_polls) {
+        setAvailablePolls(res.data.available_polls);
+      }
     } catch {
       showToast('error', 'Failed to load history.');
       setHistRecords([]);
@@ -525,6 +525,13 @@ const CropMonitoring = () => {
       loadHistory(histSeasonFilter, histYearFilter, histSearchTerm);
     }
   }, [showHistory, histSeasonFilter, histYearFilter, histSearchTerm, loadHistory]);
+
+  useEffect(() => {
+    if (showHistory && availablePolls.length === 0) {
+      loadHistory('', '', '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showHistory]);
 
   // ── LOAD DATA ──
   const loadData = useCallback(async (searchTerm, barangay, mode = 'load') => {
@@ -678,9 +685,8 @@ const CropMonitoring = () => {
   // HISTORY VIEW — UI placeholder
   // ─────────────────────────────────────────
   if (showHistory) {
-    // Sample year options derived from active season year
-    const currentYear = activeSeason?.year || new Date().getFullYear();
-    const yearOptions = [currentYear, currentYear - 1, currentYear - 2];
+    const pollYears = [...new Set(availablePolls.map(p => p.year))].sort((a, b) => b - a);
+    const pollSeasons = [...new Set(availablePolls.map(p => p.season))];
 
     return (
       <div style={{ paddingBottom: '5rem' }}>
@@ -723,8 +729,14 @@ const CropMonitoring = () => {
                   <select value={histSeasonFilter} onChange={e => setHistSeasonFilter(e.target.value)}
                     style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
                     <option value="">All seasons</option>
-                    <option value="WET"> Wet Season</option>
-                    <option value="DRY"> Dry Season</option>
+                    {pollSeasons.length > 0 ? pollSeasons.map(s => (
+                      <option key={s} value={s}>{s === 'WET' ? 'Wet Season' : s === 'DRY' ? 'Dry Season' : s}</option>
+                    )) : (
+                      <>
+                        <option value="WET"> Wet Season</option>
+                        <option value="DRY"> Dry Season</option>
+                      </>
+                    )}
                   </select>
                   <ChevronDown size={14} color="#9ca3af" style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
                 </div>
@@ -739,7 +751,7 @@ const CropMonitoring = () => {
                   <select value={histYearFilter} onChange={e => setHistYearFilter(e.target.value)}
                     style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
                     <option value="">All years</option>
-                    {yearOptions.map(y => (
+                    {pollYears.map(y => (
                       <option key={y} value={y}>{y}</option>
                     ))}
                   </select>
@@ -800,14 +812,6 @@ const CropMonitoring = () => {
                 <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
                 <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Loading records...</p>
               </div>
-            ) : !histSeasonFilter && !histYearFilter ? (
-              <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', backgroundColor: GREEN.light, border: `2px solid ${GREEN.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-                  <History size={22} color={GREEN.accent} />
-                </div>
-                <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Select a season and year to view records</p>
-                <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Use the filters above to browse monitoring history.</p>
-              </div>
             ) : histRecords.length === 0 ? (
               <div style={{ padding: '4rem 2rem', textAlign: 'center' }}>
                 <History size={28} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
@@ -815,23 +819,93 @@ const CropMonitoring = () => {
                 <p style={{ color: '#9ca3af', fontSize: '0.82rem', margin: 0 }}>Try adjusting your filters.</p>
               </div>
             ) : (
-              histRecords.map((rec, idx) => {
-                const phaseCfg = getPhaseCfg(rec.crop_phase);
-                const seedLabel = rec.seed_source === 'HYBRID' ? 'Hybrid' : rec.seed_source === 'INBRED' ? 'Inbred' : 'Own Seed';
-                return (
-                  <div key={rec.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1.2fr 1fr 0.8fr 0.8fr', gap: 0, padding: '0.75rem 1.25rem', borderBottom: idx < histRecords.length - 1 ? '1px solid #f9fafb' : 'none', alignItems: 'center' }}>
-                    <div>
-                      <p style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: '#111827' }}>{rec.farmer_name || 'Unknown Farmer'}</p>
-                      <p style={{ margin: '0.1rem 0 0', fontSize: '0.68rem', color: '#9ca3af' }}>{rec.barangay || ''}</p>
+              (() => {
+                const grouped = {};
+                histRecords.forEach(rec => {
+                  const key = `${rec.farmer}__${rec.seed_source || 'NONE'}`;
+                  if (!grouped[key]) {
+                    grouped[key] = {
+                      farmer_name: rec.farmer_name,
+                      farmer_id: rec.farmer,
+                      barangay: rec.barangay,
+                      seed_source: rec.seed_source,
+                      records: [],
+                    };
+                  }
+                  grouped[key].records.push(rec);
+                });
+
+                const SEED_LABEL = { HYBRID: 'Hybrid', INBRED: 'Inbred', OWN_SEED: 'Own Seed' };
+                const SEED_COLOR = { HYBRID: '#1e40af', INBRED: GREEN.primary, OWN_SEED: '#b45309' };
+                const SEED_BG = { HYBRID: '#eff6ff', INBRED: GREEN.light, OWN_SEED: '#fefce8' };
+                const SEED_BDR = { HYBRID: '#bfdbfe', INBRED: GREEN.border, OWN_SEED: '#fde68a' };
+
+                return Object.values(grouped).map((group, gIdx, arr) => (
+                  <div key={`${group.farmer_id}-${group.seed_source}`} style={{ borderBottom: gIdx < arr.length - 1 ? '2px solid #f3f4f6' : 'none' }}>
+                    <div style={{ padding: '0.75rem 1.25rem', backgroundColor: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                      <div>
+                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: 800, color: '#111827' }}>{group.farmer_name}</p>
+                        <p style={{ margin: '0.1rem 0 0', fontSize: '0.68rem', color: '#9ca3af' }}>{group.barangay}</p>
+                      </div>
+                      <span style={{
+                        backgroundColor: SEED_BG[group.seed_source] || '#f3f4f6',
+                        color: SEED_COLOR[group.seed_source] || '#374151',
+                        border: `1px solid ${SEED_BDR[group.seed_source] || '#e5e7eb'}`,
+                        borderRadius: '999px', padding: '0.15rem 0.625rem',
+                        fontSize: '0.68rem', fontWeight: 700,
+                      }}>
+                        {SEED_LABEL[group.seed_source] || group.seed_source || 'Unknown'}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', color: '#9ca3af', marginLeft: 'auto' }}>
+                        {group.records.length} observation{group.records.length !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                    <span style={{ fontSize: '0.75rem', color: '#374151', fontWeight: 600 }}>{seedLabel}</span>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: phaseCfg.color, backgroundColor: phaseCfg.bg, padding: '0.15rem 0.5rem', borderRadius: '999px', border: `1px solid ${phaseCfg.border}`, display: 'inline-block' }}>{phaseCfg.label}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>{rec.date_observed ? new Date(rec.date_observed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
-                    <span style={{ fontSize: '0.72rem', color: '#374151' }}>{rec.area_monitored_ha ? `${rec.area_monitored_ha} ha` : '—'}</span>
-                    <span style={{ fontSize: '0.7rem', fontWeight: 700, color: rec.phase_status === 'NORMAL' ? '#16a34a' : rec.phase_status === 'DELAYED' ? '#ca8a04' : '#dc2626' }}>{rec.phase_status || '—'}</span>
+                    {group.records.map((rec, rIdx) => {
+                      const phaseCfg = getPhaseCfg(rec.crop_phase);
+                      return (
+                        <div key={rec.id} style={{
+                          display: 'grid',
+                          gridTemplateColumns: '1.5fr 1fr 0.8fr 0.8fr',
+                          gap: 0,
+                          padding: '0.625rem 1.25rem 0.625rem 2.5rem',
+                          borderBottom: rIdx < group.records.length - 1 ? '1px solid #f9fafb' : 'none',
+                          alignItems: 'center',
+                          backgroundColor: 'white',
+                        }}>
+                          <span style={{
+                            fontSize: '0.72rem', fontWeight: 700,
+                            color: phaseCfg.color,
+                            backgroundColor: phaseCfg.bg,
+                            padding: '0.15rem 0.5rem',
+                            borderRadius: '999px',
+                            border: `1px solid ${phaseCfg.border}`,
+                            display: 'inline-block',
+                            width: 'fit-content',
+                          }}>
+                            {phaseCfg.label}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                            {rec.date_observed
+                              ? new Date(rec.date_observed + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
+                              : '—'}
+                          </span>
+                          <span style={{ fontSize: '0.72rem', color: '#374151' }}>
+                            {rec.area_monitored_ha ? `${rec.area_monitored_ha} ha` : '—'}
+                          </span>
+                          <span style={{
+                            fontSize: '0.68rem', fontWeight: 700,
+                            color: rec.phase_status === 'NORMAL' ? '#16a34a'
+                              : rec.phase_status === 'DELAYED' ? '#ca8a04'
+                              : '#dc2626',
+                          }}>
+                            {rec.phase_status || '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })
+                ));
+              })()
             )}
           </div>
         </div>

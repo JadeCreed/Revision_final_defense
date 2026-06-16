@@ -45,10 +45,8 @@ def get_active_poll(poll_id=None):
 
 
 def dry_weight_kg(record):
-    bags   = float(record.harvest_bags or 0)
-    raw_kg = bags * 50
-    moisture = float(getattr(record, 'moisture_content_pct', 12) or 12)
-    return raw_kg * (1 - moisture / 100)
+    """Simple: 1 bag = 50 kg. No moisture adjustment. Consistent with production/views.py."""
+    return float(record.harvest_bags or 0) * 50
 
 
 def utilization_pct(record):
@@ -136,8 +134,13 @@ class AdminDashboardAnalyticsView(APIView):
         all_farmer_ids  = monitored_ids | distributed_ids
         total_farmers   = len(all_farmer_ids)
 
-        total_area        = float(dist_qs.aggregate(s=Sum('farm_area_ha'))['s'] or 0)
-        barangays_covered = dist_qs.values('farmer__barangay').distinct().count()
+        # Area Covered = harvest records (consistent with Production menu)
+        total_area        = sum(float(r.harvest_area_ha or 0) for r in harvest_list)
+        barangays_covered = len(set(
+            getattr(r.farmer, 'barangay', None) or r.barangay
+            for r in harvest_list
+            if (getattr(r.farmer, 'barangay', None) or r.barangay)
+        ))
 
         # ── KPI — production ──────────────────────────────────
         total_dry_kg = sum(dry_weight_kg(r) for r in harvest_list)

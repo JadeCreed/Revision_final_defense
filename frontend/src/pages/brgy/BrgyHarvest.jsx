@@ -942,14 +942,16 @@ const HarvestRow = ({ rec, idx, total, onEdit, onDelete }) => {
 
 // ─── HISTORY VIEW ──────────────────────────────────────────────
 const HarvestHistory = ({ onBack, pushToast }) => {
-  const [polls,        setPolls]        = useState([]);
-  const [selectedPoll, setSelectedPoll] = useState('');
-  const [records,      setRecords]      = useState([]);
-  const [pollInfo,     setPollInfo]     = useState(null);
-  const [loading,      setLoading]      = useState(true);
-  const [histLoading,  setHistLoading]  = useState(false);
-  const [search,       setSearch]       = useState('');
-  const [filterSeed,   setFilterSeed]   = useState('');
+  const [polls,           setPolls]           = useState([]);
+  const [selectedPoll,    setSelectedPoll]    = useState('');
+  const [seasonFilter,    setSeasonFilter]    = useState('');
+  const [seasonYearFilter, setSeasonYearFilter] = useState('');
+  const [records,         setRecords]         = useState([]);
+  const [pollInfo,        setPollInfo]        = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [histLoading,     setHistLoading]     = useState(false);
+  const [search,          setSearch]          = useState('');
+  const [filterSeed,      setFilterSeed]      = useState('');
 
   // Load polls list on mount
   useEffect(() => {
@@ -973,8 +975,8 @@ const HarvestHistory = ({ onBack, pushToast }) => {
       setHistLoading(true);
       try {
         const params = { poll_id: selectedPoll };
-        if (search)     params.search      = search;
-        if (filterSeed) params.seed_source = filterSeed;
+        if (search)      params.search      = search;
+        if (filterSeed)  params.seed_source = filterSeed;
         const res = await API.get('/production/harvest-history/', { params });
         setRecords(res.data.records || []);
         setPollInfo(res.data.poll_info || null);
@@ -1017,20 +1019,60 @@ const HarvestHistory = ({ onBack, pushToast }) => {
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
 
-            {/* Season/Poll dropdown */}
-            <div style={{ flex: '2 1 200px', minWidth: 200 }}>
+            {/* Season pills */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '0.25rem' }}>
+                Season:
+              </span>
+              {['', 'WET', 'DRY'].map(s => {
+                const isActive = seasonFilter === s;
+                return (
+                  <button key={s} type='button'
+                    onClick={() => {
+                      setSeasonFilter(s);
+                      if (!s) {
+                        setSelectedPoll('');
+                      } else if (seasonYearFilter) {
+                        const found = polls.find(p => p.season === s && String(p.year) === String(seasonYearFilter));
+                        setSelectedPoll(found ? String(found.id) : '');
+                      }
+                    }}
+                    style={{
+                      padding: '0.35rem 0.875rem',
+                      border: `1.5px solid ${isActive ? (s === 'WET' ? '#0369a1' : s === 'DRY' ? '#b45309' : GREEN.primary) : '#e5e7eb'}`,
+                      borderRadius: '999px',
+                      backgroundColor: isActive ? (s === 'WET' ? '#e0f2fe' : s === 'DRY' ? '#fef3c7' : GREEN.light) : 'white',
+                      color: isActive ? (s === 'WET' ? '#0369a1' : s === 'DRY' ? '#b45309' : GREEN.primary) : '#6b7280',
+                      fontWeight: isActive ? 700 : 400,
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                    }}>
+                    {s === '' ? 'All' : s === 'WET' ? 'Wet Season' : 'Dry Season'}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Year dropdown */}
+            <div style={{ flex: '1 1 140px', minWidth: 140 }}>
               <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.375rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Season
+                Year
               </label>
               <div style={{ position: 'relative' }}>
-                <select value={selectedPoll} onChange={e => setSelectedPoll(e.target.value)}
+                <select value={seasonYearFilter} onChange={e => {
+                    setSeasonYearFilter(e.target.value);
+                    if (e.target.value && seasonFilter) {
+                      const found = polls.find(p => p.season === seasonFilter && String(p.year) === String(e.target.value));
+                      setSelectedPoll(found ? String(found.id) : '');
+                    } else if (!e.target.value && !seasonFilter) {
+                      setSelectedPoll('');
+                    }
+                  }}
                   disabled={loading}
                   style={{ width: '100%', padding: '0.625rem 2rem 0.625rem 0.875rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.85rem', color: '#111827', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' }}>
-                  <option value=''>Select season...</option>
-                  {polls.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.season_display} {p.year}{p.is_active ? ' (Active)' : ''}
-                    </option>
+                  <option value=''>All years</option>
+                  {[...new Set(polls.map(p => p.year))].sort((a, b) => b - a).map(y => (
+                    <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
                 <ChevronDown size={14} color='#9ca3af' style={{ position: 'absolute', right: '0.625rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
@@ -1068,8 +1110,8 @@ const HarvestHistory = ({ onBack, pushToast }) => {
             </div>
 
             {/* Clear */}
-            {(selectedPoll || filterSeed || search) && (
-              <button onClick={() => { setSelectedPoll(''); setFilterSeed(''); setSearch(''); }}
+            {(selectedPoll || seasonFilter || seasonYearFilter || filterSeed || search) && (
+              <button onClick={() => { setSelectedPoll(''); setSeasonFilter(''); setSeasonYearFilter(''); setFilterSeed(''); setSearch(''); }}
                 style={{ padding: '0.625rem 1rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', backgroundColor: 'white', color: '#6b7280', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.35rem', whiteSpace: 'nowrap' }}>
                 <X size={13} /> Clear
               </button>
