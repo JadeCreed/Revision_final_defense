@@ -1,4 +1,5 @@
 from django.urls import path
+from .views_dashboard import ATDashboardStatsView, BRGYDashboardStatsView, FarmerDashboardStatsView
 from .views import (
     ATProfileView,
     ATProfileUpdateView,
@@ -98,4 +99,10 @@ urlpatterns = [
     path('profile/bp/', BPProfileView.as_view(), name='bp-profile'),
     path('farmer/deactivate/', FarmerDeactivateView.as_view(), name='farmer-deactivate'),
     path('admin/deactivate-user/<int:user_id>/', AdminDeactivateView.as_view(), name='admin-deactivate-user'),
+
+
+    # ── DASHBOARD STATS ENDPOINTS (for charts and summary cards) ──
+    path('at/dashboard-stats/', ATDashboardStatsView.as_view(), name='at-dashboard-stats'),
+    path('brgy/dashboard-stats/', BRGYDashboardStatsView.as_view(), name='brgy-dashboard-stats'),
+    path('farmer/dashboard-stats/', FarmerDashboardStatsView.as_view(), name='farmer-dashboard-stats'),
 ]

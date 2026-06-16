@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { CheckCircle, Clock, XCircle, AlertCircle, ChevronRight, Users } from 'lucide-react';
-import API, { getAnnouncements, getFinalSeeds } from '../../api/axios';
+import { CheckCircle, Clock, XCircle, AlertCircle, ChevronRight, Users, Activity, MapPin, BarChart2, Sprout, Ruler, Wheat, Bell } from 'lucide-react';
+import API, { getAnnouncements, getFinalSeeds, getFarmerDashboardStats } from '../../api/axios';
 import AnnouncementCard from '../../components/announcements/AnnouncementCard';
 
 const getGreeting = () => {
@@ -237,6 +237,24 @@ const FarmerDashboard = () => {
     }, 300);
   };
 
+  // ── Dashboard stats (Farmer) ──
+  const [dashStats, setDashStats] = useState({
+    seed_display: 'Pending',
+    selected_seeds: [],
+    total_hectares: 0,
+    monitoring_records: 0,
+    unread_count: 0,
+    crop_status: [],
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    getFarmerDashboardStats()
+      .then(res => setDashStats(res.data || {}))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
+  }, []);
+
   // ── Notification queue logic ──
   // Status notif first (PENDING/COMPLETE/APPROVED), then seed notif
   const showStatusNotif = !profileLoading && !statusDismissed && status && status !== 'REJECTED';
@@ -388,15 +406,127 @@ const FarmerDashboard = () => {
         </div>
       )}
 
-      {/* ── 4 ANALYTICS TILES ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.375rem' }}>
-        {[1, 2, 3, 4].map(i => (
-          <div key={i} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ width: 36, height: 36, backgroundColor: '#f3f4f6', borderRadius: '0.75rem', marginBottom: '0.625rem' }} />
-            <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d1d5db', margin: 0, lineHeight: 1 }}>—</p>
-            <p style={{ fontSize: '0.72rem', color: '#d1d5db', margin: '0.25rem 0 0', fontWeight: 600 }}>Coming soon</p>
+      {/* ── 4 ANALYTICS TILES + CROP MONITORING STATUS CARD ── */}
+      <div style={{ marginBottom: '1.375rem' }}>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '0.75rem' }}>
+
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 36, height: 36, backgroundColor: '#dcfce7', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+              <Sprout size={18} color="#166534" />
+            </div>
+            {statsLoading
+              ? <div style={{ height: 20, width: 64, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+              : <p style={{ fontSize: dashStats.seed_display === 'Pending' ? '0.85rem' : '1rem', fontWeight: 800, color: dashStats.seed_display === 'Pending' ? '#d1d5db' : '#1a1a1a', margin: 0, lineHeight: 1.2 }}>
+                  {dashStats.seed_display}
+                </p>
+            }
+            <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Selected Seed</p>
           </div>
-        ))}
+
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 36, height: 36, backgroundColor: '#fef9c3', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+              <Ruler size={18} color="#854d0e" />
+            </div>
+            {statsLoading
+              ? <div style={{ height: 28, width: 56, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+              : <>
+                  <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                    {dashStats.total_hectares > 0 ? dashStats.total_hectares.toFixed(2) : '—'}
+                  </p>
+                  {dashStats.total_hectares > 0 && (
+                    <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0.1rem 0 0', fontWeight: 500 }}>hectares</p>
+                  )}
+                </>
+            }
+            <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Total Farm Area</p>
+          </div>
+
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 36, height: 36, backgroundColor: '#eff6ff', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+              <Wheat size={18} color="#1e40af" />
+            </div>
+            {statsLoading
+              ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+              : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                  {dashStats.monitoring_records ?? 0}
+                </p>
+            }
+            <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Monitoring Records</p>
+          </div>
+
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+            <div style={{ width: 36, height: 36, backgroundColor: dashStats.unread_count > 0 ? '#fef3c7' : '#f3f4f6', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+              <Bell size={18} color={dashStats.unread_count > 0 ? '#d97706' : '#9ca3af'} />
+            </div>
+            {statsLoading
+              ? <div style={{ height: 28, width: 40, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+              : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: dashStats.unread_count > 0 ? '#d97706' : '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                  {dashStats.unread_count ?? 0}
+                </p>
+            }
+            <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Unread</p>
+          </div>
+
+        </div>
+
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <p style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', margin: '0 0 0.75rem' }}>
+            Crop Monitoring Status
+          </p>
+          {statsLoading ? (
+            <div>
+              {[1, 2].map(i => (
+                <div key={i} style={{ height: 48, backgroundColor: '#f3f4f6', borderRadius: 8, marginBottom: 8 }} />
+              ))}
+            </div>
+          ) : dashStats.crop_status.length === 0 ? (
+            <p style={{ fontSize: '0.78rem', color: '#9ca3af', margin: 0, textAlign: 'center', padding: '0.75rem 0' }}>
+              No monitoring records yet this season.
+            </p>
+          ) : (
+            dashStats.crop_status.map((item) => {
+              const phaseColors = {
+                ESTABLISHMENT: { bg: '#dbeafe', text: '#1e40af' },
+                TILLERING:     { bg: '#dcfce7', text: '#166534' },
+                FLOWERING:     { bg: '#f3e8ff', text: '#7e22ce' },
+                RIPENING:      { bg: '#fef9c3', text: '#854d0e' },
+                HARVESTING:    { bg: '#ffedd5', text: '#c2410c' },
+              };
+              const colors = phaseColors[item.phase] || { bg: '#f3f4f6', text: '#6b7280' };
+              return (
+                <div key={item.seed_source} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '0.6rem 0.75rem', borderRadius: '0.75rem',
+                  backgroundColor: item.phase ? colors.bg + '60' : '#f9fafb',
+                  border: `1px solid ${item.phase ? colors.bg : '#f3f4f6'}`,
+                  marginBottom: '0.5rem',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{
+                      fontSize: '0.72rem', fontWeight: 700,
+                      backgroundColor: item.phase ? colors.bg : '#e5e7eb',
+                      color: item.phase ? colors.text : '#9ca3af',
+                      padding: '0.15rem 0.5rem', borderRadius: '999px',
+                    }}>
+                      {item.seed_label}
+                    </span>
+                    {item.phase
+                      ? <span style={{ fontSize: '0.78rem', fontWeight: 600, color: colors.text }}>✔ {item.phase_display}</span>
+                      : <span style={{ fontSize: '0.78rem', color: '#9ca3af' }}>No monitoring yet</span>
+                    }
+                  </div>
+                  {item.date_observed && (
+                    <span style={{ fontSize: '0.68rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>
+                      {item.date_observed}
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
       </div>
 
       {/* ── UPDATES & REMINDERS ── */}

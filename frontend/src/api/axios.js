@@ -162,7 +162,7 @@ export const saveSignature    = (id, data)      => API.post(`/distribution/entri
 
 // Crop monitoring
 export const getATFarmers         = (params) => API.get('/crop-monitoring/at/farmers/', { params });
-export const getATDashboardStats  = ()       => API.get('/crop-monitoring/at/stats/');
+export const getATDashboardStats  = ()       => API.get('/accounts/at/dashboard-stats/');
 export const createCropRecord     = (data)   => API.post('/crop-monitoring/records/', data);
 export const updateCropRecord     = (id, data) => API.put(`/crop-monitoring/records/${id}/`, data);
 export const getFarmerCropHistory = (farmerId, params = {}) => API.get(`/crop-monitoring/farmers/${farmerId}/history/`, { params });
@@ -252,5 +252,15 @@ export const getProductionLowPerformers = (threshold = 100) =>
   API.get(`/production/low-performers/?threshold=${threshold}`);
 export const getProductionGISSummary    = ()            => API.get('/production/gis-summary/');
 export const getSeedProductivity        = (params = {}) => API.get('/production/seed-productivity/', { params });
+
+
+// 4 tiles for AT/BRGY/Farmer dashboards
+
+
+export const getBRGYDashboardStats = () =>
+  API.get('/accounts/brgy/dashboard-stats/');
+
+export const getFarmerDashboardStats = () =>
+  API.get('/accounts/farmer/dashboard-stats/');
 
 export default API;

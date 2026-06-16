@@ -5,10 +5,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import {
   getAnnouncements, getFinalSeeds, getATFarmers,
-  getBrgyMyAllocation, brgyConfirmAllocation,
+  getBrgyMyAllocation, brgyConfirmAllocation, getBRGYDashboardStats,
 } from '../../api/axios';
 import AnnouncementCard from '../../components/announcements/AnnouncementCard';
-import { Users, ChevronRight, ClipboardList, Bell, Package, CheckCircle, Calendar } from 'lucide-react';
+import { Users, ChevronRight, ClipboardList, Bell, Package, CheckCircle, Calendar, Activity, MapPin, BarChart2, Truck, Wheat } from 'lucide-react';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -210,6 +210,22 @@ const BPDashboard = () => {
 
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  // ── Dashboard stats (BRGY) ──
+  const [dashStats, setDashStats] = useState({
+    total_farmers: null,
+    beneficiaries: null,
+    distributed_kg: null,
+    harvest_submitted: null,
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    getBRGYDashboardStats()
+      .then(res => setDashStats(res.data || {}))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
   }, []);
 
   // ── Existing handler (HINDI BINAGO) ──
@@ -500,30 +516,56 @@ const BPDashboard = () => {
         })
       }
 
-      {/* ── Tiles (HINDI BINAGO) ── */}
+      {/* ── 4 ANALYTICS TILES ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.375rem' }}>
+
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ width: 36, height: 36, backgroundColor: '#dcfce7', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
             <Users size={18} color="#166534" />
           </div>
-          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>{totalFarmers !== null ? totalFarmers : '—'}</p>
-          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Total Farmers</p>
+          {statsLoading
+            ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>{dashStats.total_farmers ?? '—'}</p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Registered Farmers</p>
         </div>
+
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 36, height: 36, backgroundColor: '#f3f4f6', borderRadius: '0.75rem', marginBottom: '0.625rem' }} />
-          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d1d5db', margin: 0, lineHeight: 1 }}>—</p>
-          <p style={{ fontSize: '0.72rem', color: '#d1d5db', margin: '0.25rem 0 0', fontWeight: 600 }}>Coming soon</p>
+          <div style={{ width: 36, height: 36, backgroundColor: '#eff6ff', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <ClipboardList size={18} color="#1e40af" />
+          </div>
+          {statsLoading
+            ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>{dashStats.beneficiaries ?? '—'}</p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Beneficiaries</p>
         </div>
+
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 36, height: 36, backgroundColor: '#f3f4f6', borderRadius: '0.75rem', marginBottom: '0.625rem' }} />
-          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d1d5db', margin: 0, lineHeight: 1 }}>—</p>
-          <p style={{ fontSize: '0.72rem', color: '#d1d5db', margin: '0.25rem 0 0', fontWeight: 600 }}>Coming soon</p>
+          <div style={{ width: 36, height: 36, backgroundColor: '#fef9c3', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <Truck size={18} color="#854d0e" />
+          </div>
+          {statsLoading
+            ? <div style={{ height: 28, width: 64, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <>
+                <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>{(dashStats.distributed_kg ?? 0).toLocaleString()}</p>
+                <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0.1rem 0 0', fontWeight: 500 }}>kilograms</p>
+              </>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.2rem 0 0', fontWeight: 600 }}>Distributed</p>
         </div>
+
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-          <div style={{ width: 36, height: 36, backgroundColor: '#f3f4f6', borderRadius: '0.75rem', marginBottom: '0.625rem' }} />
-          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d1d5db', margin: 0, lineHeight: 1 }}>—</p>
-          <p style={{ fontSize: '0.72rem', color: '#d1d5db', margin: '0.25rem 0 0', fontWeight: 600 }}>Coming soon</p>
+          <div style={{ width: 36, height: 36, backgroundColor: '#fdf4ff', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <Wheat size={18} color="#7e22ce" />
+          </div>
+          {statsLoading
+            ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>{dashStats.harvest_submitted ?? '—'}</p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Harvest Records</p>
         </div>
+
       </div>
 
       {/* ── Announcements (HINDI BINAGO) ── */}

@@ -3,9 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { getAnnouncements, getFinalSeeds, getATFarmers } from '../../api/axios';
+import { getAnnouncements, getFinalSeeds, getATFarmers, getATDashboardStats } from '../../api/axios';
 import AnnouncementCard from '../../components/announcements/AnnouncementCard';
-import { Users, ChevronRight, CheckCircle } from 'lucide-react';
+import { Users, ChevronRight, CheckCircle, Activity, MapPin, BarChart2 } from 'lucide-react';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -91,6 +91,22 @@ const ATDashboard = () => {
         else setTotalFarmers(null);
       })
       .catch(() => setTotalFarmers(null));
+  }, []);
+
+  // ── Dashboard stats (AT) ──
+  const [dashStats, setDashStats] = useState({
+    total_farmers: null,
+    monitored_farmers: null,
+    last_monitoring: null,
+    coverage_pct: null,
+  });
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    getATDashboardStats()
+      .then(res => setDashStats(res.data || {}))
+      .catch(() => {})
+      .finally(() => setStatsLoading(false));
   }, []);
 
   // ── Check masterlist notification from localStorage ──
@@ -278,24 +294,94 @@ const ATDashboard = () => {
       )}
 
       {/* ── 4 ANALYTICS TILES ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.375rem' }}>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '0.75rem',
+        marginBottom: '1.375rem',
+      }}>
+
+        {/* Tile 1 — Total Assigned Farmers */}
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ width: 36, height: 36, backgroundColor: '#dcfce7', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
             <Users size={18} color="#166534" />
           </div>
-          <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
-            {totalFarmers !== null ? totalFarmers : '—'}
+          {statsLoading
+            ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                {dashStats.total_farmers ?? '—'}
+              </p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>
+            Assigned Farmers
           </p>
-          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Total Farmers</p>
         </div>
 
-        {[2, 3, 4].map(i => (
-          <div key={i} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-            <div style={{ width: 36, height: 36, backgroundColor: '#f3f4f6', borderRadius: '0.75rem', marginBottom: '0.625rem' }} />
-            <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d1d5db', margin: 0, lineHeight: 1 }}>—</p>
-            <p style={{ fontSize: '0.72rem', color: '#d1d5db', margin: '0.25rem 0 0', fontWeight: 600 }}>Coming soon</p>
+        {/* Tile 2 — Monitoring Records (distinct farmers monitored) */}
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: 36, height: 36, backgroundColor: '#eff6ff', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <Activity size={18} color="#1e40af" />
           </div>
-        ))}
+          {statsLoading
+            ? <div style={{ height: 28, width: 48, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                {dashStats.monitored_farmers ?? '—'}
+              </p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>
+            Farmers Monitored
+          </p>
+        </div>
+
+        {/* Tile 3 — Latest Monitoring (date + barangay) */}
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: 36, height: 36, backgroundColor: '#fef9c3', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <MapPin size={18} color="#854d0e" />
+          </div>
+          {statsLoading
+            ? <>
+                <div style={{ height: 16, width: 80, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+                <div style={{ height: 12, width: 60, backgroundColor: '#f3f4f6', borderRadius: 6 }} />
+              </>
+            : dashStats.last_monitoring
+              ? <>
+                  <p style={{ fontSize: '0.82rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1.3 }}>
+                    {dashStats.last_monitoring.date}
+                  </p>
+                  <p style={{ fontSize: '0.7rem', color: '#854d0e', margin: '0.2rem 0 0', fontWeight: 700 }}>
+                    Brgy. {dashStats.last_monitoring.barangay}
+                  </p>
+                </>
+              : <p style={{ fontSize: '0.75rem', fontWeight: 600, color: '#d1d5db', margin: 0 }}>
+                  No records yet
+                </p>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>
+            Last Monitoring
+          </p>
+        </div>
+
+        {/* Tile 4 — Coverage Percentage */}
+        <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ width: 36, height: 36, backgroundColor: '#f0fdf4', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
+            <BarChart2 size={18} color="#166534" />
+          </div>
+          {statsLoading
+            ? <div style={{ height: 28, width: 64, backgroundColor: '#f3f4f6', borderRadius: 6, marginBottom: 4 }} />
+            : <>
+                <p style={{ fontSize: '1.4rem', fontWeight: 800, color: '#1a1a1a', margin: 0, lineHeight: 1 }}>
+                  {dashStats.coverage_pct ?? 0}%
+                </p>
+                <p style={{ fontSize: '0.68rem', color: '#6b7280', margin: '0.1rem 0 0', fontWeight: 500 }}>
+                  {dashStats.monitored_farmers ?? 0} / {dashStats.total_farmers ?? 0} farmers
+                </p>
+              </>
+          }
+          <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.2rem 0 0', fontWeight: 600 }}>
+            Coverage
+          </p>
+        </div>
+
       </div>
 
       {/* ── UPDATES & REMINDERS ── */}
