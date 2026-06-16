@@ -1,4 +1,4 @@
-import { Users, Layers, BarChart3, TrendingUp, Target } from 'lucide-react';
+import { Users, Layers, BarChart3, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import { fmtNum, getUtilTier } from './productionUtils';
 
 const Tile = ({ icon: Icon, label, value, sub, color, highlight, border }) => (
@@ -25,6 +25,7 @@ const ProductionTiles = ({ records, computeUtil }) => {
   const allUtils     = records.map(r => computeUtil(r)).filter(v => v !== null);
   const avgUtil      = allUtils.length > 0 ? allUtils.reduce((a, b) => a + b, 0) / allUtils.length : null;
   const tier         = getUtilTier(avgUtil);
+  const belowTarget  = records.filter(r => { const u = computeUtil(r); return u !== null && u < 80; }).length;
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
@@ -33,6 +34,7 @@ const ProductionTiles = ({ records, computeUtil }) => {
       <Tile icon={BarChart3} label='Total Production'    value={`${fmtNum(totalMT)} MT`}                               sub='Combined harvest output'         color='#2563eb' />
       <Tile icon={TrendingUp} label='Average Yield'      value={`${fmtNum(avgYield)} t/ha`}                            sub='Average yield per hectare'       color='#7c3aed' />
       <Tile icon={Target}    label='Achievement Rate'    value={avgUtil !== null ? `${fmtNum(avgUtil, 1)}%` : '—'}      sub={tier.key}                        color={tier.color} highlight />
+      <Tile icon={AlertTriangle} label='Below Target'   value={belowTarget}                                            sub='Below 80% achievement'           color='#b45309' />
     </div>
   );
 };

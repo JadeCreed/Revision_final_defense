@@ -533,9 +533,20 @@ class FarmerHarvestContextView(APIView):
         if not barangay:
             return Response({}, status=200)
 
+        # Poll-scoped — current season lang para hindi mag-bleed
+        # ang past season distribution data sa harvest context
+        active_poll = get_encoding_poll()
+        if not active_poll:
+            active_poll = get_current_poll()
+
+        entries_filter = dict(batch__status='APPROVED', farmer__barangay=barangay)
+        if active_poll:
+            entries_filter['batch__event__season'] = active_poll.season
+            entries_filter['batch__event__year'] = active_poll.year
+
         entries = (
             DistributionEntry.objects
-            .filter(batch__status='APPROVED', farmer__barangay=barangay)
+            .filter(**entries_filter)
             .select_related('farmer', 'batch__event__seed_type')
             .order_by('-encoded_at')
         )

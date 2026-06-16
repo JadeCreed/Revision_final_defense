@@ -23,8 +23,8 @@ const SEED_CFG = {
   OWN_SEED: { label: 'Own Seed',     color: '#92400e', light: '#fef3c7', border: '#fde047' },
 };
 const SEED_PHASES = {
-  HYBRID:   ['DISTRIBUTION','ESTABLISHMENT','TILLERING','FLOWERING','RIPENING','HARVESTING'],
-  INBRED:   ['DISTRIBUTION','ESTABLISHMENT','TILLERING','FLOWERING','RIPENING','HARVESTING'],
+  HYBRID:   ['ESTABLISHMENT','TILLERING','FLOWERING','RIPENING','HARVESTING'],
+  INBRED:   ['ESTABLISHMENT','TILLERING','FLOWERING','RIPENING','HARVESTING'],
   OWN_SEED: ['ESTABLISHMENT','TILLERING','FLOWERING','RIPENING','HARVESTING'],
 };
 const ENCODED_BY = {
@@ -61,7 +61,7 @@ const GanttRow = ({ phase, entry, monthCols, distEntry }) => {
 
   // Use distEntry for DISTRIBUTION if no entry
   const activeEntry = (phase === 'DISTRIBUTION' && !entry) ? distEntry : entry;
-  const pct         = activeEntry?.completion_pct ?? null;
+  const pct         = activeEntry?.done_pct ?? null;
   const isDelayed   = activeEntry?.all_delayed;
   const stdStart    = activeEntry?.std_start;
   const stdEnd      = activeEntry?.std_end;
@@ -258,14 +258,6 @@ const GanttChart = ({ ganttData, distDates, season, year, stdDays, ganttAlert, t
               {cfg.label}
             </button>
           ))}
-        </div>
-        <div style={{ display: 'flex', gap: 16, paddingBottom: 10 }}>
-          <span style={{ fontSize: 12, color: '#64748b' }}>
-            <strong style={{ color: '#0f172a', marginRight: 3 }}>{totalFarmers}</strong>encodings
-          </span>
-          <span style={{ fontSize: 12, color: '#64748b' }}>
-            <strong style={{ color: '#0f172a', marginRight: 3 }}>{activePhases}/{phases.length}</strong>phases active
-          </span>
         </div>
       </div>
 

@@ -1,11 +1,9 @@
 import datetime
 from collections import Counter, defaultdict
-from decimal import Decimal
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-
 from django.db.models import Sum, Count, Q
 
 from apps.accounts.permissions import IsAdminUserRole
@@ -13,14 +11,8 @@ from apps.crop_monitoring.models import CropMonitoringRecord
 from apps.production.models import HarvestRecord
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import Poll
-from apps.accounts.models import User
 
-# ── Constants ────────────────────────────────────────────────────────────────
-
-PHASE_ORDER = [
-    'DISTRIBUTION', 'ESTABLISHMENT', 'TILLERING',
-    'FLOWERING', 'RIPENING', 'HARVESTING',
-]
+PHASE_ORDER = ['DISTRIBUTION', 'ESTABLISHMENT', 'TILLERING', 'FLOWERING', 'RIPENING', 'HARVESTING']
 PHASE_DISPLAY = {
     'DISTRIBUTION':  'Seed Distribution',
     'ESTABLISHMENT': 'Crop Establishment',
@@ -38,13 +30,9 @@ SEED_LABELS = {
 try:
     from django.conf import settings
     STANDARD_YIELDS = settings.STANDARD_YIELDS
-    SEEDING_DENSITY = settings.SEEDING_DENSITY
 except Exception:
     STANDARD_YIELDS = {'HYBRID': 5000, 'INBRED': 3500, 'OWN_SEED': 2000}
-    SEEDING_DENSITY = {'HYBRID': 15,   'INBRED': 20,   'OWN_SEED': 80}
 
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def get_active_poll(poll_id=None):
     if poll_id:
@@ -52,17 +40,13 @@ def get_active_poll(poll_id=None):
             return Poll.objects.get(id=poll_id)
         except Poll.DoesNotExist:
             pass
-    return (
-        Poll.objects.filter(status='OPEN').order_by('-created_at').first()
-        or Poll.objects.order_by('-created_at').first()
-    )
+    from apps.seed_poll.utils import get_current_poll
+    return get_current_poll()
 
 
 def dry_weight_kg(record):
-    bags    = float(record.harvest_bags or 0)
-    raw_kg  = bags * 50
-    if getattr(record, 'weight_type', 'FRESH') == 'DRIED':
-        return raw_kg
+    bags   = float(record.harvest_bags or 0)
+    raw_kg = bags * 50
     moisture = float(getattr(record, 'moisture_content_pct', 12) or 12)
     return raw_kg * (1 - moisture / 100)
 
@@ -80,14 +64,10 @@ def utilization_pct(record):
 def get_tier_label(pct):
     if pct is None:
         return 'N/A'
-    if pct > 100:
-        return 'Exceeded Target'
-    if pct >= 80:
-        return 'Achieved Target'
-    if pct >= 70:
-        return 'Near Target'
-    if pct >= 50:
-        return 'Below Target'
+    if pct > 100: return 'Exceeded Target'
+    if pct >= 80:  return 'Achieved Target'
+    if pct >= 70:  return 'Near Target'
+    if pct >= 50:  return 'Below Target'
     return 'Critical'
 
 
@@ -100,24 +80,7 @@ def get_latest_per_farmer(qs):
     return seen
 
 
-def filter_harvest_by_poll(qs, poll, distributed_farmer_ids=None):
-    """Poll-direct filter. Mas accurate kaysa date-range."""
-    if not poll:
-        return qs
-    qs = qs.filter(poll=poll)
-    if distributed_farmer_ids is not None:
-        qs = qs.filter(farmer_id__in=distributed_farmer_ids)
-    return qs
-
-
-# ── Main View ─────────────────────────────────────────────────────────────────
-
 class AdminDashboardAnalyticsView(APIView):
-    """
-    GET /api/analytics/dashboard/?poll_id=&seed_type=
-    Single endpoint for Admin Dashboard analytics.
-    Pulls from crop_monitoring + production apps.
-    """
     permission_classes = [IsAuthenticated, IsAdminUserRole]
 
     def get(self, request):
@@ -128,24 +91,38 @@ class AdminDashboardAnalyticsView(APIView):
         season = poll.season if poll else 'WET'
         yr     = poll.year   if poll else datetime.date.today().year
 
-        # ── Base querysets ────────────────────────────────────
+        # ── Monitoring queryset (latest per farmer) ───────────
         monitoring_qs = CropMonitoringRecord.objects.select_related('farmer').all()
         if poll:
             monitoring_qs = monitoring_qs.filter(poll=poll)
         if seed_filter and seed_filter in SEED_LABELS:
             monitoring_qs = monitoring_qs.filter(seed_source=seed_filter)
 
-        harvest_qs = HarvestRecord.objects.select_related('farmer').all()
-        harvest_qs = filter_harvest_by_poll(harvest_qs, poll)
-        if seed_filter and seed_filter in SEED_LABELS:
-            harvest_qs = harvest_qs.filter(seed_source=seed_filter)
-
         latest_map     = get_latest_per_farmer(monitoring_qs)
         latest_records = list(latest_map.values())
-        harvest_list   = list(harvest_qs)
 
-        # ── SECTION 1: KPI Cards ──────────────────────────────
-        dist_qs = DistributionEntry.objects.filter(batch__status='APPROVED', date_received__isnull=False)
+        # ── ALL monitoring records (for historical delay analytics) ──
+        # Using ALL records (not latest) so we capture every delay event per phase
+        all_monitoring_qs = CropMonitoringRecord.objects.select_related('farmer').all()
+        if poll:
+            all_monitoring_qs = all_monitoring_qs.filter(poll=poll)
+        if seed_filter and seed_filter in SEED_LABELS:
+            all_monitoring_qs = all_monitoring_qs.filter(seed_source=seed_filter)
+        all_records = list(all_monitoring_qs)
+
+        # ── Harvest queryset ──────────────────────────────────
+        harvest_qs = HarvestRecord.objects.select_related('farmer').all()
+        if poll:
+            harvest_qs = harvest_qs.filter(poll=poll)
+        if seed_filter and seed_filter in SEED_LABELS:
+            harvest_qs = harvest_qs.filter(seed_source=seed_filter)
+        harvest_list = list(harvest_qs)
+
+        # ── Distribution base ─────────────────────────────────
+        dist_qs = DistributionEntry.objects.filter(
+            batch__status='APPROVED',
+            date_received__isnull=False,
+        )
         if poll:
             dist_qs = dist_qs.filter(batch__event__season=poll.season, batch__event__year=poll.year)
         if seed_filter == 'HYBRID':
@@ -153,215 +130,129 @@ class AdminDashboardAnalyticsView(APIView):
         elif seed_filter == 'INBRED':
             dist_qs = dist_qs.filter(batch__event__seed_type__name__icontains='inbred')
 
-        distributed_ids  = set(dist_qs.values_list('farmer_id', flat=True))
-        monitored_ids    = set(r.farmer_id for r in latest_records)
-        all_farmer_ids   = monitored_ids | distributed_ids
-        total_farmers    = len(all_farmer_ids)
+        distributed_ids = set(dist_qs.values_list('farmer_id', flat=True))
+        monitored_ids   = set(r.farmer_id for r in latest_records)
+        harvested_ids   = set(r.farmer_id for r in harvest_list)
+        all_farmer_ids  = monitored_ids | distributed_ids
+        total_farmers   = len(all_farmer_ids)
 
-        total_area = float(
-            dist_qs.aggregate(s=Sum('farm_area_ha'))['s'] or 0
-        )
+        total_area        = float(dist_qs.aggregate(s=Sum('farm_area_ha'))['s'] or 0)
         barangays_covered = dist_qs.values('farmer__barangay').distinct().count()
 
-        # ── Scoped pipeline counts — filtered by current poll only ──
-        pipeline_dist_qs = DistributionEntry.objects.filter(
-            batch__status='APPROVED',
-            date_received__isnull=False,
-        )
-        if poll:
-            pipeline_dist_qs = pipeline_dist_qs.filter(
-                batch__event__season=poll.season,
-                batch__event__year=poll.year,
-            )
-        pipeline_distributed_ids = set(pipeline_dist_qs.values_list('farmer_id', flat=True))
-        pipeline_monitored_ids   = set(r.farmer_id for r in latest_records)
-        pipeline_harvested_ids   = set(r.farmer_id for r in harvest_list)
+        # ── KPI — production ──────────────────────────────────
+        total_dry_kg = sum(dry_weight_kg(r) for r in harvest_list)
+        total_mt     = total_dry_kg / 1000
+        util_values  = [utilization_pct(r) for r in harvest_list]
+        util_values  = [v for v in util_values if v is not None]
+        avg_util     = (sum(util_values) / len(util_values)) if util_values else None
 
-        pipeline_total_dist    = len(pipeline_distributed_ids)
-        pipeline_total_monitor = len(pipeline_monitored_ids)
-        pipeline_total_harvest = len(pipeline_harvested_ids)
+        harvest_completion_pct = round(
+            len(harvested_ids) / total_farmers * 100, 1
+        ) if total_farmers > 0 else 0
 
-        total_dry_kg   = sum(dry_weight_kg(r) for r in harvest_list)
-        total_mt       = total_dry_kg / 1000
-        total_harvest_area = sum(float(r.harvest_area_ha or 0) for r in harvest_list)
-
-        util_values = [utilization_pct(r) for r in harvest_list]
-        util_values = [v for v in util_values if v is not None]
-        avg_util    = (sum(util_values) / len(util_values)) if util_values else None
+        delayed_farmer_ids  = set(r.farmer_id for r in latest_records if r.phase_status == 'DELAYED')
+        damaged_farmer_ids  = set(r.farmer_id for r in latest_records if r.phase_status == 'DAMAGED')
+        critical_farmer_ids = set(r.farmer_id for r in harvest_list if (utilization_pct(r) or 0) < 50)
+        attention_ids       = delayed_farmer_ids | damaged_farmer_ids | critical_farmer_ids
 
         kpi = {
-            'total_farmers':         total_farmers,
-            'area_covered_ha':       round(total_area, 2),
-            'barangays_covered':     barangays_covered,
-            'total_production_mt':   round(total_mt, 2),
-            'avg_utilization_pct':   round(avg_util, 1) if avg_util is not None else None,
-            'utilization_tier':      get_tier_label(avg_util),
-            'total_harvest_records': len(harvest_list),
+            'total_farmers':               total_farmers,
+            'area_covered_ha':             round(total_area, 2),
+            'barangays_covered':           barangays_covered,
+            'total_production_mt':         round(total_mt, 2),
+            'avg_utilization_pct':         round(avg_util, 1) if avg_util is not None else None,
+            'utilization_tier':            get_tier_label(avg_util),
+            'total_harvest_records':       len(harvest_list),
+            'harvest_completion_pct':      harvest_completion_pct,
+            'farmers_requiring_attention': len(attention_ids),
         }
 
-        # ── SECTION 2: Utilization by Barangay ───────────────
-        brgy_harvest_groups = defaultdict(list)
-        for r in harvest_list:
-            brgy = getattr(r.farmer, 'barangay', None) or r.barangay or 'Unknown'
-            brgy_harvest_groups[brgy].append(r)
-
-        utilization_by_barangay = []
-        for brgy, records in sorted(brgy_harvest_groups.items()):
-            u_vals = [utilization_pct(r) for r in records]
-            u_vals = [v for v in u_vals if v is not None]
-            avg_u  = (sum(u_vals) / len(u_vals)) if u_vals else None
-            total_prod = sum(dry_weight_kg(r) for r in records) / 1000
-            utilization_by_barangay.append({
-                'barangay':        brgy,
-                'farmer_count':    len(records),
-                'utilization_pct': round(avg_u, 1) if avg_u is not None else None,
-                'tier':            get_tier_label(avg_u),
-                'production_mt':   round(total_prod, 2),
-            })
-        utilization_by_barangay.sort(key=lambda x: x['utilization_pct'] or 0, reverse=True)
-
-        # ── SECTION 3: Farmers by Seed Type (Donut) ──────────
-        seed_farmer_counts = {}
-        for src in ['HYBRID', 'INBRED', 'OWN_SEED']:
-            if seed_filter and seed_filter != src:
-                seed_farmer_counts[src] = 0
-                continue
-            src_ids = set(r.farmer_id for r in latest_records if r.seed_source == src)
-            # also count from distribution
-            dist_src = dist_qs
-            if src == 'HYBRID':
-                dist_src = DistributionEntry.objects.filter(
-                    batch__status='APPROVED', date_received__isnull=False,
-                    batch__event__seed_type__name__icontains='hybrid'
-                )
-            elif src == 'INBRED':
-                dist_src = DistributionEntry.objects.filter(
-                    batch__status='APPROVED', date_received__isnull=False,
-                    batch__event__seed_type__name__icontains='inbred'
-                )
-            else:
-                dist_src = DistributionEntry.objects.none()
-            if poll and src != 'OWN_SEED':
-                dist_src = dist_src.filter(batch__event__season=poll.season, batch__event__year=poll.year)
-            dist_src_ids = set(dist_src.values_list('farmer_id', flat=True))
-            seed_farmer_counts[src] = len(src_ids | dist_src_ids)
-
-        farmers_by_seed = [
-            {'seed_source': src, 'label': SEED_LABELS[src], 'count': seed_farmer_counts[src]}
-            for src in ['HYBRID', 'INBRED', 'OWN_SEED']
-        ]
-
-        # ── SECTION 4: Yield by Seed Type ────────────────────
-        yield_by_seed = []
-        for src in ['HYBRID', 'INBRED', 'OWN_SEED']:
-            group = [r for r in harvest_list if r.seed_source == src]
-            if not group:
-                yield_by_seed.append({
-                    'seed_source': src, 'label': SEED_LABELS[src],
-                    'actual_yield_t_ha': 0, 'target_yield_t_ha': STANDARD_YIELDS.get(src, 2000) / 1000,
-                    'farmer_count': 0, 'total_mt': 0,
-                })
-                continue
-            area     = sum(float(r.harvest_area_ha or 0) for r in group)
-            dry_kg   = sum(dry_weight_kg(r) for r in group)
-            total_mt_src = dry_kg / 1000
-            avg_yield_tha = (total_mt_src / area) if area > 0 else 0
-            yield_by_seed.append({
-                'seed_source':      src,
-                'label':            SEED_LABELS[src],
-                'actual_yield_t_ha': round(avg_yield_tha, 2),
-                'target_yield_t_ha': round(STANDARD_YIELDS.get(src, 2000) / 1000, 2),
-                'farmer_count':     len(group),
-                'total_mt':         round(total_mt_src, 2),
-            })
-
-        # ── SECTION 5: Crop Phase Distribution ───────────────
-        phase_counts = Counter(r.crop_phase for r in latest_records)
-
-        # Farmers na naka-distribute pero wala pang CropMonitoringRecord
-        # ay considered nasa DISTRIBUTION phase pa rin
-        monitored_farmer_ids = set(r.farmer_id for r in latest_records)
-        distribution_only_count = len(distributed_ids - monitored_farmer_ids)
-
-        phase_distribution = []
-        for ph in PHASE_ORDER:
-            if ph == 'DISTRIBUTION':
-                # CropMonitoring DISTRIBUTION records + distribution-only farmers
-                farmers = phase_counts.get('DISTRIBUTION', 0) + distribution_only_count
-            else:
-                farmers = phase_counts.get(ph, 0)
-            phase_distribution.append({
-                'phase':   ph,
-                'label':   PHASE_DISPLAY[ph],
-                'farmers': farmers,
-            })
-
-        # ── SECTION 6: Delay Analytics ────────────────────────
-        delayed_records = [r for r in latest_records if r.phase_status == 'DELAYED']
-        delayed_farmers = len(set(r.farmer_id for r in delayed_records))
-        delay_rate      = round((delayed_farmers / total_farmers * 100), 1) if total_farmers > 0 else 0
-
-        delay_by_phase = []
-        for ph in PHASE_ORDER:
-            ph_records  = [r for r in latest_records if r.crop_phase == ph]
-            ph_delayed  = [r for r in ph_records  if r.phase_status == 'DELAYED']
-            delay_by_phase.append({
-                'phase':   ph,
-                'label':   PHASE_DISPLAY[ph],
-                'total':   len(set(r.farmer_id for r in ph_records)),
-                'delayed': len(set(r.farmer_id for r in ph_delayed)),
-            })
-
-        delay_analytics = {
-            'delayed_farmers': delayed_farmers,
-            'delay_rate_pct':  delay_rate,
-            'by_phase':        delay_by_phase,
+        # ── Farm Health Summary (normal/delayed/damaged) ──────
+        normal_count  = len(set(r.farmer_id for r in latest_records if r.phase_status == 'NORMAL'))
+        delayed_count = len(delayed_farmer_ids)
+        damaged_count = len(damaged_farmer_ids)
+        farm_health   = {
+            'normal':             normal_count,
+            'delayed':            delayed_count,
+            'damaged':            damaged_count,
+            'monitoring_records': normal_count + delayed_count + damaged_count,
+            'registered_farmers': total_farmers,
         }
 
-        # ── SECTION 7: Damage Analytics ───────────────────────
+        # ── Top Damage Causes ─────────────────────────────────
         damaged_records = [r for r in latest_records if r.phase_status == 'DAMAGED' and r.damage_cause]
         cause_counts    = Counter(r.damage_cause.strip().title() for r in damaged_records)
         total_damage    = sum(cause_counts.values())
         cause_of_damage = sorted([
             {'cause': k, 'count': v, 'pct': round(v / total_damage * 100, 1) if total_damage > 0 else 0}
             for k, v in cause_counts.items()
-        ], key=lambda x: -x['count'])
+        ], key=lambda x: -x['count'])[:10]
 
-        # ── SECTION 8: Production Ranking by Barangay ─────────
-        production_ranking = sorted(
-            utilization_by_barangay,
-            key=lambda x: x['production_mt'],
-            reverse=True
-        )
+        # ── Production by Barangay ────────────────────────────
+        brgy_harvest_groups = defaultdict(list)
+        for r in harvest_list:
+            brgy = getattr(r.farmer, 'barangay', None) or r.barangay or 'Unknown'
+            brgy_harvest_groups[brgy].append(r)
 
-        # ── SECTION 9: Data Pipeline Status ───────────────────
-        total_beneficiaries = len(distributed_ids)
-        total_monitored     = len(monitored_ids)
-        total_harvested     = len(set(r.farmer_id for r in harvest_list))
+        production_by_barangay = []
+        for brgy, records in sorted(brgy_harvest_groups.items()):
+            total_prod = sum(dry_weight_kg(r) for r in records) / 1000
+            u_vals = [utilization_pct(r) for r in records]
+            u_vals = [v for v in u_vals if v is not None]
+            avg_u  = (sum(u_vals) / len(u_vals)) if u_vals else None
+            production_by_barangay.append({
+                'barangay':        brgy,
+                'farmer_count':    len(records),
+                'production_mt':   round(total_prod, 2),
+                'utilization_pct': round(avg_u, 1) if avg_u is not None else None,
+                'tier':            get_tier_label(avg_u),
+            })
+        production_by_barangay.sort(key=lambda x: x['production_mt'], reverse=True)
 
-        pipeline = {
-            'beneficiaries': {
-                'count': pipeline_total_dist,
-                'label': 'Distributed',
-            },
-            'monitored': {
-                'count': pipeline_total_monitor,
-                'total': pipeline_total_dist,
-                'pct':   round(pipeline_total_monitor / pipeline_total_dist * 100, 1) if pipeline_total_dist > 0 else 0,
-                'label': 'Monitored',
-            },
-            'harvested': {
-                'count': pipeline_total_harvest,
-                'total': pipeline_total_monitor,
-                'pct':   round(pipeline_total_harvest / pipeline_total_monitor * 100, 1) if pipeline_total_monitor > 0 else 0,
-                'label': 'Harvest Encoded',
-            },
+        # ── DELAY ANALYTICS BY PHASE (historical — all records) ──
+        # Uses ALL records so we capture every delay event per phase,
+        # even if the farmer has since moved to a later phase with normal status
+        delay_by_phase = []
+        for ph in PHASE_ORDER:
+            # All records for this phase (historical)
+            ph_all_records = [r for r in all_records if r.crop_phase == ph]
+            # Unique farmers in this phase (historical)
+            ph_farmer_ids  = set(r.farmer_id for r in ph_all_records)
+            # Farmers who experienced delay in this phase (may have recovered)
+            ph_delayed_ids = set(r.farmer_id for r in ph_all_records if r.phase_status == 'DELAYED')
+
+            # Per-farmer names for detailed list
+            delayed_details = []
+            seen_delayed = set()
+            for r in sorted(ph_all_records, key=lambda x: x.date_observed, reverse=True):
+                if r.phase_status == 'DELAYED' and r.farmer_id not in seen_delayed:
+                    seen_delayed.add(r.farmer_id)
+                    delayed_details.append({
+                        'farmer_name':   r.farmer.get_full_name(),
+                        'barangay':      r.barangay or '',
+                        'seed_source':   r.seed_source,
+                        'delay_days':    r.delay_days or 0,
+                        'date_observed': r.date_observed.isoformat(),
+                    })
+
+            delay_by_phase.append({
+                'phase':           ph,
+                'label':           PHASE_DISPLAY[ph],
+                'total_farmers':   len(ph_farmer_ids),
+                'delayed_farmers': len(ph_delayed_ids),
+                'delayed_details': delayed_details[:10],  # top 10 for display
+                'delay_rate_pct':  round(len(ph_delayed_ids) / len(ph_farmer_ids) * 100, 1) if ph_farmer_ids else 0,
+            })
+
+        delay_analytics = {
+            'delayed_farmers': delayed_count,
+            'delay_rate_pct':  round(delayed_count / total_farmers * 100, 1) if total_farmers > 0 else 0,
+            'by_phase':        delay_by_phase,
         }
 
-        # ── SECTION 10: Alerts ─────────────────────────────────
-        critical_farmers = [r for r in harvest_list if (utilization_pct(r) or 0) < 50]
-        attention_list   = []
-        seen_att         = set()
+        # ── Alerts ────────────────────────────────────────────
+        seen_att       = set()
+        attention_list = []
         for r in sorted(latest_records, key=lambda x: x.date_observed, reverse=True):
             if r.phase_status not in ('DELAYED', 'DAMAGED'):
                 continue
@@ -370,46 +261,71 @@ class AdminDashboardAnalyticsView(APIView):
                 continue
             seen_att.add(key)
             attention_list.append({
-                'farmer_name':   r.farmer.get_full_name(),
-                'barangay':      r.barangay,
-                'seed_label':    SEED_LABELS.get(r.seed_source, r.seed_source),
-                'phase':         PHASE_DISPLAY.get(r.crop_phase, r.crop_phase),
-                'status':        r.phase_status,
-                'damage_cause':  r.damage_cause or '',
-                'delay_days':    r.delay_days or 0,
+                'farmer_name':  r.farmer.get_full_name(),
+                'barangay':     r.barangay,
+                'seed_label':   SEED_LABELS.get(r.seed_source, r.seed_source),
+                'phase':        PHASE_DISPLAY.get(r.crop_phase, r.crop_phase),
+                'status':       r.phase_status,
+                'damage_cause': r.damage_cause or '',
+                'delay_days':   r.delay_days or 0,
             })
 
         alerts = {
-            'critical_yield_count': len(critical_farmers),
-            'delayed_count':        delayed_farmers,
-            'damaged_count':        len(set(r.farmer_id for r in damaged_records)),
+            'critical_yield_count': len(critical_farmer_ids),
+            'delayed_count':        delayed_count,
+            'damaged_count':        damaged_count,
+            'attention_required':   len(attention_ids),
             'attention_list':       attention_list[:10],
         }
 
-        # ── SECTION 11: Executive Insights ────────────────────
+        # ── Executive Insights ────────────────────────────────
+        phase_counts   = Counter(r.crop_phase for r in latest_records)
         dominant_phase = phase_counts.most_common(1)[0][0] if phase_counts else None
-        top_brgy_prod  = production_ranking[0] if production_ranking else None
-        top_damage     = cause_of_damage[0]    if cause_of_damage    else None
-        best_seed      = max(yield_by_seed, key=lambda x: x['actual_yield_t_ha']) if yield_by_seed else None
+        top_brgy_prod  = production_by_barangay[0] if production_by_barangay else None
+        top_damage     = cause_of_damage[0] if cause_of_damage else None
 
         insights = []
-        if dominant_phase:
-            insights.append(f"{PHASE_DISPLAY[dominant_phase]} is currently the most active crop phase with {phase_counts[dominant_phase]} farmers.")
-        if best_seed and best_seed['actual_yield_t_ha'] > 0:
-            insights.append(f"{best_seed['label']} seeds lead in average yield at {best_seed['actual_yield_t_ha']} t/ha.")
-        if top_damage:
-            insights.append(f"{top_damage['cause']} accounts for {top_damage['pct']}% of all reported damage incidents.")
-        if alerts['critical_yield_count'] > 0:
-            insights.append(f"{alerts['critical_yield_count']} farmers are operating below 50% yield utilization.")
-        if total_mt > 0:
-            completion_pct = round(total_mt / ((total_area * STANDARD_YIELDS.get('HYBRID', 5000) / 1000) or 1) * 100, 1)
-            insights.append(f"Production achievement stands at {round(avg_util, 1) if avg_util else 0}% of seasonal target.")
-        if top_brgy_prod:
-            insights.append(f"{top_brgy_prod['barangay']} ranks first in production with {top_brgy_prod['production_mt']} MT.")
-        if pipeline['monitored']['pct'] < 100:
-            insights.append(f"Monitoring coverage is at {pipeline['monitored']['pct']}% of distributed farmers.")
+        if total_farmers > 0:
+            if dominant_phase:
+                insights.append(
+                    f"{PHASE_DISPLAY[dominant_phase]} is currently the most active crop phase "
+                    f"with {phase_counts[dominant_phase]} farmers."
+                )
+            if len(harvested_ids) > 0:
+                insights.append(
+                    f"Harvest completion rate is at {harvest_completion_pct}% "
+                    f"({len(harvested_ids)} of {total_farmers} farmers)."
+                )
+            if top_damage:
+                insights.append(
+                    f"{top_damage['cause']} accounts for {top_damage['pct']}% "
+                    f"of all reported damage incidents."
+                )
+            if len(critical_farmer_ids) > 0:
+                insights.append(
+                    f"{len(critical_farmer_ids)} farmers are operating below 50% yield utilization."
+                )
+            if top_brgy_prod and top_brgy_prod['production_mt'] > 0:
+                insights.append(
+                    f"{top_brgy_prod['barangay']} ranks first in production "
+                    f"with {top_brgy_prod['production_mt']} MT."
+                )
+            if delayed_count > 0:
+                insights.append(
+                    f"{delayed_count} farmers currently have delayed crop phase status."
+                )
+            if avg_util is not None:
+                insights.append(
+                    f"Overall production achievement is at {round(avg_util, 1)}% — "
+                    f"{get_tier_label(avg_util)}."
+                )
+            if len(monitored_ids) > 0 and len(distributed_ids) > 0:
+                monitoring_pct = round(len(monitored_ids) / len(distributed_ids) * 100, 1)
+                insights.append(
+                    f"Monitoring coverage is at {monitoring_pct}% of distributed farmers "
+                    f"({len(monitored_ids)} of {len(distributed_ids)})."
+                )
 
-        # ── Poll list for dropdown ─────────────────────────────
         poll_list = [
             {
                 'id':     p['id'],
@@ -423,22 +339,18 @@ class AdminDashboardAnalyticsView(APIView):
 
         return Response({
             'poll': {
-                'id':     poll.id     if poll else None,
+                'id':     poll.id if poll else None,
                 'season': season,
                 'year':   yr,
                 'status': poll.status if poll else None,
                 'label':  f"{'Wet' if season == 'WET' else 'Dry'} Season {yr}" if poll else '—',
             },
-            'poll_list':               poll_list,
-            'kpi':                     kpi,
-            'utilization_by_barangay': utilization_by_barangay,
-            'farmers_by_seed':         farmers_by_seed,
-            'yield_by_seed':           yield_by_seed,
-            'phase_distribution':      phase_distribution,
-            'delay_analytics':         delay_analytics,
-            'cause_of_damage':         cause_of_damage,
-            'production_ranking':      production_ranking,
-            'pipeline':                pipeline,
-            'alerts':                  alerts,
-            'insights':                insights,
+            'poll_list':              poll_list,
+            'kpi':                    kpi,
+            'farm_health':            farm_health,
+            'cause_of_damage':        cause_of_damage,
+            'production_by_barangay': production_by_barangay,
+            'delay_analytics':        delay_analytics,
+            'alerts':                 alerts,
+            'insights':               insights,
         })

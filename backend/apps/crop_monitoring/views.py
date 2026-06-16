@@ -121,10 +121,18 @@ class ATFarmerListView(APIView):
                 'seed_records': seed_records,
             })
 
-            # Distribution info — filter by encoding poll (current season only)
+            # Gate para sa AT encode modal seed type buttons (HYBRID/INBRED).
+            # Dalawang kondisyon bago ma-enable ang button:
+            # 1. batch__status='APPROVED' — beneficiary-approved ang farmer sa current poll
+            # 2. qty_bags__isnull=False at qty_bags__gt=0 — nag-confirm na ng seed
+            #    distribution ang BRGY (napindot na ang "Confirm Seed Distributed")
+            # Ang "Distributed: Inbred — RC-10" header sa modal ay galing din
+            # sa same queryset — lalabas lang kapag confirmed na ang distribution.
             dist_entry_qs = DistributionEntry.objects.filter(
                 farmer=farmer,
                 batch__status='APPROVED',
+                qty_bags__isnull=False,
+                qty_bags__gt=0,
             ).select_related('variety', 'batch__event__seed_type', 'batch__event__variety')
 
             if active_poll:
@@ -132,6 +140,8 @@ class ATFarmerListView(APIView):
                     batch__event__season=active_poll.season,
                     batch__event__year=active_poll.year,
                 )
+            else:
+                dist_entry_qs = dist_entry_qs.none()
 
             dist_entry_qs = dist_entry_qs.order_by('-batch__approved_at')
 
@@ -149,7 +159,6 @@ class ATFarmerListView(APIView):
                 'distributed_seed_type': distributed_seed_type,
             })
 
-            # Per-seed-type distribution map — current season only
             distribution_by_seed_type = {}
             for entry in dist_entry_qs:
                 seed_type_obj = entry.batch.event.seed_type
@@ -224,7 +233,17 @@ class ATFarmerDetailView(APIView):
                 'is_distributed': bool(entry.qty_bags or entry.date_received),
             })
 
-        latest = CropMonitoringRecord.objects.filter(farmer=farmer).order_by('-date_observed', '-encoded_at').first()
+        # Poll-scoped — current season lang ang latest phase
+        # para hindi mag-bleed ang past season data
+        active_poll = get_encoding_poll()
+        if not active_poll:
+            active_poll = get_current_poll()
+        latest_filter = {'farmer': farmer}
+        if active_poll:
+            latest_filter['poll'] = active_poll
+        latest = CropMonitoringRecord.objects.filter(
+            **latest_filter
+        ).order_by('-date_observed', '-encoded_at').first()
         latest_seed_source = latest.seed_source if latest else None
         latest_phase = latest.crop_phase if latest else None
         latest_observed = latest.date_observed.isoformat() if latest else None
@@ -424,16 +443,20 @@ class ATMonitoringHistoryView(APIView):
         year = request.query_params.get('year', '')
         search = request.query_params.get('search', '')
 
-        if year:
-            try:
-                qs = qs.filter(date_observed__year=int(year))
-            except ValueError:
-                pass
-
-        if season == 'WET':
-            qs = qs.filter(date_observed__month__in=[6, 7, 8, 9, 10])
-        elif season == 'DRY':
-            qs = qs.filter(date_observed__month__in=[11, 12, 1, 2, 3, 4, 5])
+        # Poll-based filtering — hindi na month-range para hindi mag-bleed
+        # ang data ng ibang season na magkaparehong buwan
+        if year or season:
+            from apps.seed_poll.models import Poll as PollModel
+            poll_qs = PollModel.objects.all()
+            if year:
+                try:
+                    poll_qs = poll_qs.filter(year=int(year))
+                except ValueError:
+                    pass
+            if season:
+                poll_qs = poll_qs.filter(season=season)
+            poll_ids = list(poll_qs.values_list('id', flat=True))
+            qs = qs.filter(poll_id__in=poll_ids)
 
         if search:
             qs = qs.filter(
@@ -506,19 +529,21 @@ class ATFarmerHistoryView(APIView):
                 'year': int(year) if year and year.isdigit() else None,
             }
         else:
-            latest_final_seed = FinalSeed.objects.order_by('-year', '-id').first()
-            if latest_final_seed:
-                year = latest_final_seed.year
-                season = latest_final_seed.season
-                months = season_months(season)
-                records = records.filter(date_observed__year=year)
-                if months:
-                    records = records.filter(date_observed__month__in=months)
+            # Default: poll FK ang gamit, hindi date-based
+            # para consistent ang Poll-Scoped Data Lifecycle
+            active_poll = get_encoding_poll()
+            if not active_poll:
+                active_poll = get_current_poll()
+            if active_poll:
+                records = records.filter(poll=active_poll)
                 selected_season = {
-                    'season': season,
-                    'season_display': latest_final_seed.get_season_display(),
-                    'year': year,
+                    'season': active_poll.season,
+                    'season_display': active_poll.get_season_display(),
+                    'year': active_poll.year,
                 }
+            else:
+                records = records.none()
+                selected_season = None
 
         records = records.order_by('-date_observed', '-encoded_at')
         serializer = CropMonitoringRecordSerializer(records, many=True)

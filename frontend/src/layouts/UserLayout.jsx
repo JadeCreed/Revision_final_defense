@@ -354,7 +354,7 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: '340px', backgroundColor: 'white', borderRadius: '1rem',
-          border: '1px solid #e5e7eb', boxShadow: '0 16px 40px rgba(0,0,0,0.13)', overflow: 'hidden', zIndex: 60,
+          border: '1px solid #e5e7eb', boxShadow: '0 16px 40px rgba(0,0,0,0.13)', overflow: 'hidden', zIndex: 1100,
           animation: 'notifDropIn 0.2s ease forwards',
         }}>
           <style>{`
@@ -661,7 +661,7 @@ const UserLayout = () => {
           display:         'flex',
           alignItems:      'center',
           justifyContent:  'space-between',
-          zIndex:          40,
+          zIndex:          1000,
           boxShadow:       isDesktop ? '0 1px 4px rgba(0,0,0,0.08)' : '0 2px 8px rgba(0,0,0,0.15)',
           borderBottom:    isDesktop ? '1px solid #e5e7eb' : 'none',
         }}>
@@ -779,8 +779,10 @@ const UserLayout = () => {
         {/* ── PAGE CONTENT ── */}
         <div style={{
           flex:          1,
-          overflowY:     'auto',
-          paddingBottom: isDesktop ? '2rem' : 'calc(72px + env(safe-area-inset-bottom))',
+          display:       'flex',
+          flexDirection: 'column',
+          minHeight:     0,
+          overflowY:     'hidden',
         }}>
           <Outlet />
         </div>
@@ -802,7 +804,7 @@ const UserLayout = () => {
           justifyContent:  'space-around',
           alignItems:      'center',
           height:          '72px',
-          zIndex:          40,
+          zIndex:          1100,
           boxShadow:       '0 -2px 16px rgba(0,0,0,0.08)',
           borderTop:       '1px solid #e5e7eb',
           paddingBottom:   'env(safe-area-inset-bottom)',
@@ -822,7 +824,7 @@ const UserLayout = () => {
               position:        'fixed',
               inset:           0,
               backgroundColor: 'rgba(0,0,0,0.4)',
-              zIndex:          60,
+              zIndex:          1000,
             }}
           />
           <div style={{
@@ -836,7 +838,7 @@ const UserLayout = () => {
             maxWidth:        isDesktop ? '260px' : '480px',
             backgroundColor: 'white',
             borderRadius:    isDesktop ? '0.875rem' : '1.25rem 1.25rem 0 0',
-            zIndex:          70,
+            zIndex:          1100,
             padding:         '1.5rem',
             boxShadow:       '0 -4px 24px rgba(0,0,0,0.15)',
           }}>

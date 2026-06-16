@@ -271,10 +271,17 @@ const HarvestForm = ({
 
   const filteredFarmers = useMemo(() => {
     const q = farmerSearch.trim().toLowerCase();
-    return harvestingFarmers.filter(f =>
-      !q || [f.first_name, f.last_name, f.rsbsa_number]
-        .join(' ').toLowerCase().includes(q)
-    );
+    if (!q) return harvestingFarmers;
+
+    // Split query into tokens — handles "Rivera, Christine",
+    // "Christine Rivera", "rivera christine", etc.
+    const tokens = q.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
+
+    return harvestingFarmers.filter(f => {
+      const haystack = [f.first_name, f.last_name, f.rsbsa_number]
+        .join(' ').toLowerCase();
+      return tokens.every(t => haystack.includes(t));
+    });
   }, [harvestingFarmers, farmerSearch]);
 
   const selectFarmer = (farmer) => {

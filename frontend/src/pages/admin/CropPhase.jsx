@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, MapPin, ChevronDown, BarChart3, AlertCircle, AlertTriangle, Users } from 'lucide-react';
+import {
+  RefreshCw, MapPin, ChevronDown,
+  BarChart3, AlertCircle, AlertTriangle, Users, Calendar,
+} from 'lucide-react';
 import { getCropPhaseAnalytics } from '../../api/axios';
-import KpiCards          from '../../components/KpiCards';
-import GanttChart        from '../../components/GanttChart';
-import PhaseDistribution from '../../components/PhaseDistribution';
-import DelayChart        from '../../components/DelayChart';
-import DamageChart       from '../../components/DamageChart';
-import AttentionPanel    from '../../components/AttentionPanel';
+import KpiCards       from '../../components/KpiCards';
+import GanttChart     from '../../components/GanttChart';
+import DelayChart     from '../../components/DelayChart';
+import DamageChart    from '../../components/DamageChart';
+import AttentionPanel from '../../components/AttentionPanel';
 
 const SEED_CFG = {
   HYBRID:   { label: 'Hybrid Seed',  color: '#166534', light: '#dcfce7', border: '#86efac' },
@@ -19,55 +21,50 @@ const PHASE_COLORS = {
   FLOWERING:'#a855f7',    RIPENING:'#eab308',      HARVESTING:'#f97316',
 };
 const pc   = k => PHASE_COLORS[k] || '#94a3b8';
-const fmtN = (n, d = 0) => n != null && !isNaN(n)
-  ? Number(n).toLocaleString('en-PH', { minimumFractionDigits: d, maximumFractionDigits: d })
+const fmtN = (n, d=0) => n != null && !isNaN(n)
+  ? Number(n).toLocaleString('en-PH', { minimumFractionDigits:d, maximumFractionDigits:d })
   : '—';
 
-
-// ── Simple dropdown ──────────────────────────────────────────
+// ── Dropdown ──────────────────────────────────────────────────
 const SimpleDropdown = ({ options, value, onChange, placeholder }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const current = options.find(o => o.value === value);
-
   useEffect(() => {
     const h = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <div ref={ref} style={{ position:'relative' }}>
       <button onClick={() => setOpen(v => !v)} style={{
-        display: 'flex', alignItems: 'center', gap: 7,
-        padding: '7px 13px', borderRadius: 10,
-        border: '1px solid #e2e8f0', background: 'white',
-        fontSize: 13, fontWeight: 600, color: '#374151',
-        cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,.05)',
-        whiteSpace: 'nowrap',
+        display:'flex', alignItems:'center', gap:7,
+        padding:'7px 13px', borderRadius:10,
+        border:'1px solid #e2e8f0', background:'white',
+        fontSize:13, fontWeight:600, color:'#374151',
+        cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,.05)', whiteSpace:'nowrap',
       }}>
         {current?.label || placeholder}
-        <ChevronDown size={13} style={{ transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none' }} />
+        <ChevronDown size={13} style={{ transition:'transform .15s', transform:open?'rotate(180deg)':'none' }}/>
       </button>
-
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: 0,
-          background: 'white', border: '1px solid #e2e8f0',
-          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.12)',
-          zIndex: 50, minWidth: 170, overflow: 'hidden',
+          position:'absolute', top:'calc(100% + 6px)', left:0,
+          background:'white', border:'1px solid #e2e8f0',
+          borderRadius:12, boxShadow:'0 8px 24px rgba(0,0,0,.12)',
+          zIndex:50, minWidth:170, overflow:'hidden',
         }}>
           {options.map(o => (
             <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); }} style={{
-              width: '100%', textAlign: 'left', padding: '9px 14px',
-              border: 'none', fontSize: 13, cursor: 'pointer',
-              background: o.value === value ? '#f0fdf4' : 'white',
-              color: o.value === value ? '#166534' : '#374151',
-              fontWeight: o.value === value ? 700 : 400,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              width:'100%', textAlign:'left', padding:'9px 14px',
+              border:'none', fontSize:13, cursor:'pointer',
+              background: o.value===value ? '#f0fdf4' : 'white',
+              color:      o.value===value ? '#166534' : '#374151',
+              fontWeight: o.value===value ? 700 : 400,
+              display:'flex', justifyContent:'space-between', alignItems:'center',
             }}>
               {o.label}
-              {o.active && <span style={{ fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 99, background: '#dcfce7', color: '#166534' }}>active</span>}
+              {o.active && <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:99, background:'#dcfce7', color:'#166534' }}>active</span>}
             </button>
           ))}
         </div>
@@ -76,21 +73,206 @@ const SimpleDropdown = ({ options, value, onChange, placeholder }) => {
   );
 };
 
-// ── Insight card ──────────────────────────────────────────────
-const InsightCard = ({ icon, title, value, sub, accent = '#166534', bg = '#f0fdf4', border = '#bbf7d0' }) => (
-  <div style={{ background: bg, border: `1px solid ${border}`, borderRadius: 14, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-    <div style={{ width: 34, height: 34, borderRadius: 10, background: `${accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+// ── Insight card ─────────────────────────────────────────────
+const InsightCard = ({ icon, title, value, sub, accent='#166534', bg='#f0fdf4', border='#bbf7d0' }) => (
+  <div style={{ background:bg, border:`1px solid ${border}`, borderRadius:14, padding:'14px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
+    <div style={{ width:34, height:34, borderRadius:10, background:`${accent}20`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
       {icon}
     </div>
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: accent, marginBottom: 2 }}>{title}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: accent, lineHeight: 1.2 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: `${accent}bb`, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
+    <div style={{ minWidth:0 }}>
+      <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:accent, marginBottom:2 }}>{title}</div>
+      <div style={{ fontSize:16, fontWeight:700, color:accent, lineHeight:1.2 }}>{value}</div>
+      {sub && <div style={{ fontSize:11, color:`${accent}bb`, marginTop:3, lineHeight:1.4 }}>{sub}</div>}
     </div>
   </div>
 );
 
-// ── Main page ─────────────────────────────────────────────────
+// ── Seed Distribution Chart (vertical bar) ─────────────────────
+const SeedDistributionChart = ({ distSummary }) => {
+  if (!distSummary || !distSummary.by_seed?.length) return (
+    <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:20, textAlign:'center', color:'#94a3b8', fontSize:13 }}>
+      No seed distribution data for this season.
+    </div>
+  );
+
+  const { by_seed, total_beneficiaries, total_kg } = distSummary;
+  const maxKg = Math.max(...by_seed.map(s => s.total_kg), 1);
+  const COLORS = {
+    HYBRID: { color:'#166534', light:'#dcfce7', border:'#86efac', label:'Hybrid' },
+    INBRED: { color:'#1e40af', light:'#dbeafe', border:'#93c5fd', label:'Certified' },
+  };
+
+  return (
+    <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:20 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>
+        Seed Distribution — Current Season
+      </div>
+      <div style={{ fontSize:11, color:'#94a3b8', marginBottom:16 }}>
+        Total seed distributed per seed type during the active season.
+      </div>
+
+      {/* Summary chips */}
+      <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
+        <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'8px 14px' }}>
+          <div style={{ fontSize:11, color:'#64748b' }}>Beneficiaries Served</div>
+          <div style={{ fontSize:18, fontWeight:800, color:'#15803d' }}>{total_beneficiaries}</div>
+          <div style={{ fontSize:10, color:'#94a3b8' }}>unique farmers</div>
+        </div>
+        <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'8px 14px' }}>
+          <div style={{ fontSize:11, color:'#64748b' }}>Total Seed Distributed</div>
+          <div style={{ fontSize:18, fontWeight:800, color:'#15803d' }}>{fmtN(total_kg)} kg</div>
+          <div style={{ fontSize:10, color:'#94a3b8' }}>all seed types</div>
+        </div>
+      </div>
+
+      {/* Vertical bar chart */}
+      <div style={{ marginBottom:20 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:'#475569', marginBottom:12 }}>Seed Distribution by Seed Type</div>
+
+        {/* Y-axis labels + bars */}
+        <div style={{ display:'flex', gap:16, alignItems:'flex-end', height:160, paddingLeft:48, position:'relative' }}>
+          {/* Y axis ticks */}
+          {[0, 0.25, 0.5, 0.75, 1].map(frac => {
+            const val = Math.round(maxKg * frac);
+            return (
+              <div key={frac} style={{
+                position:'absolute', left:0, bottom:`${frac*100}%`,
+                display:'flex', alignItems:'center', gap:4,
+                transform:'translateY(50%)',
+              }}>
+                <span style={{ fontSize:9, color:'#94a3b8', whiteSpace:'nowrap' }}>{fmtN(val)} kg</span>
+                <div style={{ width:`calc(100% - 44px)`, height:1, background:'#f1f5f9', marginLeft:4, position:'absolute', left:44 }}/>
+              </div>
+            );
+          })}
+
+          {/* Bars */}
+          {by_seed.map(seed => {
+            const cfg    = COLORS[seed.seed_key] || { color:'#64748b', light:'#f1f5f9', border:'#e2e8f0', label:seed.seed_key };
+            const heightPct = maxKg > 0 ? (seed.total_kg / maxKg) * 100 : 0;
+            return (
+              <div key={seed.seed_key} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:cfg.color }}>{fmtN(seed.total_kg)} kg</div>
+                <div style={{
+                  width:'100%', maxWidth:80,
+                  height:`${heightPct}%`, minHeight:4,
+                  background:cfg.color, borderRadius:'6px 6px 0 0',
+                  transition:'height .8s ease',
+                  position:'relative',
+                }}>
+                  <div style={{
+                    position:'absolute', top:-20, left:'50%', transform:'translateX(-50%)',
+                    fontSize:10, color:cfg.color, fontWeight:700, whiteSpace:'nowrap',
+                  }}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* X axis labels */}
+        <div style={{ display:'flex', gap:16, paddingLeft:48, marginTop:8 }}>
+          {by_seed.map(seed => {
+            const cfg = COLORS[seed.seed_key] || { color:'#64748b', label:seed.seed_key };
+            const coveragePct = distSummary.total_beneficiaries > 0
+              ? ((seed.beneficiaries / distSummary.total_beneficiaries) * 100).toFixed(0)
+              : 0;
+            return (
+              <div key={seed.seed_key} style={{ flex:1, textAlign:'center' }}>
+                <div style={{ fontSize:12, fontWeight:700, color:cfg.color }}>{cfg.label}</div>
+                <div style={{ fontSize:11, color:'#475569', marginTop:4 }}>
+                  {seed.beneficiaries} / {distSummary.total_beneficiaries} farmers ({coveragePct}%)
+                </div>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:2 }}>
+                  {fmtN(seed.total_bags)} bag{seed.total_bags !== 1 ? 's' : ''}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Table breakdown */}
+      <div style={{ borderRadius:10, border:'1px solid #e2e8f0', overflow:'hidden' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+          <thead>
+            <tr style={{ background:'#f8fafc' }}>
+              <th style={{ padding:'8px 12px', textAlign:'left', fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', borderBottom:'1px solid #e2e8f0' }}>Seed Type</th>
+              <th style={{ padding:'8px 12px', textAlign:'right', fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', borderBottom:'1px solid #e2e8f0' }}>Coverage</th>
+              <th style={{ padding:'8px 12px', textAlign:'right', fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', borderBottom:'1px solid #e2e8f0' }}>Bags</th>
+              <th style={{ padding:'8px 12px', textAlign:'right', fontSize:10, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', borderBottom:'1px solid #e2e8f0' }}>Distributed (kg)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {by_seed.map((seed, i) => {
+              const cfg = COLORS[seed.seed_key] || { color:'#64748b', light:'#f9fafb', border:'#e2e8f0', label:seed.seed_key };
+              return (
+                <tr key={seed.seed_key} style={{ background: i%2===0 ? 'white' : '#fafafa' }}>
+                  <td style={{ padding:'9px 12px', borderBottom:'1px solid #f1f5f9' }}>
+                    <span style={{ background:cfg.light, color:cfg.color, border:`1px solid ${cfg.border}`, borderRadius:99, padding:'2px 8px', fontSize:11, fontWeight:700 }}>
+                      {cfg.label}
+                    </span>
+                  </td>
+                  <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:'#0f172a', borderBottom:'1px solid #f1f5f9' }}>{seed.beneficiaries} / {distSummary.total_beneficiaries}</td>
+                  <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151', borderBottom:'1px solid #f1f5f9' }}>{fmtN(seed.total_bags)} bags</td>
+                  <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:cfg.color, borderBottom:'1px solid #f1f5f9' }}>{fmtN(seed.total_kg)} kg</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// ── Area Monitored by Seed Type ───────────────────────────────
+const AreaBySeedChart = ({ areaBySeed }) => {
+  if (!areaBySeed || areaBySeed.length === 0) return null;
+  const maxArea = Math.max(...areaBySeed.map(a => a.area_ha), 1);
+
+  return (
+    <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:'20px' }}>
+      <div style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:4 }}>
+        Area Monitored by Seed Type
+      </div>
+      <div style={{ fontSize:11, color:'#94a3b8', marginBottom:16 }}>
+        Total area being monitored per seed type — used to estimate expected harvest at season end.
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        {areaBySeed.map(item => {
+          const cfg = SEED_CFG[item.seed_source] || SEED_CFG.HYBRID;
+          const pct = maxArea > 0 ? (item.area_ha / maxArea) * 100 : 0;
+          return (
+            <div key={item.seed_source}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:6 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ width:10, height:10, borderRadius:2, background:cfg.color, display:'inline-block' }}/>
+                  <span style={{ fontSize:13, fontWeight:600, color:'#374151' }}>{cfg.label}</span>
+                  <span style={{ fontSize:11, color:'#94a3b8' }}>{item.farmer_count} farmers</span>
+                </div>
+                <div>
+                  <span style={{ fontSize:15, fontWeight:800, color:cfg.color }}>{fmtN(item.area_ha, 2)}</span>
+                  <span style={{ fontSize:11, color:'#94a3b8', marginLeft:3 }}>ha</span>
+                </div>
+              </div>
+              <div style={{ height:10, background:'#f1f5f9', borderRadius:99, overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${pct}%`, background:cfg.color, borderRadius:99, transition:'width .9s ease' }}/>
+              </div>
+              {item.area_ha > 0 && (
+                <div style={{ fontSize:10, color:'#94a3b8', marginTop:3 }}>
+                  Expected yield ≈ {fmtN(item.area_ha * 5000 / 1000, 1)} MT (Hybrid) / {fmtN(item.area_ha * 3500 / 1000, 1)} MT (Inbred)
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── Main ─────────────────────────────────────────────────────
 const CropPhase = () => {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
@@ -101,7 +283,7 @@ const CropPhase = () => {
   const navigate = useNavigate();
   const timerRef = useRef(null);
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (silent=false) => {
     if (!silent) setLoading(true); else setRefreshing(true);
     setError(null);
     try {
@@ -110,7 +292,7 @@ const CropPhase = () => {
       if (seedFilter && seedFilter !== 'ALL') params.seed_type = seedFilter;
       const res = await getCropPhaseAnalytics(params);
       setData(res.data);
-    } catch (e) {
+    } catch {
       setError('Failed to load analytics. Make sure /api/crop-phase/analytics/ is accessible.');
     } finally {
       setLoading(false);
@@ -124,139 +306,103 @@ const CropPhase = () => {
     return () => clearInterval(timerRef.current);
   }, [load]);
 
-  const poll   = data?.poll;
-  const kpi    = data?.kpi;
-  const ins    = data?.insights;
-  const polls  = data?.poll_list || [];
-  const season = poll?.season || 'WET';
-  const year   = poll?.year   || new Date().getFullYear();
+  const poll  = data?.poll;
+  const kpi   = data?.kpi;
+  const ins   = data?.insights;
+  const polls = data?.poll_list || [];
 
   if (loading) return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: 14, color: '#64748b' }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'60vh', gap:14, color:'#64748b' }}>
       <style>{`@keyframes cp-spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ width: 28, height: 28, border: '3px solid #bbf7d0', borderTopColor: '#1a4d1a', borderRadius: '50%', animation: 'cp-spin .7s linear infinite' }} />
-      <span style={{ fontSize: 13 }}>Loading crop phase analytics…</span>
+      <div style={{ width:28, height:28, border:'3px solid #bbf7d0', borderTopColor:'#1a4d1a', borderRadius:'50%', animation:'cp-spin .7s linear infinite' }}/>
+      <span style={{ fontSize:13 }}>Loading crop phase analytics…</span>
     </div>
   );
 
   if (error) return (
-    <div style={{ margin: '2rem', padding: '1.5rem', background: '#fff5f5', border: '1px solid #fecaca', borderRadius: 14, color: '#991b1b', fontSize: 13 }}>
-      <strong>Error:</strong> {error}
-      <br />
-      <button onClick={() => load()} style={{ marginTop: 12, padding: '6px 14px', background: '#1a4d1a', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Retry</button>
+    <div style={{ margin:'2rem', padding:'1.5rem', background:'#fff5f5', border:'1px solid #fecaca', borderRadius:14, color:'#991b1b', fontSize:13 }}>
+      <strong>Error:</strong> {error}<br/>
+      <button onClick={() => load()} style={{ marginTop:12, padding:'6px 14px', background:'#1a4d1a', color:'white', border:'none', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600 }}>Retry</button>
     </div>
   );
 
   return (
-    <div style={{ minHeight: '100vh'}}>
+    <div style={{ minHeight:'100vh' }}>
       <style>{`
-        @keyframes cp-spin   { to { transform: rotate(360deg); } }
-        @keyframes cp-pulse  { 0%,100%{opacity:1} 50%{opacity:.4} }
-        .cp-two  { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-        .cp-ins  { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+        @keyframes cp-spin  { to { transform: rotate(360deg); } }
+        @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+        .cp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .cp-ins { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
         @media(max-width:900px)  { .cp-two { grid-template-columns: 1fr !important; } .cp-ins { grid-template-columns: repeat(2,minmax(0,1fr)) !important; } }
         @media(max-width:600px)  { .cp-ins { grid-template-columns: 1fr !important; } }
       `}</style>
 
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ padding:'16px', display:'flex', flexDirection:'column', gap:16 }}>
 
-        {/* ── Hero ── */}
+        {/* Hero */}
         <div style={{
-          background: 'linear-gradient(135deg, #14532d 0%, #166534 55%, #15803d 100%)',
-          borderRadius: 16, padding: '24px 28px',
-          display: 'flex', alignItems: 'center',
-          justifyContent: 'space-between', flexWrap: 'wrap', gap: 14,
-          boxShadow: '0 4px 16px rgba(15,23,42,.10)',
+          background:'linear-gradient(135deg, #14532d 0%, #166534 55%, #15803d 100%)',
+          borderRadius:16, padding:'24px 28px',
+          display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:14,
+          boxShadow:'0 4px 16px rgba(15,23,42,.10)',
         }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.08em', color: '#86efac' }}>Crop Phase Analytics</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, padding: '2px 9px', borderRadius: 999, background: 'rgba(255,255,255,.15)', color: '#dcfce7' }}>
-                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#4ade80', display: 'inline-block', animation: 'cp-pulse 1.5s infinite' }} />
+            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+              <span style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.08em', color:'#86efac' }}>Crop Phase Analytics</span>
+              <span style={{ display:'flex', alignItems:'center', gap:5, fontSize:11, fontWeight:700, padding:'2px 9px', borderRadius:999, background:'rgba(255,255,255,.15)', color:'#dcfce7' }}>
+                <span style={{ width:6, height:6, borderRadius:'50%', background:'#4ade80', display:'inline-block', animation:'cp-pulse 1.5s infinite' }}/>
                 Live
               </span>
             </div>
-            <h1 style={{ margin: '0 0 4px', fontSize: 26, fontWeight: 800, color: 'white', lineHeight: 1.15 }}>{poll?.label || '—'}</h1>
-            <p style={{ margin: 0, fontSize: 13, color: '#bbf7d0', lineHeight: 1.5 }}>Track crop phase progression per seed type across all barangays in Lucban, Quezon.</p>
+            <h1 style={{ margin:'0 0 4px', fontSize:26, fontWeight:800, color:'white', lineHeight:1.15 }}>{poll?.label || '—'}</h1>
+            <p style={{ margin:0, fontSize:13, color:'#bbf7d0' }}>Track crop phase progression per seed type across all barangays in Lucban, Quezon.</p>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button onClick={() => load()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, border: '1.5px solid rgba(255,255,255,.3)', background: 'rgba(255,255,255,.12)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              <RefreshCw size={13} style={{ animation: refreshing ? 'cp-spin .7s linear infinite' : 'none' }} /> Refresh
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => load()} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:10, border:'1.5px solid rgba(255,255,255,.3)', background:'rgba(255,255,255,.12)', color:'white', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              <RefreshCw size={13} style={{ animation:refreshing?'cp-spin .7s linear infinite':'none' }}/> Refresh
             </button>
-            <button onClick={() => navigate('/admin/gis')} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 10, border: '1.5px solid rgba(255,255,255,.3)', background: 'rgba(255,255,255,.12)', color: 'white', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-              <MapPin size={13} /> GIS Map ↗
+            <button onClick={() => navigate('/admin/gis')} style={{ display:'flex', alignItems:'center', gap:6, padding:'7px 14px', borderRadius:10, border:'1.5px solid rgba(255,255,255,.3)', background:'rgba(255,255,255,.12)', color:'white', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              <MapPin size={13}/> GIS Map ↗
             </button>
           </div>
         </div>
 
-        {/* ── Filters ── */}
+        {/* Filters */}
         {(() => {
           const seasonOptions = [...new Map(
-            polls.map(p => [p.season, { value: p.season, label: p.season === 'WET' ? 'Wet Season' : 'Dry Season' }])
+            polls.map(p => [p.season, { value:p.season, label:p.season==='WET'?'Wet Season':'Dry Season' }])
           ).values()];
-
-          const activePoll   = polls.find(p => p.id === (pollId ?? poll?.id));
+          const activePoll   = polls.find(p => p.id===(pollId ?? poll?.id));
           const activeSeason = activePoll?.season || poll?.season || 'WET';
-          const activeYear   = activePoll?.year || poll?.year || new Date().getFullYear();
-
-          const yearOptions = polls
+          const yearOptions  = polls
             .filter(p => p.season === activeSeason)
-            .map(p => ({
-              value: p.id,
-              label: String(p.year),
-              active: p.status === 'OPEN',
-            }))
-            .filter((v, i, a) => a.findIndex(x => x.value === v.value) === i);
-
+            .map(p => ({ value:p.id, label:String(p.year), active:p.status==='OPEN' }))
+            .filter((v,i,a) => a.findIndex(x => x.value===v.value)===i);
           const handleSeasonChange = newSeason => {
-            const match = polls.find(p => p.season === newSeason && p.status === 'OPEN')
-              || polls.find(p => p.season === newSeason);
+            const match = polls.find(p => p.season===newSeason && p.status==='OPEN') || polls.find(p => p.season===newSeason);
             if (match) setPollId(match.id);
           };
-
-          const handleYearChange = newPollId => setPollId(newPollId);
-
           return (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center' }}>
               {seasonOptions.length > 0 && (
-                <SimpleDropdown
-                  options={seasonOptions}
-                  value={activeSeason}
-                  onChange={handleSeasonChange}
-                  placeholder="Select season"
-                />
+                <SimpleDropdown options={seasonOptions} value={activeSeason} onChange={handleSeasonChange} placeholder="Select season"/>
               )}
-
               {yearOptions.length > 0 && (
-                <SimpleDropdown
-                  options={yearOptions}
-                  value={pollId ?? activePoll?.id}
-                  onChange={handleYearChange}
-                  placeholder={String(activeYear)}
-                />
+                <SimpleDropdown options={yearOptions} value={pollId ?? activePoll?.id} onChange={id => setPollId(id)} placeholder={String(poll?.year || '')}/>
               )}
-
-              <div style={{ width: 1, height: 28, background: '#e2e8f0', flexShrink: 0 }} />
-
-              <div style={{ display: 'flex', gap: 5, background: 'white', borderRadius: 10, border: '1px solid #e2e8f0', padding: 4, flexWrap: 'wrap', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-                {[
-                  { key: 'ALL',      label: 'All seeds' },
-                  { key: 'HYBRID',   label: 'Hybrid'    },
-                  { key: 'INBRED',   label: 'Inbred'    },
-                  { key: 'OWN_SEED', label: 'Own Seed'  },
-                ].map(s => {
+              <div style={{ width:1, height:28, background:'#e2e8f0', flexShrink:0 }}/>
+              <div style={{ display:'flex', gap:5, background:'white', borderRadius:10, border:'1px solid #e2e8f0', padding:4, flexWrap:'wrap', boxShadow:'0 1px 3px rgba(0,0,0,.05)' }}>
+                {[{ key:'ALL', label:'All seeds' },{ key:'HYBRID', label:'Hybrid' },{ key:'INBRED', label:'Inbred' },{ key:'OWN_SEED', label:'Own Seed' }].map(s => {
                   const cfg    = SEED_CFG[s.key];
                   const active = seedFilter === s.key;
                   return (
                     <button key={s.key} onClick={() => setSeedFilter(s.key)} style={{
-                      padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-                      background: active ? (cfg?.light || '#f0fdf4') : 'transparent',
-                      color:      active ? (cfg?.color || '#166534') : '#64748b',
-                      border:     active ? `1px solid ${cfg?.border || '#bbf7d0'}` : '1px solid transparent',
-                      cursor: 'pointer', transition: 'all .12s',
-                    }}>
-                      {s.label}
-                    </button>
+                      padding:'5px 12px', borderRadius:7, fontSize:12, fontWeight:600,
+                      background: active ? (cfg?.light||'#f0fdf4') : 'transparent',
+                      color:      active ? (cfg?.color||'#166534') : '#64748b',
+                      border:     active ? `1px solid ${cfg?.border||'#bbf7d0'}` : '1px solid transparent',
+                      cursor:'pointer', transition:'all .12s',
+                    }}>{s.label}</button>
                   );
                 })}
               </div>
@@ -264,82 +410,85 @@ const CropPhase = () => {
           );
         })()}
 
-        {/* ── KPI cards ── */}
-        <KpiCards kpi={kpi} />
+        {/* KPI tiles */}
+        <KpiCards kpi={kpi}/>
 
-        {/* ── Gantt ── */}
+        {/* Seed Distribution Chart (vertical bar, separate from Gantt) */}
+        <SeedDistributionChart distSummary={data?.dist_summary}/>
+
+        {/* Gantt (5 phases, no Distribution row, no encodings label) */}
         <GanttChart
           ganttData={data?.gantt}
-          distDates={data?.dist_dates}
-          season={season}
-          year={year}
+          distDates={null}
+          season={poll?.season || 'WET'}
+          year={poll?.year || new Date().getFullYear()}
           stdDays={data?.std_days}
           ganttAlert={ins?.gantt_alert}
           timelineMonths={data?.timeline_months}
         />
 
-        {/* ── Insights ── */}
+        {/* Key Insights */}
         {ins && (
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Key insights</div>
+            <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:10 }}>Key insights</div>
             <div className="cp-ins">
               {ins.most_active_phase?.phase && (
-                <InsightCard icon={<BarChart3 size={16} color={pc(ins.most_active_phase.phase)} />}
+                <InsightCard icon={<BarChart3 size={16} color={pc(ins.most_active_phase.phase)}/>}
                   title="Most active phase" value={ins.most_active_phase.label}
                   sub={`${ins.most_active_phase.count} farmers · ${ins.most_active_phase.pct}% of monitored`}
-                  accent={pc(ins.most_active_phase.phase)} bg={`${pc(ins.most_active_phase.phase)}12`} border={`${pc(ins.most_active_phase.phase)}33`} />
+                  accent={pc(ins.most_active_phase.phase)} bg={`${pc(ins.most_active_phase.phase)}12`} border={`${pc(ins.most_active_phase.phase)}33`}/>
               )}
               {ins.delay_alert?.count > 0 && (
-                <InsightCard icon={<AlertCircle size={16} color="#dc2626" />}
+                <InsightCard icon={<AlertCircle size={16} color="#dc2626"/>}
                   title="Delay alert" value={`${ins.delay_alert.count} delayed`}
                   sub={`Highest in ${ins.delay_alert.seed_label} · ${ins.delay_alert.total_delayed} total`}
-                  accent="#991b1b" bg="#fee2e2" border="#fca5a5" />
+                  accent="#991b1b" bg="#fee2e2" border="#fca5a5"/>
               )}
               {ins.risk_alert?.cause && (
-                <InsightCard icon={<AlertTriangle size={16} color="#f97316" />}
+                <InsightCard icon={<AlertTriangle size={16} color="#f97316"/>}
                   title="Risk alert" value={ins.risk_alert.cause}
                   sub={`${ins.risk_alert.count} cases · ${ins.risk_alert.pct}% of all damage`}
-                  accent="#c2410c" bg="#fff7ed" border="#fed7aa" />
+                  accent="#c2410c" bg="#fff7ed" border="#fed7aa"/>
               )}
               {ins.attention_required > 0 && (
-                <InsightCard icon={<Users size={16} color="#7c3aed" />}
+                <InsightCard icon={<Users size={16} color="#7c3aed"/>}
                   title="Attention required" value={`${ins.attention_required} farmers`}
                   sub="Delayed or damaged — need follow-up visit"
-                  accent="#5b21b6" bg="#faf5ff" border="#ddd6fe" />
+                  accent="#5b21b6" bg="#faf5ff" border="#ddd6fe"/>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Phase distribution + Delay ── */}
+        {/* Area by Seed + Delay side by side */}
         <div className="cp-two">
-          <PhaseDistribution data={data?.phase_distribution} />
-          <DelayChart data={data?.delay_by_seed} />
+          <AreaBySeedChart areaBySeed={data?.area_by_seed}/>
+          <DelayChart data={data?.delay_by_seed}/>
         </div>
 
-        {/* ── Damage ── */}
-        <DamageChart data={data?.cause_of_damage} />
+        {/* Damage */}
+        <DamageChart data={data?.cause_of_damage}/>
 
-        {/* ── Attention panel ── */}
-        <AttentionPanel data={data?.attention_list} />
+        {/* Attention panel */}
+        <AttentionPanel data={data?.attention_list}/>
 
-        {/* ── Std days reference ── */}
-        <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 14, padding: '16px 20px' }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
-            Standard days — {season === 'WET' ? 'Wet' : 'Dry'} Season {year}
+        {/* Std days reference */}
+        <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:14, padding:'16px 20px' }}>
+          <div style={{ fontSize:11, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.06em', marginBottom:12 }}>
+            Standard days — {poll?.season==='WET' ? 'Wet' : 'Dry'} Season {poll?.year}
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-            {Object.entries((data?.std_days?.[season]) || {}).map(([ph, d]) => (
-              <div key={ph} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ width: 9, height: 9, borderRadius: 2, background: pc(ph), flexShrink: 0 }} />
-                <span style={{ fontSize: 12, color: '#475569' }}>
-                  {ph === 'DISTRIBUTION' ? 'Seed dist.' : ph === 'ESTABLISHMENT' ? 'Establishment' : ph.charAt(0) + ph.slice(1).toLowerCase()}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:14 }}>
+            {Object.entries((data?.std_days?.[poll?.season||'WET']) || {}).map(([ph, d]) => (
+              <div key={ph} style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ width:9, height:9, borderRadius:2, background:pc(ph), flexShrink:0 }}/>
+                <span style={{ fontSize:12, color:'#475569' }}>
+                  {ph==='DISTRIBUTION'?'Seed dist.':ph==='ESTABLISHMENT'?'Establishment':ph.charAt(0)+ph.slice(1).toLowerCase()}
                 </span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{d}d</span>
+                <span style={{ fontSize:12, fontWeight:700, color:'#0f172a' }}>{d}d</span>
               </div>
             ))}
           </div>
-          <p style={{ fontSize: 10, color: '#94a3b8', margin: '8px 0 0', lineHeight: 1.5 }}>
+          <p style={{ fontSize:10, color:'#94a3b8', margin:'8px 0 0', lineHeight:1.5 }}>
             Seed Distribution encoded by Brgy President · All other phases encoded by AT
           </p>
         </div>

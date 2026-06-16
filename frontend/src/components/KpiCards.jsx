@@ -81,7 +81,7 @@ const KpiCards = ({ kpi }) => {
         <KpiCard
           icon={<Users size={16} color="#16a34a" />}
           value={fmtN(kpi?.total_farmers)}
-          label="Farmers monitored"
+          label="Active Monitoring Records"
           sub="this season"
         />
         <KpiCard
