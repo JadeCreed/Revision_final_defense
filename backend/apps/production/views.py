@@ -662,8 +662,10 @@ class BrgyReportPDFView(APIView):
             f"{poll_info.get('season_display', '')} {poll_info.get('year', '')}"
             if poll_info else 'All Seasons'
         )
+        
+        brgy_president_name = f"{request.user.first_name} {request.user.last_name}".strip() or 'Barangay President'  # noqa
+        brgy_president_role = f"Barangay President, Brgy. {barangay}"  # noqa
 
-        # ── Logo as base64 ─────────────────────────────────────────
         logo_b64 = ''
         logo_paths = [
             os.path.join(settings.BASE_DIR, '..', 'frontend', 'src', 'assets', 'logo.png'),
@@ -677,23 +679,7 @@ class BrgyReportPDFView(APIView):
             except Exception:
                 pass
 
-        logo_img = (
-            f'<img src="data:image/png;base64,{logo_b64}" '
-            f'style="width:64px;height:64px;border-radius:50%;object-fit:cover;" />'
-            if logo_b64 else
-            '<div style="width:64px;height:64px;border-radius:50%;background:#166534;'
-            'display:flex;align-items:center;justify-content:center;'
-            'color:white;font-size:10pt;font-weight:bold;">MAO</div>'
-        )
-
-        # ── Chart images ──────────────────────────────────────────
-        def chart_img(key):
-            data = charts.get(key, '')
-            if not data:
-                return ''
-            return f'<img src="data:image/png;base64,{data}" style="width:100%;height:auto;" />'
-
-        # ── Seed type rows ────────────────────────────────────────
+        # ── Seed type rows (split bags/kg into separate columns) ──
         seed_rows_html = ''
         for s in by_seed:
             if s['farmer_count'] == 0:
@@ -703,17 +689,26 @@ class BrgyReportPDFView(APIView):
                 'Near Target': '#0369a1',     'Below Target': '#b45309',
                 'Critical': '#b91c1c',
             }.get(s['tier'], '#64748b')
+            util_str = f"{s['avg_util_pct']}%" if s['avg_util_pct'] is not None else '—'
             seed_rows_html += f"""
             <tr>
-              <td>{s['label']}</td>
-              <td style="text-align:center">{s['farmer_count']}</td>
-              <td style="text-align:center">{s['seed_bags_received']} bags<br/><span style="font-size:7pt;color:#64748b">({s['seed_kg_received']:,} kg)</span></td>
-              <td style="text-align:center">{s['total_area_ha']} ha</td>
-              <td style="text-align:center">{s['expected_kg']:,.0f} kg</td>
-              <td style="text-align:center;font-weight:bold">{s['actual_kg']:,.0f} kg</td>
-              <td style="text-align:center;font-weight:bold;color:{tier_color}">{s['avg_util_pct'] if s['avg_util_pct'] is not None else '—'}{'%' if s['avg_util_pct'] is not None else ''}</td>
-              <td style="text-align:center;color:{tier_color};font-weight:bold">{s['tier']}</td>
+              <td class="left">{s['label']}</td>
+              <td>{s['farmer_count']}</td>
+              <td>{s['seed_bags_received']:,}</td>
+              <td>{s['seed_kg_received']:,} kg</td>
+              <td>{s['total_area_ha']} ha</td>
+              <td>{s['expected_kg']:,.0f}</td>
+              <td style="font-weight:bold">{s['actual_kg']:,.0f}</td>
+              <td style="font-weight:bold;color:{tier_color}">{util_str}</td>
+              <td style="color:{tier_color};font-weight:bold">{s['tier']}</td>
             </tr>"""
+
+        # ── Chart images ──────────────────────────────────────────
+        def chart_img(key):
+            data = charts.get(key, '')
+            if not data:
+                return ''
+            return f'<img src="data:image/png;base64,{data}" style="width:100%;height:auto;" />'
 
         # ── Harvest performance rows (top 15) ─────────────────────
         perf_rows_html = ''
@@ -751,6 +746,7 @@ class BrgyReportPDFView(APIView):
               <td>{phase_display.get(ph, ph)}</td>
               <td style="text-align:center">{cnt}</td>
               <td style="text-align:center">{pct}%</td>
+              <td></td>
             </tr>"""
 
         # ── Insights ──────────────────────────────────────────────
@@ -806,153 +802,167 @@ class BrgyReportPDFView(APIView):
 <meta charset="UTF-8" />
 <style>
   @page {{ size: A4; margin: 15mm 14mm; }}
-  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111827; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #111827; margin:0; padding:0; }}
 
-  /* ── HEADER ── */
-  .header {{ display:flex; align-items:center; gap:14px; padding-bottom:10px;
-             border-bottom:2.5px solid #166534; margin-bottom:12px; }}
-  .header-text {{ flex:1; }}
-  .header-agency {{ font-size:7.5pt; color:#166534; font-weight:bold;
-                    text-transform:uppercase; letter-spacing:.04em; }}
-  .header-title  {{ font-size:13pt; font-weight:bold; color:#0f172a; line-height:1.2; }}
+  /* ── HEADER (centered) ── */
+  .header {{ text-align:center; padding-bottom:10px; border-bottom:2.5px solid #166534; margin-bottom:12px; }}
+  .header-logo {{ margin-bottom:6px; }}
+  .header-logo img {{ width:70px; height:70px; border-radius:50%; object-fit:cover; }}
+  .header-logo-fallback {{ width:70px; height:70px; border-radius:50%; background:#166534; display:inline-block; line-height:70px; color:white; font-size:10pt; font-weight:bold; text-align:center; }}
+  .header-agency {{ font-size:7.5pt; color:#166534; font-weight:bold; text-transform:uppercase; }}
+  .header-title  {{ font-size:14pt; font-weight:bold; color:#0f172a; line-height:1.3; margin:3px 0; }}
   .header-sub    {{ font-size:8pt; color:#475569; margin-top:2px; }}
-  .season-badge  {{ display:inline-block; padding:3px 10px; border-radius:999px;
-                    background:#f0fdf4; border:1.5px solid #86efac;
-                    color:#166534; font-size:8pt; font-weight:bold; }}
+  .season-badge  {{ display:inline-block; padding:3px 12px; border-radius:999px; background:#f0fdf4; border:1.5px solid #86efac; color:#166534; font-size:8pt; font-weight:bold; margin-top:5px; }}
 
   /* ── SECTION TITLES ── */
-  .sec-title {{ font-size:8pt; font-weight:bold; color:#166534; text-transform:uppercase;
-                letter-spacing:.06em; margin:14px 0 6px; padding-bottom:3px;
-                border-bottom:1px solid #e2e8f0; }}
+  .sec-title {{ font-size:8pt; font-weight:bold; color:#166534; text-transform:uppercase; margin:14px 0 6px; padding-bottom:3px; border-bottom:1.5px solid #166534; }}
 
-  /* ── KPI GRID ── */
-  .kpi-grid {{ display:table; width:100%; border-collapse:collapse; }}
-  .kpi-cell {{ display:table-cell; width:16.6%; padding:8px 6px; border:1px solid #e2e8f0;
-               background:#f8fafc; text-align:center; vertical-align:middle; }}
-  .kpi-label {{ font-size:6.5pt; color:#94a3b8; text-transform:uppercase;
-                letter-spacing:.05em; font-weight:bold; }}
-  .kpi-value {{ font-size:13pt; font-weight:800; color:#14532d; margin-top:2px; line-height:1; }}
-  .kpi-sub   {{ font-size:6.5pt; color:#64748b; margin-top:1px; }}
+  /* ── KPI GRID (horizontal tiles using table) ── */
+  .kpi-table {{ width:100%; border-collapse:collapse; margin-bottom:12px; }}
+  .kpi-table td {{ width:16.6%; padding:8px 4px; border:1px solid #e2e8f0; background:#f8fafc; text-align:center; vertical-align:middle; }}
+  .kpi-label {{ font-size:6pt; color:#94a3b8; text-transform:uppercase; font-weight:bold; display:block; }}
+  .kpi-value {{ font-size:14pt; font-weight:800; color:#14532d; display:block; line-height:1.1; margin-top:2px; }}
+  .kpi-sub   {{ font-size:6pt; color:#64748b; display:block; margin-top:1px; }}
 
-  /* ── CHARTS SIDE BY SIDE ── */
-  .chart-row  {{ display:table; width:100%; border-collapse:collapse; margin-bottom:12px; }}
-  .chart-cell {{ display:table-cell; width:50%; padding:10px;
-                 border:1px solid #e2e8f0; background:white; vertical-align:top; }}
-  .chart-title {{ font-size:8pt; font-weight:bold; color:#0f172a; margin-bottom:6px; }}
-  .chart-sub   {{ font-size:6.5pt; color:#94a3b8; margin-bottom:8px; }}
+  /* ── PRODUCTION ANALYTICS (side by side bars) ── */
+  .analytics-row {{ width:100%; border-collapse:collapse; margin-bottom:12px; }}
+  .analytics-cell {{ width:50%; padding:10px 12px; border:1px solid #e2e8f0; background:white; vertical-align:top; }}
+  .chart-title {{ font-size:8pt; font-weight:bold; color:#0f172a; margin-bottom:3px; }}
+  .chart-sub   {{ font-size:6.5pt; color:#94a3b8; margin-bottom:8px; display:block; }}
+
+  /* bar chart rows */
+  .bar-label {{ font-size:7.5pt; font-weight:600; color:#374151; }}
+  .bar-value {{ font-size:7.5pt; font-weight:700; color:#0f172a; }}
+  .bar-track {{ height:9px; background:#f1f5f9; border-radius:99px; overflow:hidden; margin:3px 0 1px; }}
+  .bar-fill  {{ height:100%; border-radius:99px; }}
+  .bar-sub   {{ font-size:6.5pt; color:#94a3b8; }}
 
   /* ── TABLES ── */
-  table {{ width:100%; border-collapse:collapse; font-size:7.5pt; margin-bottom:10px; }}
-  th {{ background:#14532d; color:white; padding:5px 6px; font-size:7pt;
-        text-transform:uppercase; letter-spacing:.04em; text-align:left; }}
-  td {{ padding:5px 6px; border-bottom:1px solid #f1f5f9; color:#374151; vertical-align:middle; }}
-  tr:nth-child(even) td {{ background:#f8fafc; }}
+  table.data-table {{ width:100%; border-collapse:collapse; font-size:7.5pt; margin-bottom:10px; }}
+  table.data-table th {{ background:#14532d; color:white; padding:5px 6px; font-size:7pt; text-transform:uppercase; text-align:center; white-space:nowrap; }}
+  table.data-table td {{ padding:5px 6px; border-bottom:1px solid #f1f5f9; color:#374151; vertical-align:middle; text-align:center; }}
+  table.data-table td.left {{ text-align:left; }}
+  table.data-table tr:nth-child(even) td {{ background:#f8fafc; }}
 
-  /* ── CROP PHASE ── */
-  .phase-badge {{ display:inline-block; padding:2px 7px; border-radius:99px;
-                  font-size:6.5pt; font-weight:bold; background:#f0fdf4;
-                  color:#166534; border:1px solid #bbf7d0; }}
+  /* ── REMARKS TILES (horizontal) ── */
+  .remarks-row {{ width:100%; border-collapse:collapse; margin-bottom:10px; }}
+  .remarks-cell {{ width:33.3%; padding:10px 8px; text-align:center; vertical-align:middle; }}
+  .remarks-val {{ font-size:22pt; font-weight:800; line-height:1; display:block; }}
+  .remarks-lbl {{ font-size:6.5pt; font-weight:bold; text-transform:uppercase; display:block; margin-top:3px; }}
 
   /* ── INSIGHTS ── */
-  .insights-box {{ background:#f8fafc; border:1px solid #e2e8f0;
-                   border-radius:6px; padding:10px 12px; margin-top:10px; }}
-  .insights-title {{ font-size:7.5pt; font-weight:bold; color:#475569;
-                     text-transform:uppercase; letter-spacing:.06em; margin-bottom:7px; }}
+  .insights-box {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px 12px; margin-top:8px; }}
+  .insights-title {{ font-size:7.5pt; font-weight:bold; color:#475569; text-transform:uppercase; margin-bottom:7px; }}
+  .insight-row {{ display:block; margin-bottom:4px; font-size:8.5pt; color:#374151; line-height:1.5; }}
 
-  /* ── FOOTER ── */
-  .footer {{ margin-top:18px; padding-top:8px; border-top:1px solid #e2e8f0;
-             display:flex; justify-content:space-between; }}
-  .sig-block {{ text-align:center; width:30%; }}
-  .sig-name  {{ font-size:8.5pt; font-weight:bold; text-decoration:underline; }}
-  .sig-role  {{ font-size:7pt; color:#64748b; margin-top:2px; }}
+  /* ── SIGNATORIES (3-column table) ── */
+  .sig-table {{ width:100%; border-collapse:collapse; margin-top:20px; padding-top:10px; border-top:1px solid #e2e8f0; }}
+  .sig-table td {{ width:33.3%; text-align:center; vertical-align:bottom; padding:0 8px; }}
+  .sig-space {{ height:32px; display:block; }}
+  .sig-name  {{ font-size:8.5pt; font-weight:bold; text-decoration:underline; display:block; }}
+  .sig-role  {{ font-size:7pt; color:#64748b; display:block; margin-top:2px; }}
 </style>
 </head>
 <body>
 
-<!-- ══ HEADER ══════════════════════════════════════════════════ -->
+<!-- ══ HEADER (CENTERED) ══════════════════════════════════════ -->
 <div class="header">
-  {logo_img}
-  <div class="header-text">
-    <div class="header-agency">Municipal Agriculture Office — Lucban, Quezon</div>
-    <div class="header-title">Barangay {barangay} — Agricultural Season Report</div>
-    <div class="header-sub">Rice Program Management System (AGRICE) &nbsp;·&nbsp; Prepared by Barangay President</div>
+  <div class="header-logo">
+    {f'<img src="data:image/png;base64,{logo_b64}" style="width:70px;height:70px;border-radius:50%;object-fit:cover;" />' if logo_b64 else '<span class="header-logo-fallback">MAO</span>'}
   </div>
-  <div><span class="season-badge">{season_label}</span></div>
+  <div class="header-agency">Municipal Agriculture Office &mdash; Lucban, Quezon</div>
+  <div class="header-title">Barangay {barangay} &mdash; Agricultural Season Report</div>
+  <div class="header-sub">Rice Program Management System (AGRICE) &nbsp;&middot;&nbsp; Prepared by: <strong>{brgy_president_name}</strong> &nbsp;&middot;&nbsp; {brgy_president_role}</div>
+  <span class="season-badge">{season_label}</span>
 </div>
 
-<!-- ══ KPI TILES ════════════════════════════════════════════════ -->
+<!-- ══ KPI TILES (HORIZONTAL) ══════════════════════════════════ -->
 <div class="sec-title">Summary Overview</div>
-<div class="kpi-grid">
-  <div class="kpi-cell">
-    <div class="kpi-label">Farmers Harvested</div>
-    <div class="kpi-value">{summary.get('total_farmers', 0)}</div>
-    <div class="kpi-sub">With harvest records</div>
-  </div>
-  <div class="kpi-cell">
-    <div class="kpi-label">Beneficiaries</div>
-    <div class="kpi-value">{summary.get('total_beneficiaries', 0)}</div>
-    <div class="kpi-sub">Seed recipients</div>
-  </div>
-  <div class="kpi-cell">
-    <div class="kpi-label">Bags Received</div>
-    <div class="kpi-value">{summary.get('total_dist_bags', 0)}</div>
-    <div class="kpi-sub">{summary.get('total_dist_kg', 0):,} kg total</div>
-  </div>
-  <div class="kpi-cell">
-    <div class="kpi-label">Total Production</div>
-    <div class="kpi-value">{summary.get('total_production_mt', 0)} MT</div>
-    <div class="kpi-sub">All seed types</div>
-  </div>
-  <div class="kpi-cell">
-    <div class="kpi-label">Avg Yield</div>
-    <div class="kpi-value">{summary.get('avg_yield_t_ha', 0)} t/ha</div>
-    <div class="kpi-sub">Per hectare</div>
-  </div>
-  <div class="kpi-cell">
-    <div class="kpi-label">Achievement</div>
-    <div class="kpi-value" style="color:{'#166534' if (summary.get('avg_util_pct') or 0) >= 80 else '#b45309'}">{summary.get('avg_util_pct', '—')}{'%' if summary.get('avg_util_pct') is not None else ''}</div>
-    <div class="kpi-sub">{summary.get('overall_tier', 'N/A')}</div>
-  </div>
-</div>
+<table class="kpi-table">
+  <tr>
+    <td>
+      <span class="kpi-label">Farmers Harvested</span>
+      <span class="kpi-value">{summary.get('total_farmers', 0)}</span>
+      <span class="kpi-sub">With harvest records</span>
+    </td>
+    <td>
+      <span class="kpi-label">Beneficiaries</span>
+      <span class="kpi-value">{summary.get('total_beneficiaries', 0)}</span>
+      <span class="kpi-sub">Seed recipients</span>
+    </td>
+    <td>
+      <span class="kpi-label">Bags Received</span>
+      <span class="kpi-value">{summary.get('total_dist_bags', 0)}</span>
+      <span class="kpi-sub">{summary.get('total_dist_kg', 0):,} kg total</span>
+    </td>
+    <td>
+      <span class="kpi-label">Total Production</span>
+      <span class="kpi-value">{summary.get('total_production_mt', 0)} MT</span>
+      <span class="kpi-sub">All seed types</span>
+    </td>
+    <td>
+      <span class="kpi-label">Avg Yield</span>
+      <span class="kpi-value">{summary.get('avg_yield_t_ha', 0)} t/ha</span>
+      <span class="kpi-sub">Per hectare</span>
+    </td>
+    <td>
+      <span class="kpi-label">Achievement</span>
+      <span class="kpi-value" style="color:{'#166534' if (summary.get('avg_util_pct') or 0) >= 80 else '#b45309'}">{summary.get('avg_util_pct', '—')}{'%' if summary.get('avg_util_pct') is not None else ''}</span>
+      <span class="kpi-sub">{summary.get('overall_tier', 'N/A')}</span>
+    </td>
+  </tr>
+</table>
 
-<!-- ══ CHARTS: Production + Achievement ════════════════════════ -->
+<!-- ══ PRODUCTION ANALYTICS (SIDE BY SIDE) ══════════════════════ -->
 <div class="sec-title">Production Analytics</div>
-<div class="chart-row">
-  <div class="chart-cell">
-    <div class="chart-title">Production by Seed Type (MT)</div>
-    <div class="chart-sub">Total harvest output per seed program</div>
-    {seed_chart_bars if seed_chart_bars else '<p style="color:#94a3b8;font-size:8pt">No harvest data yet.</p>'}
-  </div>
-  <div class="chart-cell">
-    <div class="chart-title">Yield Achievement by Seed Type (%)</div>
-    <div class="chart-sub">Achievement rate vs DA target yield</div>
-    {achieve_bars if achieve_bars else '<p style="color:#94a3b8;font-size:8pt">No harvest data yet.</p>'}
-  </div>
-</div>
+<table class="analytics-row">
+  <tr>
+    <td class="analytics-cell">
+      <div class="chart-title">Production by Seed Type (MT)</div>
+      <span class="chart-sub">Total harvest output per seed program</span>
+      {seed_chart_bars if seed_chart_bars else '<p style="color:#94a3b8;font-size:8pt;text-align:center">No harvest data yet.</p>'}
+    </td>
+    <td class="analytics-cell">
+      <div class="chart-title">Yield Achievement by Seed Type (%)</div>
+      <span class="chart-sub">Achievement rate vs DA target yield</span>
+      {achieve_bars if achieve_bars else '<p style="color:#94a3b8;font-size:8pt;text-align:center">No harvest data yet.</p>'}
+    </td>
+  </tr>
+</table>
 
-<!-- ══ SEED ANALYTICS TABLE ════════════════════════════════════ -->
+<!-- ══ SEED PROGRAM ANALYTICS TABLE ══════════════════════════════ -->
 <div class="sec-title">Seed Program Analytics</div>
-<table>
+<table class="data-table">
   <thead>
     <tr>
-      <th>Seed Type</th><th>Farmers</th><th>Bags / Kg Received</th>
-      <th>Area (ha)</th><th>Expected (kg)</th><th>Actual (kg)</th>
-      <th>Achievement</th><th>Status</th>
+      <th style="text-align:left">Seed Type</th>
+      <th>Farmers</th>
+      <th>Bags Received</th>
+      <th>Kg Received</th>
+      <th>Area (ha)</th>
+      <th>Expected (kg)</th>
+      <th>Actual (kg)</th>
+      <th>Achievement</th>
+      <th>Status</th>
     </tr>
   </thead>
   <tbody>
-    {seed_rows_html if seed_rows_html else '<tr><td colspan="8" style="text-align:center;color:#94a3b8">No data available.</td></tr>'}
+    {seed_rows_html if seed_rows_html else '<tr><td colspan="9" style="text-align:center;color:#94a3b8">No data available.</td></tr>'}
   </tbody>
 </table>
 
-<!-- ══ HARVEST PERFORMANCE ══════════════════════════════════════ -->
+<!-- ══ HARVEST PERFORMANCE TABLE ═════════════════════════════════ -->
 <div class="sec-title">Harvest Performance (Expected vs Actual)</div>
-<table>
+<table class="data-table">
   <thead>
     <tr>
-      <th>Farmer</th><th>Seed Type</th><th>Area (ha)</th>
-      <th>Expected (kg)</th><th>Actual (kg)</th>
-      <th>Achievement</th><th>Status</th>
+      <th style="text-align:left">Farmer</th>
+      <th>Seed Type</th>
+      <th>Area (ha)</th>
+      <th>Expected (kg)</th>
+      <th>Actual (kg)</th>
+      <th>Achievement</th>
+      <th>Status</th>
     </tr>
   </thead>
   <tbody>
@@ -960,73 +970,87 @@ class BrgyReportPDFView(APIView):
   </tbody>
 </table>
 
-<!-- ══ CROP PHASE MONITORING ════════════════════════════════════ -->
+<!-- ══ CROP PHASE MONITORING ═════════════════════════════════════ -->
 <div class="sec-title">Crop Phase Monitoring</div>
-<div class="chart-row">
-  <div class="chart-cell" style="width:40%">
-    <div class="chart-title">Phase Breakdown</div>
-    <table style="margin-bottom:0">
-      <thead><tr><th>Phase</th><th>Count</th><th>Share</th></tr></thead>
-      <tbody>
-        {phase_rows_html if phase_rows_html else '<tr><td colspan="3" style="color:#94a3b8;text-align:center">No monitoring data.</td></tr>'}
-      </tbody>
-    </table>
+<table class="data-table" style="margin-top:6px;margin-bottom:0; width:100%;">
+  <thead>
+    <tr>
+      <th style="text-align:left">Phase</th>
+      <th>Count</th>
+      <th>Share</th>
+      <th>Remark</th>
+    </tr>
+  </thead>
+  <tbody>
+    {phase_rows_html if phase_rows_html else '<tr><td colspan="4" style="color:#94a3b8;text-align:center">No monitoring data.</td></tr>'}
+  </tbody>
+</table>
+<div style="display:flex;justify-content:space-between;margin-top:12px;gap:6px;">
+  <div style="flex:1;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px;text-align:center;">
+    <div style="font-size:22pt;font-weight:800;color:#b45309">{crop_phase.get('delayed_count', 0)}</div>
+    <div style="font-size:7pt;font-weight:bold;color:#b45309;">Delayed</div>
   </div>
-  <div class="chart-cell" style="width:60%">
-    <div class="chart-title">Remarks</div>
-    <div style="display:flex;gap:12px;margin-top:6px;">
-      <div style="text-align:center;background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:10px 18px;">
-        <div style="font-size:18pt;font-weight:800;color:#b45309">{crop_phase.get('delayed_count', 0)}</div>
-        <div style="font-size:7pt;font-weight:bold;color:#b45309;text-transform:uppercase">Delayed</div>
-      </div>
-      <div style="text-align:center;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 18px;">
-        <div style="font-size:18pt;font-weight:800;color:#b91c1c">{crop_phase.get('damaged_count', 0)}</div>
-        <div style="font-size:7pt;font-weight:bold;color:#b91c1c;text-transform:uppercase">Damaged</div>
-      </div>
-      <div style="text-align:center;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 18px;">
-        <div style="font-size:18pt;font-weight:800;color:#166534">{crop_phase.get('total_monitored', 0)}</div>
-        <div style="font-size:7pt;font-weight:bold;color:#166534;text-transform:uppercase">Total Monitored</div>
-      </div>
-    </div>
+  <div style="flex:1;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px;text-align:center;">
+    <div style="font-size:22pt;font-weight:800;color:#b91c1c">{crop_phase.get('damaged_count', 0)}</div>
+    <div style="font-size:7pt;font-weight:bold;color:#b91c1c;">Damaged</div>
+  </div>
+  <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;text-align:center;">
+    <div style="font-size:22pt;font-weight:800;color:#166534">{crop_phase.get('total_monitored', 0)}</div>
+    <div style="font-size:7pt;font-weight:bold;color:#166534;">Total Monitored</div>
   </div>
 </div>
 
-<!-- ══ INSIGHTS ═════════════════════════════════════════════════ -->
+<!-- ══ KEY INSIGHTS ══════════════════════════════════════════════ -->
 <div class="insights-box">
   <div class="insights-title">Key Insights</div>
   {insights_html if insights_html else '<p style="color:#94a3b8;font-size:8pt">No insights yet.</p>'}
 </div>
 
-<!-- ══ SIGNATORIES ══════════════════════════════════════════════ -->
-<div class="footer">
-  <div class="sig-block">
-    <div style="height:30px"></div>
-    <div class="sig-name">RANDY F. LEONIDO</div>
-    <div class="sig-role">Agricultural Technician</div>
-  </div>
-  <div class="sig-block">
-    <div style="height:30px"></div>
-    <div class="sig-name">JOANNA LYNN P. GONZALES</div>
-    <div class="sig-role">OIC Municipal Agriculturist</div>
-  </div>
-  <div class="sig-block">
-    <div style="height:30px"></div>
-    <div class="sig-name">Barangay President, Brgy. {barangay}</div>
-    <div class="sig-role">Noted by</div>
-  </div>
-</div>
+<!-- ══ SIGNATORIES (LEFT · CENTER · RIGHT) ═══════════════════════ -->
+<table class="sig-table">
+  <tr>
+    <td style="text-align:left">
+      <span class="sig-space"></span>
+      <span class="sig-name">RANDY F. LEONIDO</span>
+      <span class="sig-role">Agricultural Technician</span>
+    </td>
+    <td style="text-align:center">
+      <span class="sig-space"></span>
+      <span class="sig-name">JOANNA LYNN P. GONZALES</span>
+      <span class="sig-role">OIC Municipal Agriculturist</span>
+    </td>
+    <td style="text-align:right">
+      <span class="sig-space"></span>
+      <span class="sig-name">{brgy_president_name}</span>
+      <span class="sig-role">Noted by &nbsp;&middot;&nbsp; Barangay President, Brgy. {barangay}</span>
+    </td>
+  </tr>
+</table>
 
 </body>
 </html>"""
 
         buffer = BytesIO()
+        error_buffer = BytesIO()
         try:
-            pisa_status = pisa.CreatePDF(html_content, dest=buffer)
+            pisa_status = pisa.CreatePDF(
+                html_content, dest=buffer, err=error_buffer
+            )
         except Exception as exc:
-            return Response({'error': 'PDF generation failed.', 'detail': str(exc)}, status=500)
+            import traceback
+            return Response({
+                'error': 'PDF generation failed.',
+                'detail': str(exc),
+                'traceback': traceback.format_exc(),
+            }, status=500)
 
         if pisa_status.err:
-            return Response({'error': 'PDF generation failed.'}, status=500)
+            error_buffer.seek(0)
+            return Response({
+                'error': 'PDF generation failed.',
+                'pisa_errors': pisa_status.err,
+                'pisa_log': error_buffer.read().decode('utf-8', errors='ignore'),
+            }, status=500)
 
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')

@@ -208,6 +208,17 @@ const BrgyReports = () => {
         { poll_id: pollId, charts: {} },
         { responseType: 'blob' }
       );
+
+      // Check if response is JSON error (not PDF)
+      const contentType = response.headers?.['content-type'] || '';
+      if (contentType.includes('application/json')) {
+        const text = await response.data.text();
+        const payload = JSON.parse(text);
+        console.error('PDF error detail:', payload);
+        pushToast(payload.error || 'PDF export failed.', 'error');
+        return;
+      }
+
       const url  = window.URL.createObjectURL(response.data);
       const link = document.createElement('a');
       link.href  = url;
@@ -219,7 +230,22 @@ const BrgyReports = () => {
       setShowExport(false);
       pushToast('PDF exported successfully!');
     } catch (err) {
-      pushToast(err?.response?.data?.error || 'PDF export failed.', 'error');
+      // Try to read the blob as text to get the error
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const payload = JSON.parse(text);
+          console.error('PDF backend error:', payload);
+          console.error('Traceback:', payload.traceback);
+          pushToast(payload.error || 'PDF export failed.', 'error');
+        } catch {
+          console.error('Raw error blob:', err);
+          pushToast('PDF export failed.', 'error');
+        }
+      } else {
+        console.error('PDF export error:', err);
+        pushToast(err?.message || 'PDF export failed.', 'error');
+      }
     } finally {
       setExporting(false);
     }
