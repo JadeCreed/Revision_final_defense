@@ -468,8 +468,13 @@ const BPDashboard = () => {
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <p style={{ fontWeight: 800, fontSize: '0.875rem', color: tagColor, margin: 0 }}>
-                    {alloc.seed_type_name}{alloc.variety_name ? ` (${alloc.variety_name})` : ''}{' '}
-                    — <span style={{ fontSize: '1rem' }}>{alloc.allocated_bags}</span> seed bags
+                    {alloc.seed_type_name}{alloc.variety_name ? ` (${alloc.variety_name})` : ''}
+                  </p>
+                  {/* Prominent bag count with kg — e.g. "1 bag (7.5kg)" */}
+                  <p style={{ margin: '0.2rem 0 0', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: tagColor, lineHeight: 1 }}>
+                      {alloc.bag_label || `${alloc.allocated_bags} bag${alloc.allocated_bags !== 1 ? 's' : ''}`}
+                    </span>
                   </p>
                   <p style={{ fontSize: '0.78rem', color: tagColor, margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
                     <span style={{
@@ -487,7 +492,6 @@ const BPDashboard = () => {
                     </span>
                     <span style={{ display: 'block', marginTop: '0.15rem' }}>
                       {alloc.farmer_count} farmer{alloc.farmer_count !== 1 ? 's' : ''} · {alloc.total_hectares} ha
-                      {' · '}{isHybrid ? '1 bag/ha (15kg)' : '2 bags/ha (20kg)'}
                     </span>
                     <span style={{ display: 'block', fontSize: '0.72rem', marginTop: '0.1rem' }}>
                       {alloc.season_display} {alloc.year}

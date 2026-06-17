@@ -1,3 +1,4 @@
+import math
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -386,29 +387,50 @@ def brgy_my_seed_allocation_view(request):
         if total_ha <= 0:
             continue
 
-        allocated_bags = round(total_ha * 1) if is_hybrid else round(total_ha * 2)
+        # ── Seed bag computation with exact kg tracking ──
+        # Hybrid:  1 bag = 15kg, 1 bag per ha
+        #          0.5 ha = 0.5 bag = 7.5kg
+        # Inbred:  1 bag = 20kg, 2 bags per ha
+        #          0.5 ha = 1 bag = 20kg (minimum 1 bag, ceiling)
+        if is_hybrid:
+            # Exact decimal bags for accurate kg display
+            allocated_bags_exact = total_ha * 1.0          # e.g. 0.5 ha → 0.5 bags
+            allocated_bags_kg    = round(allocated_bags_exact * 15, 2)  # e.g. 0.5 × 15 = 7.5 kg
+            # Physical bags: ceil so BRGY receives enough (min 1)
+            allocated_bags       = max(1, math.ceil(allocated_bags_exact)) if allocated_bags_exact < 1 else int(allocated_bags_exact)
+        else:
+            # Inbred: 2 bags per ha, ceil for partial ha, minimum 1 bag
+            allocated_bags_exact = total_ha * 2.0          # e.g. 0.5 ha → 1.0 bags
+            allocated_bags       = max(1, math.ceil(allocated_bags_exact))
+            allocated_bags_kg    = round(allocated_bags * 20, 2)        # e.g. 1 × 20 = 20 kg
+
+        # Format display string: "1 bag (7.5kg)" or "2 bags (15kg)"
+        bag_label = f"{allocated_bags} bag{'s' if allocated_bags != 1 else ''} ({allocated_bags_kg}kg)"
+
         existing_alloc = BrgyAllocation.objects.filter(
             barangay=barangay,
             delivery=delivery,
         ).first()
 
         result.append({
-            'delivery_id': delivery.id,
-            'seed_type_id': seed_type.id,
-            'seed_type_name': seed_type.name,
-            'variety_id': delivery.variety_id,
-            'variety_name': delivery.variety.name if delivery.variety else '',
-            'is_hybrid': is_hybrid,
-            'season': season,
-            'season_display': dict([('WET', 'Wet Season'), ('DRY', 'Dry Season')]).get(season, season),
-            'year': year,
-            'delivery_date': str(delivery.delivery_date),
-            'total_hectares': round(total_ha, 2),
-            'farmer_count': farmer_count,
-            'allocated_bags': allocated_bags,
-            'bag_weight_kg': 15 if is_hybrid else 20,
-            'alloc_status': existing_alloc.status if existing_alloc else 'PENDING',
-            'alloc_id': existing_alloc.id if existing_alloc else None,
+            'delivery_id':       delivery.id,
+            'seed_type_id':      seed_type.id,
+            'seed_type_name':    seed_type.name,
+            'variety_id':        delivery.variety_id,
+            'variety_name':      delivery.variety.name if delivery.variety else '',
+            'is_hybrid':         is_hybrid,
+            'season':            season,
+            'season_display':    dict([('WET', 'Wet Season'), ('DRY', 'Dry Season')]).get(season, season),
+            'year':              year,
+            'delivery_date':     str(delivery.delivery_date),
+            'total_hectares':    round(total_ha, 2),
+            'farmer_count':      farmer_count,
+            'allocated_bags':    allocated_bags,
+            'allocated_bags_kg': allocated_bags_kg,
+            'bag_label':         bag_label,
+            'bag_weight_kg':     15 if is_hybrid else 20,
+            'alloc_status':      existing_alloc.status if existing_alloc else 'PENDING',
+            'alloc_id':          existing_alloc.id if existing_alloc else None,
             'already_confirmed': existing_alloc.status == 'CONFIRMED' if existing_alloc else False,
         })
 
@@ -426,13 +448,22 @@ def brgy_confirm_allocation_view(request):
     if not all([barangay, delivery_id, allocated_bags is not None]):
         return Response({'error': 'Missing required fields.'}, status=400)
 
+    # Validate allocated_bags is a positive integer
+    try:
+        allocated_bags_int = int(allocated_bags)
+    except (TypeError, ValueError):
+        return Response({'error': 'Invalid allocated bags value.'}, status=400)
+
+    if allocated_bags_int <= 0:
+        return Response({'error': 'Allocated bags must be greater than zero.'}, status=400)
+
     delivery = get_object_or_404(SeedDelivery, pk=delivery_id)
 
     existing = BrgyAllocation.objects.filter(delivery=delivery, barangay=barangay).first()
     if existing:
         if existing.status == 'CONFIRMED':
             return Response({'error': 'Already confirmed.'}, status=400)
-        existing.allocated_bags = int(allocated_bags)
+        existing.allocated_bags = allocated_bags_int
         existing.status = 'CONFIRMED'
         existing.confirmed_by = request.user
         existing.date_confirmed = timezone.now().date()
@@ -442,11 +473,11 @@ def brgy_confirm_allocation_view(request):
         alloc = BrgyAllocation.objects.create(
             delivery=delivery,
             barangay=barangay,
-            allocated_bags=int(allocated_bags),
+            allocated_bags=allocated_bags_int,
             status='CONFIRMED',
             confirmed_by=request.user,
             date_confirmed=timezone.now().date(),
-            notes=f"Auto-confirmed by {request.user.get_full_name()} based on {allocated_bags} bags computed from beneficiary hectares.",
+            notes=f"Auto-confirmed by {request.user.get_full_name()} based on {allocated_bags_int} bags computed from beneficiary hectares.",
         )
 
     SeedDeliveryAudit.objects.create(

@@ -950,6 +950,31 @@ export default function SeedInventory() {
       };
     });
 
+    // ── VALIDATION: Block pag-save ng variety na already DELIVERED
+    // sa same season + year — hindi pwedeng mag-duplicate
+    const deliveredConflicts = [];
+    for (const entry of entries) {
+      const allExistingEntries = schedules.flatMap(s => s.entries);
+      const conflict = allExistingEntries.find(existing =>
+        String(existing.seedTypeDbId) === String(entry.seedTypeDbId) &&
+        String(existing.varietyId) === String(entry.varietyId) &&
+        existing.season === entry.season &&
+        String(existing.year) === String(entry.year) &&
+        existing.status === 'DELIVERED'
+      );
+      if (conflict) {
+        deliveredConflicts.push(
+          `${entry.seedTypeName} — ${entry.varietyName} (${entry.season === 'WET' ? 'Wet' : 'Dry'} Season ${entry.year}) is already DELIVERED.`
+        );
+      }
+    }
+
+    if (deliveredConflicts.length > 0) {
+      showToast('error', `Cannot schedule: ${deliveredConflicts[0]} Create a new season instead.`);
+      setScheduleSaving(false);
+      return;
+    }
+
     let updated;
     const firstEntry = entries[0];
     const existingSchedule = schedules.find(s =>
@@ -1364,7 +1389,7 @@ export default function SeedInventory() {
         </div>
       )}
 
-      {/* ══ HISTORY VIEW ══ */}
+        
       {view === 'history' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
@@ -1799,17 +1824,21 @@ export default function SeedInventory() {
                             const vKey = `${seedTypeKey}::${v.id}::${v.name}`;
                             const season = fs.season || '';
                             const year = fs.year || new Date().getFullYear();
-                            const isScheduled = !!scheduleForms[vKey] || schedules.some(schedule =>
-                              schedule.entries.some(entry =>
-                                String(entry.seedTypeDbId) === String(fs.seed_type?.id) &&
-                                String(entry.varietyId) === String(v.id) &&
-                                entry.season === season &&
-                                Number(entry.year) === Number(year)
-                              )
+                            const existingEntry = schedules.flatMap(s => s.entries).find(entry =>
+                              String(entry.seedTypeDbId) === String(fs.seed_type?.id) &&
+                              String(entry.varietyId) === String(v.id) &&
+                              entry.season === season &&
+                              Number(entry.year) === Number(year)
                             );
+                            const isDelivered = existingEntry?.status === 'DELIVERED';
+                            const isScheduled = !!scheduleForms[vKey] || !!existingEntry;
                             return (
                               <button key={v.id} type="button"
                                 onClick={() => {
+                                  if (isDelivered) {
+                                    showToast('error', `${v.name} is already DELIVERED for ${season === 'WET' ? 'Wet' : 'Dry'} Season ${year}. Cannot create duplicate — create a new season instead.`);
+                                    return;
+                                  }
                                   if (isScheduled) {
                                     showToast('error', `${v.name} is already encoded. Use the Edit button on the variety card to update it.`);
                                     return;
@@ -1830,10 +1859,12 @@ export default function SeedInventory() {
                                   }
                                   setScheduleErrors(prev => ({ ...prev, [vKey]: {} }));
                                 }}
-                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isScheduled ? '#d1d5db' : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isScheduled ? '#f3f4f6' : tagBg, color: isScheduled ? '#9ca3af' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: isScheduled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s', opacity: isScheduled ? 0.75 : 1 }}>
-                                {isScheduled && <CheckCircle size={13} color="#9ca3af" />}
+                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isDelivered ? '#fca5a5' : isScheduled ? '#d1d5db' : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isDelivered ? '#fee2e2' : isScheduled ? '#f3f4f6' : tagBg, color: isDelivered ? '#dc2626' : isScheduled ? '#9ca3af' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: (isDelivered || isScheduled) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s', opacity: (isDelivered || isScheduled) ? 0.75 : 1 }}>
+                                {isDelivered && <CheckCircle size={13} color="#dc2626" />}
+                                {!isDelivered && isScheduled && <CheckCircle size={13} color="#9ca3af" />}
                                 {v.name}
-                                {isScheduled && <span style={{ fontSize: '0.65rem' }}>· already encoded</span>}
+                                {isDelivered && <span style={{ fontSize: '0.65rem' }}>· already delivered</span>}
+                                {!isDelivered && isScheduled && <span style={{ fontSize: '0.65rem' }}>· already encoded</span>}
                               </button>
                             );
                           })}
