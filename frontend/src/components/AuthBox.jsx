@@ -7,7 +7,6 @@ import logo from '../assets/logo.png';
 
 const ROLE_ROUTES = { ADMIN: '/admin', FARMER: '/farmer', AT: '/at', BRGY: '/brgy' };
 
-// ── Tab styles (inline, hiwalay sa CSS file mo para hindi magkasalungat) ──
 const tabsContainerStyle = {
   display: 'flex',
   gap: '0px',
@@ -23,18 +22,14 @@ const baseTabStyle = {
   fontWeight: 600,
   border: 'none',
   borderBottom: '2px solid transparent',
-  marginBottom: '-2px',          // overlap yung border ng container
+  marginBottom: '-2px',
   background: 'transparent',
   cursor: 'pointer',
   transition: 'color 0.2s ease, border-color 0.2s ease',
   letterSpacing: '0.01em',
 };
 
-const activeTabStyle = {
-  ...baseTabStyle,
-  color: '#2d6a2d',
-  borderBottom: '2px solid #2d6a2d',
-};
+const activeTabStyle = { ...baseTabStyle, color: '#2d6a2d', borderBottom: '2px solid #2d6a2d' };
 const inactiveTabStyle = { ...baseTabStyle, color: '#9ca3af' };
 
 const AuthBox = () => {
@@ -42,35 +37,30 @@ const AuthBox = () => {
   const [loginType, setLoginType] = useState('email'); // 'email' | 'contact'
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState('');
+
+  // Format validation lang ito — ito lang ang dapat nag-BLOCK ng submit
   const [fieldErrors, setFieldErrors] = useState({ login: '', password: '' });
+
+  // Pure visual red-border indicator pag-na-401/400 — HINDI nag-block ng submit
+  const [submitErrorFields, setSubmitErrorFields] = useState({ login: false, password: false });
+
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  // Real-time field validation — same rules mo, tab-aware lang ngayon
   const validateLoginField = (value, type) => {
     const trimmed = value.trim();
     if (!trimmed) return '';
 
     if (type === 'email') {
-      if (!trimmed.includes('@')) {
-        return ''; // hayaan munang mag-type
-      }
+      if (!trimmed.includes('@')) return '';
       if (!trimmed.endsWith('@gmail.com')) {
         return 'Only Gmail addresses are accepted (e.g. juan@gmail.com)';
       }
     } else {
-      // contact number
-      if (!/^\d+$/.test(value)) {
-        return '';
-      }
-      if (!value.startsWith('09')) {
-        return 'Contact number must start with 09';
-      }
-      if (value.length < 11) {
-        return 'Contact number must be exactly 11 digits';
-      }
-      if (value.length > 11) {
+      if (!/^\d+$/.test(value)) return '';
+      if (!value.startsWith('09')) return 'Contact number must start with 09';
+      if (value.length < 11 || value.length > 11) {
         return 'Contact number must be exactly 11 digits';
       }
     }
@@ -82,6 +72,7 @@ const AuthBox = () => {
     setLoginType(type);
     setForm((prev) => ({ ...prev, login: '' }));
     setFieldErrors((prev) => ({ ...prev, login: '' }));
+    setSubmitErrorFields({ login: false, password: false });
     setError('');
   };
 
@@ -90,23 +81,19 @@ const AuthBox = () => {
 
     if (name === 'login') {
       let nextValue = value;
-
-      // Contact Number tab: digits-only ang tanggapin
       if (loginType === 'contact') {
         nextValue = value.replace(/\D/g, '');
       }
-
       const fieldError = validateLoginField(nextValue, loginType);
-      // I-clear yung 'invalid' red border pag nag-type ulit
-      setFieldErrors({ login: fieldError, password: '' });
+      setFieldErrors((prev) => ({ ...prev, login: fieldError }));
+      setSubmitErrorFields((prev) => ({ ...prev, login: false })); // i-clear red border pag nag-type ulit
       setForm({ ...form, login: nextValue });
       setError('');
       return;
     }
 
-    // Para sa password field — i-clear din yung red border kapag nag-type ulit
     if (name === 'password') {
-      setFieldErrors((prev) => ({ ...prev, password: '' }));
+      setSubmitErrorFields((prev) => ({ ...prev, password: false })); // i-clear red border pag nag-type ulit
     }
 
     setForm({
@@ -141,6 +128,7 @@ const AuthBox = () => {
         return;
       }
 
+      // Format validation lang ito — hindi na sentinel string
       if (fieldErrors.login) {
         setError('Please fix the errors below before submitting');
         setLoading(false);
@@ -159,10 +147,8 @@ const AuthBox = () => {
       const status = err.response?.status;
       const errorMsg = err.response?.data?.error;
 
-      // ── Red border sa PAREHO kapag mali ang credentials (401/400) ──
-      // Hindi natin sasabihin kung alin ang mali — security best practice
       if (status === 401 || status === 400) {
-        setFieldErrors({ login: 'invalid', password: 'invalid' }); // 'invalid' = trigger lang ng red border
+        setSubmitErrorFields({ login: true, password: true }); // red border lang, hindi na nag-block ng future submit
       }
 
       if (status === 429) {
@@ -183,11 +169,8 @@ const AuthBox = () => {
 
   return (
     <div className="authbox-outer">
-
-      {/* ── FLOATING WHITE CARD ── */}
       <div className="authbox-card">
 
-        {/* LOGO — hindi ginalaw */}
         <div className="authbox-logo-wrap">
           <img src={logo} alt="AGRICE Logo" className="authbox-logo" />
         </div>
@@ -205,10 +188,8 @@ const AuthBox = () => {
         )}
 
         <form onSubmit={handleSubmit} noValidate>
-          {/* EMAIL/CONTACT — may TABS na ngayon */}
           <div className="authbox-field">
 
-            {/* TABS */}
             <div style={tabsContainerStyle}>
               <button
                 type="button"
@@ -245,7 +226,7 @@ const AuthBox = () => {
                 </svg>
               )}
               <input
-                className={`authbox-input${fieldErrors.login ? ' authbox-input--error' : ''}`}
+                className={`authbox-input${(fieldErrors.login || submitErrorFields.login) ? ' authbox-input--error' : ''}`}
                 type="text"
                 name="login"
                 placeholder={loginType === 'email' ? 'Enter your email' : 'Enter your contact number'}
@@ -257,14 +238,13 @@ const AuthBox = () => {
                 maxLength={loginType === 'contact' ? 11 : undefined}
               />
             </div>
-            {fieldErrors.login && fieldErrors.login !== 'invalid' && (
+            {fieldErrors.login && (
               <small style={{ color: '#dc2626', display: 'block', marginTop: '4px', fontSize: '13px' }}>
                 {fieldErrors.login}
               </small>
             )}
           </div>
 
-          {/* PASSWORD — hindi ginalaw */}
           <div className="authbox-field">
             <label className="authbox-label">Password</label>
             <div className="authbox-input-wrap">
@@ -272,7 +252,7 @@ const AuthBox = () => {
                 <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
               </svg>
               <input
-                className={`authbox-input${fieldErrors.password ? ' authbox-input--error' : ''}`}
+                className={`authbox-input${submitErrorFields.password ? ' authbox-input--error' : ''}`}
                 type={showPass ? 'text' : 'password'}
                 name="password"
                 placeholder="Enter your password"
@@ -300,7 +280,6 @@ const AuthBox = () => {
             </div>
           </div>
 
-          {/* REMEMBER ME + FORGOT — hindi ginalaw */}
           <div className="authbox-row">
             <label className="authbox-remember">
               <input
@@ -314,7 +293,6 @@ const AuthBox = () => {
             <Link to="/forgot-password" className="authbox-forgot">Forgot Password?</Link>
           </div>
 
-          {/* SUBMIT — hindi ginalaw */}
           <button className="authbox-submit" type="submit" disabled={loading}>
             {loading ? (
               <>
@@ -334,14 +312,12 @@ const AuthBox = () => {
             )}
           </button>
 
-          {/* REGISTER LINK — hindi ginalaw */}
           <p className="authbox-register">
             Don't have an account?{' '}
             <Link to="/register" className="authbox-register-link">Register as Farmer</Link>
           </p>
         </form>
 
-        {/* SECURITY NOTE — hindi ginalaw */}
         <div className="authbox-security">
           <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
@@ -350,9 +326,7 @@ const AuthBox = () => {
         </div>
 
       </div>
-      {/* ── END CARD ── */}
 
-      {/* ── BELOW CARD: footer + socials — hindi ginalaw ── */}
       <div className="authbox-below">
         <p className="authbox-footer">
           AGRICE – Municipal Agriculture Office, Lucban<br />© 2026 All rights reserved.

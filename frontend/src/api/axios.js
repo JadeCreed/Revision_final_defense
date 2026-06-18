@@ -10,13 +10,41 @@ const API = axios.create({
   withCredentials: true,  // 🍪 Enable automatic cookie sending
 });
 
+
+// Response interceptor for error handling
+// ── GLOBAL "SESSION EXPIRED" HANDLER ──
+// AuthContext registers itself here so axios can trigger a logout
+// whenever any request comes back 401, even outside of React components.
+let onUnauthorized = null;
+export const setUnauthorizedHandler = (handler) => {
+  onUnauthorized = handler;
+};
+
+// Endpoints na hindi dapat mag-trigger ng global logout sa 401:
+// - /accounts/login/      → mali lang yung credentials, hindi session expiry
+// - /accounts/verify-token/ → may sariling handling na sa AuthContext checkAuth()
+const SKIP_GLOBAL_401 = ['/accounts/login/', '/accounts/verify-token/'];
+
 // Response interceptor for error handling
 API.interceptors.response.use(
   response => response,
   (error) => {
+    const status = error.response?.status;
+    const requestUrl = error.config?.url || '';
+    const shouldSkip = SKIP_GLOBAL_401.some((path) => requestUrl.includes(path));
+
+    if (status === 401 && !shouldSkip && onUnauthorized) {
+      onUnauthorized();
+    }
+
     return Promise.reject(error);
   }
 );
+
+
+
+
+
 
 // ===== AUTH =====
 // NOTE: field is "login" not "contact_number" — matches your new Django LoginView
@@ -27,7 +55,7 @@ export const verifyToken = () => API.get('/accounts/verify-token/');
 export const logoutUser = () => API.post('/accounts/logout/');
 // Farmer self-registration
 export const registerFarmer = (data) => API.post('/accounts/register/farmer/', data);
-
+export const validateStep1 = (data) => API.post('/accounts/register/validate-step1/', data);
 // ── FORGOT PASSWORD — 3-step flow ──
 // Step 1: Send OTP to email
 export const forgotPassword  = (data) => API.post('/accounts/forgot-password/', data);

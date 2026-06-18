@@ -113,6 +113,51 @@ def _yn(profile, field):
     return 'N'
 
 
+def _embed_signature(ws, entry, row_num, col_letter, cell_width_px=110, cell_height_px=30):
+    """
+    Decodes entry.signature (base64 data URL: "data:image/png;base64,...")
+    and embeds it as an actual image into the given cell, matching
+    what the admin sees when clicking "View" in the Batch Detail modal.
+
+    Leaves the cell blank if there is no signature — does not write any
+    placeholder text. Silently skips on decode failure so a single bad
+    signature can't break the whole report generation.
+    """
+    if not entry.signature:
+        return
+
+    try:
+        import base64
+        import io
+        from PIL import Image as PILImage
+        from openpyxl.drawing.image import Image as XLImage
+
+        raw = entry.signature
+        if ',' in raw and raw.strip().lower().startswith('data:'):
+            raw = raw.split(',', 1)[1]
+
+        img_bytes = base64.b64decode(raw)
+        pil_img = PILImage.open(io.BytesIO(img_bytes)).convert('RGBA')
+
+        # Resize to fit inside the signature cell while keeping aspect ratio
+        pil_img.thumbnail((cell_width_px, cell_height_px), PILImage.LANCZOS)
+
+        buf = io.BytesIO()
+        pil_img.save(buf, format='PNG')
+        buf.seek(0)
+
+        xl_img = XLImage(buf)
+        xl_img.width  = pil_img.width
+        xl_img.height = pil_img.height
+
+        cell_ref = f'{col_letter}{row_num}'
+        ws.add_image(xl_img, cell_ref)
+    except Exception:
+        # If the signature data is malformed, don't crash report generation —
+        # just leave that cell without an image.
+        pass
+
+
 # ─────────────────────────────────────────────────────────────
 # SEED TYPE HELPERS
 # Used to identify if an event is Hybrid (Region) or Inbred (PhilRice)
@@ -286,11 +331,14 @@ def generate_region_masterlist(entries_qs, event):
             entry.farm_area_ha or '—',
             entry.qty_bags or '—',
             farmer.contact_number or '—',
-            '',   # Signature — blank for physical signing
+            '',
         ]
 
-        ws.row_dimensions[current_row].height = 15
+
+        ws.row_dimensions[current_row].height = 30
         _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
+        # Embed the actual signature image (column U = Signature/Thumbmark)
+        _embed_signature(ws, entry, current_row, 'U')
         current_row += 1
 
     # ── Signatories footer ──
@@ -395,16 +443,18 @@ def generate_philrice_masterlist(entries_qs, event):
             '—',   # KP Kits — not in our system
             entry.authorized_representative or '—',
             entry.date_received.strftime('%m/%d/%y') if entry.date_received else '—',
-            '',    # Signature blank
+            ''
         ]
 
-        ws.row_dimensions[current_row].height = 15
+        ws.row_dimensions[current_row].height = 30
         _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
 
         # Mark the placeholder yield column gray
         placeholder_cell = ws.cell(row=current_row, column=11)
         placeholder_cell.fill = PatternFill('solid', start_color='F3F4F6')
         placeholder_cell.font = _normal_font(8, '9CA3AF', italic=True)
+        
+        _embed_signature(ws, entry, current_row, 'O')
 
         current_row += 1
 
@@ -923,6 +973,8 @@ class ReportPreviewView(APIView):
             'count': len(rows),
             'rows':  rows,
         })
+    
+    
 
 
 # ─────────────────────────────────────────────────────────────

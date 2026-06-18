@@ -592,7 +592,13 @@ input::-webkit-contacts-auto-fill-button { visibility: hidden; }
   box-shadow: 0 0 0 3px rgba(45,106,45,0.1);
   background: white;
 }
+
 .authbox-input--error { border-color: var(--color-error); }
+.authbox-input--error:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+  background: white;
+}
 
 .authbox-eye {
   position: absolute;

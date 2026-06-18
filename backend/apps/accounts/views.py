@@ -181,17 +181,19 @@ class LoginView(APIView):
 
             # 🔐 Generate JWT
             refresh = RefreshToken.for_user(user)
-            access_token = str(refresh.access_token)
+            access_token = refresh.access_token
 
             # Determine token lifetime based on remember_me
             if remember_me:
                 # 30 days for "Remember Me"
-                access_token_lifetime = timedelta(days=30)
+                access_token.set_exp(lifetime=timedelta(days=30))
                 max_age = 30 * 24 * 60 * 60  # 30 days in seconds
             else:
                 # 1 hour for regular session
-                access_token_lifetime = timedelta(hours=1)
+                access_token.set_exp(lifetime=timedelta(hours=1))
                 max_age = 3600  # 1 hour
+
+            access_token = str(access_token)
 
             response = Response({
                 "access_token": access_token,
@@ -1816,3 +1818,40 @@ class PublicSeasonView(APIView):
                 'year': None,
                 'status': None,
             })
+        
+class FarmerRegistryValidateView(APIView):
+    """
+    POST /api/accounts/register/validate-step1/
+    Validates RSBSA, first_name, last_name, barangay against MAO registry.
+    Does NOT create any user. Used by frontend Step 1 pre-check.
+    """
+    def post(self, request):
+        from .models import FarmerMasterRecord
+
+        rsbsa = (request.data.get('rsbsa_number') or '').strip()
+        first_name = (request.data.get('first_name') or '').strip().lower()
+        last_name = (request.data.get('last_name') or '').strip().lower()
+        barangay = (request.data.get('barangay') or '').strip()
+
+        errors = {}
+
+        if not rsbsa:
+            errors['rsbsa_number'] = 'RSBSA number is required.'
+        else:
+            master = FarmerMasterRecord.objects.filter(rsbsa_number=rsbsa).first()
+            if not master:
+                errors['rsbsa_number'] = 'RSBSA number not found in the MAO registry. Please contact the Municipal Agriculture Office.'
+            else:
+                if master.is_claimed:
+                    errors['rsbsa_number'] = 'This RSBSA number is already registered in the system.'
+                else:
+                    master_first = (master.first_name or '').strip().lower()
+                    master_last = (master.last_name or '').strip().lower()
+                    if first_name != master_first or last_name != master_last:
+                        errors['rsbsa_number'] = 'The name you entered does not match the MAO registry for this RSBSA number. Please check your First Name, Last Name, and RSBSA number.'
+                    elif barangay and master.barangay and barangay != master.barangay.strip():
+                        errors['barangay'] = 'The barangay you selected does not match the MAO registry for this RSBSA number.'
+
+        if errors:
+            return Response(errors, status=400)
+        return Response({'valid': True}, status=200)

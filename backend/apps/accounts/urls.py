@@ -43,11 +43,13 @@ from .views import (
     MeView,
     PublicStatsView,
     PublicSeasonView,
+    FarmerRegistryValidateView
 
 )
 
 urlpatterns = [
     path('register/farmer/', FarmerRegisterView.as_view(), name='farmer-register'),
+    path('register/validate-step1/', FarmerRegistryValidateView.as_view(), name='farmer-validate-step1'),
     path('login/', LoginView.as_view(), name='login'),
     path('logout/', LogoutView.as_view(), name='logout'),
     path('verify-token/', VerifyTokenView.as_view(), name='verify-token'),

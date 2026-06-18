@@ -1831,7 +1831,12 @@ export default function SeedInventory() {
                               Number(entry.year) === Number(year)
                             );
                             const isDelivered = existingEntry?.status === 'DELIVERED';
-                            const isScheduled = !!scheduleForms[vKey] || !!existingEntry;
+                            // isScheduled = true lang kung:
+                            // 1. Naka-save na sa scheduleForms (ibig sabihin, pumili na ng details)
+                            //    AT hindi ito yung kasalukuyang active tab na binabago
+                            // 2. O naka-save na sa existing schedule entries
+                            const isCurrentlyActive = activeScheduleTab === vKey;
+                            const isScheduled = (!isCurrentlyActive && !!scheduleForms[vKey]) || !!existingEntry;
                             return (
                               <button key={v.id} type="button"
                                 onClick={() => {
@@ -1902,7 +1907,17 @@ export default function SeedInventory() {
                           </div>
                           {fs?.varieties?.length > 1 && (
                             <button type="button"
-                              onClick={() => setActiveScheduleTab(fsId)}
+                              onClick={() => {
+                                // I-clear ang scheduleForms entry para sa current variety
+                                // para hindi na ma-detect bilang "already encoded" kapag
+                                // bumalik sa variety selection at pumili ng ibang variety
+                                setScheduleForms(prev => {
+                                  const updated = { ...prev };
+                                  delete updated[key];
+                                  return updated;
+                                });
+                                setActiveScheduleTab(fsId);
+                              }}
                               style={{ marginLeft: 'auto', fontSize: '0.7rem', color: tagColor, background: 'none', border: `1px solid ${tagBorder}`, borderRadius: '0.5rem', padding: '0.2rem 0.5rem', cursor: 'pointer', fontWeight: 600 }}>
                               ← Change variety
                             </button>

@@ -2,8 +2,7 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import logo from '../assets/logo.png';
 import { CheckCircle2, Eye, EyeOff, User, MapPin, Hash, Phone, Mail, Lock } from 'lucide-react';
-import { registerFarmer } from '../api/axios';
-
+import { registerFarmer, validateStep1 as validateStep1Api } from '../api/axios';
 const BARANGAY_CHOICES = [
   'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit',
   'Kalangay','Kalyaat','Kilib','Kulapi','Mahabang Parang','Malupak',
@@ -88,45 +87,25 @@ const Register = () => {
       return;
     }
 
-    // Validate against MAO registry before proceeding to step 2
     setLoading(true);
     try {
-      // We do a lightweight pre-check by submitting to see if step 1 data is valid
-      // We'll catch field-specific errors from the backend
-      await registerFarmer({
+      await validateStep1Api({
         first_name: form.first_name,
         last_name: form.last_name,
         barangay: form.barangay,
         rsbsa_number: form.rsbsa_number,
-        contact_number: '09000000000', // dummy to pass required field
-        password: 'TempPass1',
-        confirm_password: 'TempPass1',
       });
-      // If somehow it succeeds (shouldn't with dummy contact), still go to step 2
+      // Backend confirmed valid — safe to go to step 2
       setStep(2);
     } catch (err) {
       const data = err.response?.data;
       if (data && typeof data === 'object') {
-        const step1Fields = ['first_name', 'last_name', 'barangay', 'rsbsa_number'];
-        const step1Errors = {};
-        let hasStep1Error = false;
-        Object.keys(data).forEach(key => {
-          if (step1Fields.includes(key)) {
-            step1Errors[key] = Array.isArray(data[key]) ? data[key][0] : data[key];
-            hasStep1Error = true;
-          }
-        });
-        if (hasStep1Error) {
-          setErrors(step1Errors);
-          setVibrate(true);
-          setTimeout(() => setVibrate(false), 500);
-        } else {
-          // No step 1 errors — safe to proceed
-          setStep(2);
-        }
+        setErrors(data);
       } else {
-        setStep(2); // non-field error means step 1 is fine
+        setErrors({ rsbsa_number: 'Validation failed. Please try again.' });
       }
+      setVibrate(true);
+      setTimeout(() => setVibrate(false), 500);
     } finally {
       setLoading(false);
     }

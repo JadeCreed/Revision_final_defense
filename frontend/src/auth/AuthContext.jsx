@@ -1,8 +1,8 @@
 // src/auth/AuthContext.jsx
 // Secure cookie-based authentication (no localStorage for tokens)
 
-import { createContext, useContext, useState, useEffect } from 'react';
-import API from '../api/axios';
+import { createContext, useContext, useState, useEffect, useRef } from 'react';
+import API, { setUnauthorizedHandler } from '../api/axios';
 
 const AuthContext = createContext(null);
 const SESSION_TOKEN_KEY = 'agrice_access_token';
@@ -15,6 +15,9 @@ export const AuthProvider = ({ children }) => {
   const [isVerified, setIsVerified] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  // Guard para hindi mag-trigger ng logout() multiple times
+  // kung sabay-sabay dumating ang ilang 401 response
+  const isHandlingExpiry = useRef(false);
 
   const setAuthHeader = (accessToken) => {
     if (accessToken) {
@@ -72,6 +75,8 @@ export const AuthProvider = ({ children }) => {
     setFirstName(data.first_name || '');
     setLastName(data.last_name || '');
     setIsLoggedIn(true);
+    // Bagong session na ang umpisahan, kaya buksan ulit ang guard
+    isHandlingExpiry.current = false;
   };
 
   const logout = async () => {
@@ -91,6 +96,21 @@ export const AuthProvider = ({ children }) => {
       setIsLoggedIn(false);
     }
   };
+
+  // 🔌 Connect axios unauthorized handling to the auth context.
+  // When a protected request returns 401, this will force a logout
+  // so the navbar and protected views stay in sync without a reload.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      if (isHandlingExpiry.current) return;
+      isHandlingExpiry.current = true;
+      logout().finally(() => {
+        isHandlingExpiry.current = false;
+      });
+    });
+
+    return () => setUnauthorizedHandler(null);
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{
