@@ -923,6 +923,13 @@ const BrgyBeneficiaries = () => {
       </div>
     );
   }
+  // Filter events batay sa kasalukuyang aktibong season at taon ng active poll
+  const currentSeasonEvents = activePollSeason
+    ? events.filter(e => e.season === activePollSeason.season && String(e.year) === String(activePollSeason.year))
+    : [];
+
+  const activeProgramsCount = currentSeasonEvents.filter(e => e.status === 'ACTIVE').length;
+  const totalCurrentSeasonPrograms = currentSeasonEvents.length;
 
   // ─────────────────────────────────────────
   // RENDER
@@ -1064,7 +1071,7 @@ const BrgyBeneficiaries = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
             {[
               { label: 'Approved Farmers', value: totalFarmers, sub: `in ${myBarangay}` },
-              { label: 'Active Programs', value: events.filter(e => e.status === 'ACTIVE').length, sub: `${events.length} total` },
+              { label: 'Active Programs', value: activeProgramsCount, sub: `${totalCurrentSeasonPrograms} total` },
             ].map(({ label, value, sub }, i) => (
               <div key={i} style={{ backgroundColor: GREEN.light, borderRadius: '1rem', padding: '1rem', border: `1px solid ${GREEN.border}`, animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                 <p style={{ fontSize: '1.75rem', fontWeight: 800, color: GREEN.primary, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>

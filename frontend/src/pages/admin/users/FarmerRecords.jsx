@@ -758,12 +758,12 @@ const FarmerMasterlistTab = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
                   <button onClick={() => setResetMode('auto')} style={{ padding: '0.85rem 1rem', borderRadius: '0.75rem', cursor: 'pointer', border: `2px solid ${resetMode === 'auto' ? '#2d6a2d' : '#e5e7eb'}`, backgroundColor: resetMode === 'auto' ? '#f0fdf4' : 'white', textAlign: 'left', transition: 'all 0.15s' }}>
-                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}>🎲 Generate Temporary Password</p>
+                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}> Generate Temporary Password</p>
                     <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: 0 }}>System generates a temporary password the admin can share with the farmer.</p>
                   </button>
 
                   <button onClick={() => setResetMode('manual')} style={{ padding: '0.85rem 1rem', borderRadius: '0.75rem', cursor: 'pointer', border: `2px solid ${resetMode === 'manual' ? '#2d6a2d' : '#e5e7eb'}`, backgroundColor: resetMode === 'manual' ? '#f0fdf4' : 'white', textAlign: 'left', transition: 'all 0.15s' }}>
-                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}>✏️ Set Manual Password</p>
+                    <p style={{ fontWeight: '700', color: '#1a1a1a', margin: '0 0 0.125rem', fontSize: '0.875rem' }}> Set Manual Password</p>
                     <p style={{ color: '#6b7280', fontSize: '0.78rem', margin: 0 }}>Enter a password you've agreed on with the farmer.</p>
                   </button>
                 </div>

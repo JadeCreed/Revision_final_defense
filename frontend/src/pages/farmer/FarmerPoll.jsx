@@ -203,7 +203,7 @@ const FarmerPoll = () => {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '0.625rem' }}>
           <span style={{ fontSize: '1.1rem' }}>
-            {poll.season === 'WET' ? '💧' : '☀️'}
+            {poll.season === 'WET' ? '' : ''}
           </span>
           <span style={{ fontSize: '0.8rem', fontWeight: 600, opacity: 0.85 }}>
             {poll.season_display} {poll.year}
@@ -218,7 +218,7 @@ const FarmerPoll = () => {
             fontWeight:      700,
             border:          `1px solid ${poll.status === 'OPEN' ? 'rgba(34,197,94,0.4)' : 'rgba(249,115,22,0.4)'}`,
           }}>
-            {poll.status === 'OPEN' ? '● Open' : poll.status === 'LOCKED' ? '🔒 Locked' : '⛔ Closed'}
+            {poll.status === 'OPEN' ? '● Open' : poll.status === 'LOCKED' ? ' Locked' : ' Closed'}
           </span>
         </div>
         <h1 style={{ fontWeight: 800, fontSize: '1.1rem', margin: '0 0 0.5rem', lineHeight: 1.3 }}>

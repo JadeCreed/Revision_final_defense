@@ -14,7 +14,11 @@ import {
   CheckCircle, Clock, AlertCircle,
   XCircle, Save, Send, ChevronRight,
 } from 'lucide-react';
+
+import AddressSelector from '../../components/AddressSelector';
+
 import API from '../../api/axios';
+
 
 const BARANGAYS = [
   'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit',
@@ -168,8 +172,9 @@ const FarmerProfile = () => {
         gender:                 profile.gender                 || '',
         residency_municipality: profile.residency_municipality || '',
         residency_barangay:     profile.residency_barangay     || '',
-        farm_municipality:      profile.farm_municipality      || '',
-        farm_barangay:          profile.farm_barangay          || '',
+
+        farm_municipality:      profile.farm_municipality      || 'Lucban',
+        farm_barangay:          profile.farm_barangay          || user.barangay || '',
         hectares:               profile.hectares               || '',  // Total hectares
         id_card_url:            profile.id_card_url            || '',
         ip:             profile.ip             ?? false,
@@ -737,29 +742,41 @@ const FarmerProfile = () => {
           </div>
         </Section>
 
+       
         {/* SECTION 3: Residency Address */}
         <Section icon={MapPin} title="Residency Address">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
-
-            <Field label="Municipality" required error={fieldErrors.residency_municipality}>
-              <input
-                value={form.residency_municipality}
-                onChange={e => handleChange('residency_municipality', e.target.value)}
-                style={inputStyle(!!fieldErrors.residency_municipality)}
-                placeholder="e.g. Lucban"
-              />
-            </Field>
-
-            <Field label="Barangay" required error={fieldErrors.residency_barangay}>
-              <input
-                value={form.residency_barangay}
-                onChange={e => handleChange('residency_barangay', e.target.value)}
-                style={inputStyle(!!fieldErrors.residency_barangay)}
-                placeholder="e.g. Abang"
-              />
-            </Field>
-
-          </div>
+          <Field
+            label="Complete Address"
+            required
+            error={fieldErrors.residency_municipality || fieldErrors.residency_barangay}
+          >
+            <AddressSelector
+              values={{
+                municipality: form.residency_municipality,
+                barangay: form.residency_barangay,
+              }}
+              inputStyle={inputStyle}
+              onChange={(addr) => {
+                // AddressSelector returns { region, province, municipality, barangay }.
+                // FarmerProfile's form state only keeps the flat municipality/barangay —
+                // region/province are just intermediate UI state, hindi na-save sa DB,
+                // kaya hindi nagbabago ang payload na pinapadala sa backend.
+                isDirty.current = true;
+                setForm(prev => ({
+                  ...prev,
+                  residency_municipality: addr.municipality,
+                  residency_barangay:     addr.barangay,
+                }));
+                setFieldErrors(prev => ({
+                  ...prev,
+                  residency_municipality: '',
+                  residency_barangay: '',
+                }));
+                setError('');
+                setSuccess('');
+              }}
+            />
+          </Field>
         </Section>
 
         {/* SECTION 4: Farm Location */}

@@ -405,11 +405,19 @@ const BrgyDistribution = () => {
       setEvents(evData);
 
       // Calculate stats from event summaries
+      // Calculate stats mula sa event summaries (Naka-filter para sa Kasalukuyang Aktibong Season lamang)
+      const activeSeason = ctxRes.data.current_season;
       let totalApproved = 0;
       let totalEncoded = 0;
       for (const ev of evData) {
-        totalApproved += Number(ev.total_approved || 0);
-        totalEncoded += Number(ev.total_encoded || 0);
+        if (
+          activeSeason &&
+          ev.season === activeSeason.season &&
+          String(ev.year) === String(activeSeason.year)
+        ) {
+          totalApproved += Number(ev.total_approved || 0);
+          totalEncoded += Number(ev.total_encoded || 0);
+        }
       }
       setTotalToDistribute(totalApproved);
       setTotalApprovedBoth(totalApproved);

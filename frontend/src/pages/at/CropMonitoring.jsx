@@ -912,6 +912,10 @@ const CropMonitoring = () => {
       </div>
     );
   }
+  const totalBarangaysCount = barangays.length;
+  const totalFarmersCount = farmers.length;
+  const monitoredFarmersCount = farmers.filter(f => f.latest_phase).length;
+  const unmonitoredFarmersCount = farmers.filter(f => !f.latest_phase).length;
 
   // ─────────────────────────────────────────
   // MAIN MONITORING VIEW
@@ -958,13 +962,13 @@ const CropMonitoring = () => {
         </div>
 
         {/* ── STATS CARDS ── */}
-        {stats && (
+        
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
             {[
-              { label: 'Assigned Barangays', value: stats.total_barangays,     color: GREEN.primary },
-              { label: 'Total Farmers',      value: stats.total_farmers,       color: '#374151'     },
-              { label: 'Monitored',          value: stats.monitored_farmers,   color: '#16a34a'     },
-              { label: 'Not Yet Monitored',  value: stats.unmonitored_farmers, color: '#dc2626'     },
+              { label: 'Assigned Barangays', value: totalBarangaysCount,     color: GREEN.primary }, // ◀── PINALITAN
+              { label: 'Total Farmers',      value: totalFarmersCount,       color: '#374151'     }, // ◀── PINALITAN
+              { label: 'Monitored',          value: monitoredFarmersCount,   color: '#16a34a'     }, // ◀── PINALITAN
+              { label: 'Not Yet Monitored',  value: unmonitoredFarmersCount, color: '#dc2626'     }, // ◀── PINALITAN
             ].map(({ label, value, color }, i) => (
               <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                 <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
@@ -972,7 +976,7 @@ const CropMonitoring = () => {
               </div>
             ))}
           </div>
-        )}
+        
 
         {/* ── SEARCH + FILTERS ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem', border: '1px solid #f3f4f6' }}>

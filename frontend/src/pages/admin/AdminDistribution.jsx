@@ -505,13 +505,14 @@ const AdminDistribution = () => {
         </p>
       </div>
 
-      {stats && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+      
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
-            { label: 'Total Events',     value: stats.total_events,         Icon: ClipboardList },
+             { label: 'Total Events',     value: events.length,              Icon: ClipboardList },
+            // { label: 'Total Events',     value: stats.total_events,         Icon: ClipboardList },
             { label: 'Pending Batches',  value: stats.pending_batches,      Icon: Clock        },
             { label: 'Approved',         value: stats.approved_batches,     Icon: CheckCircle  },
-            { label: 'Farmers Served',   value: stats.total_farmers_served, Icon: Users        },
+            // { label: 'Farmers Served',   value: stats.total_farmers_served, Icon: Users        },
           ].map(({ label, value, Icon }) => (
             <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.125rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
               <Icon size={18} color={GREEN.primary} />
@@ -520,7 +521,7 @@ const AdminDistribution = () => {
             </div>
           ))}
         </div>
-      )}
+      
 
       <div style={{ display: 'flex', gap: '0.25rem', marginBottom: '1.5rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', border: '1px solid #e5e7eb' }}>
         {TABS.map(({ key, label, Icon }) => (
