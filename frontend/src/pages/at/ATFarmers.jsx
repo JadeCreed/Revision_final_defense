@@ -147,79 +147,58 @@ const InfoRow = ({ label, value, valueColor }) => (
 );
 
 // Progress summary focused on AT monitoring and seed tracking
-const SeasonProgress = ({ farmer, finalSeed }) => {
+// Progress summary focused on AT monitoring and seed tracking — Redesigned Header
+const SeasonProgress = ({ farmer, distributionEntries }) => {
+  const currentDist = distributionEntries?.[0]; // Kukunin ang pinakaunang current season distribution record (filtered na mula sa backend)
+  const assigned = !!currentDist;
+  const seedLabel = currentDist 
+    ? `${currentDist.seed_type} — ${currentDist.variety_name || 'Unspecified Variety'}` 
+    : 'No seed assignment found';
+  
   const observed = !!farmer.latest_phase;
-  const assigned = !!farmer.distributed_variety || !!farmer.distributed_seed_type;
-  const assignmentLabel = farmer.distributed_variety || farmer.distributed_seed_type || 'No seed assignment yet';
   const observedDate = farmer.latest_observed ? new Date(farmer.latest_observed).toLocaleDateString('en-PH', {
     month: 'short', day: 'numeric', year: 'numeric',
   }) : null;
-  const seasonLabel = finalSeed ? `${finalSeed.season_display} ${finalSeed.year}` : 'No active season';
-  const seedFinalLabel = finalSeed
-    ? `${finalSeed.seed_type.name}: ${finalSeed.varieties.map(v => v.name).join(', ')}`
-    : 'Final seeds not set yet';
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
-      <div style={{ backgroundColor: 'white', borderRadius: '0.95rem', padding: '0.95rem', border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <Wheat size={16} color={finalSeed ? GREEN.accent : '#9ca3af'} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151' }}>Active season</span>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
+      {/* Sleek KPI Card 1: Seed Assignment */}
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.2)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Wheat size={20} color="#16a34a" />
         </div>
-        <p style={{ margin: 0, fontSize: '0.79rem', color: '#4b5563', lineHeight: 1.6 }}>
-          {finalSeed ? 'Current season cycle for seed poll use' : 'No season finalized yet'}
-        </p>
-        <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', fontWeight: 700, color: finalSeed ? GREEN.primary : '#9ca3af' }}>
-          {seasonLabel}
-        </div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', borderRadius: '0.95rem', padding: '0.95rem', border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <CheckCircle size={16} color={finalSeed ? GREEN.accent : '#9ca3af'} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151' }}>Final seed</span>
-        </div>
-        <p style={{ margin: 0, fontSize: '0.79rem', color: '#4b5563', lineHeight: 1.6 }}>
-          {seedFinalLabel}
-        </p>
-        <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', fontWeight: 700, color: finalSeed ? GREEN.primary : '#9ca3af' }}>
-          {finalSeed ? 'Used across system until season end' : 'Waiting on poll finalization'}
-        </div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', borderRadius: '0.95rem', padding: '0.95rem', border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <Package size={16} color={assigned ? GREEN.accent : '#9ca3af'} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151' }}>Seed assignment</span>
-        </div>
-        <p style={{ margin: 0, fontSize: '0.79rem', color: '#4b5563', lineHeight: 1.6 }}>
-          {assigned ? assignmentLabel : 'No approved seed assignment found'}
-        </p>
-        <div style={{ marginTop: '0.75rem', fontSize: '0.72rem', fontWeight: 700, color: assigned ? GREEN.primary : '#9ca3af' }}>
-          {assigned ? 'Assigned' : 'Not assigned'}
-        </div>
-      </div>
-
-      <div style={{ backgroundColor: 'white', borderRadius: '0.95rem', padding: '0.95rem', border: '1px solid #e5e7eb' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-          <Leaf size={16} color={observed ? GREEN.accent : '#9ca3af'} />
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#374151' }}>Field observation</span>
-        </div>
-        <p style={{ margin: 0, fontSize: '0.79rem', color: '#4b5563', lineHeight: 1.6 }}>
-          {observed ? 'Crop phase captured by AT' : 'Awaiting first field visit'}
-        </p>
-        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: observed ? GREEN.primary : '#9ca3af' }}>
-            {observed ? 'Recorded' : 'Pending'}
+        <div>
+          <p style={{ margin: 0, fontSize: '0.68rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Assigned Seed variety</p>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', fontWeight: 800, color: '#111827' }}>
+            {seedLabel}
+          </p>
+          <span style={{ display: 'inline-block', marginTop: '0.4rem', fontSize: '0.65rem', fontWeight: 700, color: assigned ? '#166534' : '#991b1b', backgroundColor: assigned ? '#dcfce7' : '#fee2e2', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
+            {assigned ? 'Assigned' : 'Not Assigned'}
           </span>
-          {observedDate && (
-            <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>on {observedDate}</span>
-          )}
+        </div>
+      </div>
+
+      {/* Sleek KPI Card 2: Field Observation */}
+      <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', border: '1px solid rgba(255, 255, 255, 0.2)', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Leaf size={20} color="#2563eb" />
+        </div>
+        <div>
+          <p style={{ margin: 0, fontSize: '0.68rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Field Phase</p>
+          <p style={{ margin: '0.25rem 0 0', fontSize: '0.875rem', fontWeight: 800, color: '#111827' }}>
+            {observed ? getPhaseCfg(farmer.latest_phase).label : 'No observations recorded'}
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.4rem' }}>
+            <span style={{ display: 'inline-block', fontSize: '0.65rem', fontWeight: 700, color: observed ? '#1e40af' : '#4b5563', backgroundColor: observed ? '#dbeafe' : '#f3f4f6', padding: '0.15rem 0.5rem', borderRadius: '999px' }}>
+              {observed ? 'Recorded' : 'Pending Visit'}
+            </span>
+            {observedDate && <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>({observedDate})</span>}
+          </div>
         </div>
       </div>
     </div>
   );
-};
+};                                                                                       // ◀── PINALITAN (HEADER REDESIGN)
 
 // ─────────────────────────────────────────
 // MAIN COMPONENT
@@ -249,6 +228,7 @@ const ATFarmers = () => {
   const [yearOptions,     setYearOptions]     = useState([]);
   const [seasonFilter,    setSeasonFilter]    = useState('');
   const [yearFilter,      setYearFilter]      = useState('');
+  const [selectedSeedTab, setSelectedSeedTab] = useState('HYBRID'); 
 
   // ── ACTIVE DETAIL TAB ──
   // 'overview' | 'history'
@@ -360,7 +340,7 @@ const ATFarmers = () => {
       .finally(() => {
         setHistoryLoading(false);
       });
-  }, [seasonFilter, selectedFarmer, view, seasonOptions, showToast]);
+  }, [seasonFilter, yearFilter, selectedFarmer, view, seasonOptions, showToast]); 
 
   // ─────────────────────────────────────────
   // OPEN FARMER DETAIL
@@ -370,6 +350,7 @@ const ATFarmers = () => {
     setSelectedFarmer(farmer);
     setView('detail');
     setDetailTab('overview');
+    setSelectedSeedTab('HYBRID'); 
     setDetailLoading(true);
     setHistoryLoading(true);
     setSeasonFilter('');
@@ -425,6 +406,9 @@ const ATFarmers = () => {
 
   const totalMonitored   = farmers.filter(f => !!f.latest_phase).length;
   const totalUnmonitored = farmers.filter(f => !f.latest_phase).length;
+  const totalFarmersCount = farmers.length;      
+  const totalBarangaysCount = barangays.length;  
+
 
   const activeSeason = cropHistory?.selected_season || (finalSeeds[0] ? {
     season: finalSeeds[0].season,
@@ -511,10 +495,10 @@ const ATFarmers = () => {
               {/* Main stats */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
                 {[
-                  { label: 'Total Farmers',   value: stats.total_farmers,       color: '#374151'     },
-                  { label: 'Monitored',        value: stats.monitored_farmers,   color: '#16a34a'     },
-                  { label: 'Not Monitored',    value: stats.unmonitored_farmers, color: '#dc2626'     },
-                  { label: 'Barangays',        value: stats.total_barangays,     color: GREEN.primary },
+                  { label: 'Total Farmers',   value: totalFarmersCount,         color: '#374151'     }, 
+                  { label: 'Monitored',        value: totalMonitored,            color: '#16a34a'     }, 
+                  { label: 'Not Monitored',    value: totalUnmonitored,          color: '#dc2626'     }, 
+                  { label: 'Barangays',        value: totalBarangaysCount,       color: GREEN.primary }, 
                 ].map(({ label, value, color }, i) => (
                   <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.05)', animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                     <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
@@ -704,8 +688,9 @@ const ATFarmers = () => {
           </button>
 
           {/* ── Farmer card header ── */}
+          {/* ── Farmer card header — Clean & Minimal ── */}
           <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', color: 'white' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', marginBottom: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: '1.125rem', flexShrink: 0 }}>
                 {selectedFarmer.full_name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
               </div>
@@ -718,25 +703,7 @@ const ATFarmers = () => {
                 </p>
               </div>
             </div>
-
-            {/* Season progress stepper */}
-            <div style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '0.75rem', padding: '0.875rem 1rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <p style={{ fontSize: '0.65rem', fontWeight: 700, opacity: 0.7, textTransform: 'uppercase', margin: '0 0 0.5rem', letterSpacing: '0.05em' }}>
-                    Season Progress
-                  </p>
-                  <p style={{ fontSize: '0.82rem', fontWeight: 700, margin: 0, color: '#111827' }}>
-                    {activeSeasonLabel}
-                  </p>
-                </div>
-                <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#2563eb', margin: 0, whiteSpace: 'nowrap' }}>
-                  {observationSummary}
-                </p>
-              </div>
-              <SeasonProgress farmer={selectedFarmer} finalSeed={finalSeeds[0]} />
-            </div>
-          </div>
+          </div>                                                                                 
 
           {/* ── Tab navigation ── */}
           <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', padding: '0.25rem', marginBottom: '1.25rem', border: '1px solid #e5e7eb' }}>
@@ -903,28 +870,70 @@ const ATFarmers = () => {
                       <div style={{ width: 28, height: 28, border: `3px solid ${GREEN.border}`, borderTopColor: GREEN.primary, borderRadius: '50%', animation: 'spin 0.7s linear infinite', margin: '0 auto 0.75rem' }} />
                       <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>Loading season history...</p>
                     </div>
-                  ) : cropHistory?.records?.length === 0 || !cropHistory ? (
-                    <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', border: '1px solid #f3f4f6' }}>
-                      <Leaf size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
-                      <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No records yet</p>
-                      <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                        No crop monitoring records found for this season.
-                      </p>
-                    </div>
                   ) : (
                     <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-                      <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', margin: '0 0 1.25rem', letterSpacing: '0.04em' }}>
-                        {observationSummary} {seasonFilter ? '' : 'This Season'}
-                      </p>
-                      {cropHistory.records.map((rec, idx) => (
-                        <TimelineStep
-                          key={rec.id}
-                          record={rec}
-                          isLast={idx === cropHistory.records.length - 1}
-                        />
-                      ))}
+                      
+                      {/* Seed Source Tabs Selector (Hybrid, Inbred, Own Seed) */}
+                      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.75rem' }}>
+                        {[
+                          { key: 'HYBRID', label: 'Hybrid', color: '#1e40af', bg: '#eff6ff' },
+                          { key: 'INBRED', label: 'Inbred', color: '#166534', bg: '#f0fdf4' },
+                          { key: 'OWN_SEED', label: 'Own Seed', color: '#b45309', bg: '#fefce8' },
+                        ].map(tab => {
+                          const active = selectedSeedTab === tab.key;
+                          return (
+                            <button key={tab.key}
+                              onClick={() => setSelectedSeedTab(tab.key)}
+                              style={{
+                                padding: '0.4rem 0.875rem',
+                                borderRadius: '999px',
+                                border: `1.5px solid ${active ? tab.color : '#e5e7eb'}`,
+                                backgroundColor: active ? tab.bg : 'white',
+                                color: active ? tab.color : '#4b5563',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                              }}>
+                              {tab.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {(() => {
+                        // Kumuha ng crop history records na sumasailalim lamang sa kasalukuyang piniling tab
+                        const filteredRecords = (cropHistory?.records || []).filter(rec => rec.seed_source === selectedSeedTab);
+                        
+                        if (filteredRecords.length === 0) {
+                          return (
+                            <div style={{ padding: '3rem', textAlign: 'center' }}>
+                              <Leaf size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+                              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No records yet</p>
+                              <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: 0 }}>
+                                No crop monitoring records found for this season.
+                              </p>
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <>
+                            <p style={{ fontSize: '0.72rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', margin: '0 0 1.25rem', letterSpacing: '0.04em' }}>
+                              {filteredRecords.length} Observation{filteredRecords.length !== 1 ? 's' : ''} {seasonFilter ? '' : 'This Season'}
+                            </p>
+                            {filteredRecords.map((rec, idx) => (
+                              <TimelineStep
+                                key={rec.id}
+                                record={rec}
+                                isLast={idx === filteredRecords.length - 1}
+                              />
+                            ))}
+                          </>
+                        );
+                      })()}
                     </div>
-                  )}
+                  )}    
                 </div>
               )}
             </>

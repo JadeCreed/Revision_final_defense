@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthContext';
 import { Bell, X, LogOut, User, ChevronRight } from 'lucide-react'; // ✅ single import
 import { getGisActivePoll } from '../api/axios';
 import { USER_NAV, ROLE_COLORS, ROLE_LABELS } from '../components/navigation/UserNavConfig';
+import BottomNav from '../components/navigation/BottomNav';   
 import logo from '../assets/logo.png';
 
 const DESKTOP_BREAKPOINT = 768;
@@ -354,7 +355,7 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       {open && (
         <div style={{
           position: 'absolute', top: 'calc(100% + 10px)', right: 0, width: '340px', backgroundColor: 'white', borderRadius: '1rem',
-          border: '1px solid #e5e7eb', boxShadow: '0 16px 40px rgba(0,0,0,0.13)', overflow: 'hidden', zIndex: 1100,
+          border: '1px solid #e5e7eb', boxShadow: '0 16px 40px rgba(0,0,0,0.13)', overflow: 'hidden', zIndex: 1040,
           animation: 'notifDropIn 0.2s ease forwards',
         }}>
           <style>{`
@@ -661,7 +662,7 @@ const UserLayout = () => {
           display:         'flex',
           alignItems:      'center',
           justifyContent:  'space-between',
-          zIndex:          1000,
+          zIndex:          40,
           boxShadow:       isDesktop ? '0 1px 4px rgba(0,0,0,0.08)' : '0 2px 8px rgba(0,0,0,0.15)',
           borderBottom:    isDesktop ? '1px solid #e5e7eb' : 'none',
         }}>
@@ -778,11 +779,12 @@ const UserLayout = () => {
 
         {/* ── PAGE CONTENT ── */}
         <div style={{
+          position:      'relative',
           flex:          1,
-          display:       'flex',
-          flexDirection: 'column',
-          minHeight:     0,
-          overflowY:     'hidden',
+          overflow:      'hidden',
+          height:        '100%',
+          overflowY:     'auto',
+          paddingBottom: isDesktop ? '2rem' : 'calc(60px + env(safe-area-inset-bottom))',
         }}>
           <Outlet />
         </div>
@@ -791,27 +793,7 @@ const UserLayout = () => {
       {/* ════════════════════════════════════════════
           BOTTOM NAVIGATION — mobile only
       ════════════════════════════════════════════ */}
-      {!isDesktop && (
-        <div style={{
-          position:        'fixed',
-          bottom:          0,
-          left:            0,
-          right:           0,
-          width:           '100%',
-          maxWidth:        '100%',
-          backgroundColor: 'white',
-          display:         'flex',
-          justifyContent:  'space-around',
-          alignItems:      'center',
-          height:          '72px',
-          zIndex:          1100,
-          boxShadow:       '0 -2px 16px rgba(0,0,0,0.08)',
-          borderTop:       '1px solid #e5e7eb',
-          paddingBottom:   'env(safe-area-inset-bottom)',
-        }}>
-          {navItems.map(item => renderNavItem(item, false))}
-        </div>
-      )}
+      {!isDesktop &&<BottomNav />} 
 
       {/* ════════════════════════════════════════════
           PROFILE DRAWER
@@ -824,7 +806,7 @@ const UserLayout = () => {
               position:        'fixed',
               inset:           0,
               backgroundColor: 'rgba(0,0,0,0.4)',
-              zIndex:          1000,
+              zIndex:          1020,
             }}
           />
           <div style={{
@@ -838,7 +820,7 @@ const UserLayout = () => {
             maxWidth:        isDesktop ? '260px' : '480px',
             backgroundColor: 'white',
             borderRadius:    isDesktop ? '0.875rem' : '1.25rem 1.25rem 0 0',
-            zIndex:          1100,
+            zIndex:          1030,
             padding:         '1.5rem',
             boxShadow:       '0 -4px 24px rgba(0,0,0,0.15)',
           }}>

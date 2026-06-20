@@ -169,7 +169,8 @@ export const updateDistributionEvent = (id, data) => API.put(`/distribution/even
 
 // Batches
 export const getEventBatches  = (eventId)      => API.get(`/distribution/events/${eventId}/batches/`);
-export const createBatch      = (eventId)      => API.post(`/distribution/events/${eventId}/batches/`);
+export const createBatch = (eventId, varietyId) =>
+  API.post(`/distribution/events/${eventId}/batches/`, varietyId ? { variety_id: varietyId } : {});
 export const getBatchDetail   = (id)           => API.get(`/distribution/batches/${id}/`);
 export const submitBatch      = (id)           => API.post(`/distribution/batches/${id}/submit/`);
 export const submitDistributionBatch = (id) => API.post(`/distribution/batches/${id}/submit-distribution/`);

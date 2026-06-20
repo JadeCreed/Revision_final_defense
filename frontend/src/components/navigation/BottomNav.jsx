@@ -1,11 +1,8 @@
 // src/components/navigation/BottomNav.jsx
-// Mobile bottom navigation with Lucide icons
-// "More" drawer shows all menu items
-
 import { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { MENU_CONFIG, BOTTOM_NAV_CONFIG } from './MenuConfig';
+import { MENU_CONFIG, USER_NAV } from './MenuConfig';
 import { LogOut, Menu, X } from 'lucide-react';
 
 const BottomNav = () => {
@@ -14,14 +11,31 @@ const BottomNav = () => {
   const location          = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const bottomItems = (BOTTOM_NAV_CONFIG[role] || []).slice(0, 4);
+  // Kukunin ang buong menu list ng kasalukuyang role
+  const fullMenu = role === 'ADMIN' 
+    ? (MENU_CONFIG.ADMIN || []) 
+    : (USER_NAV[role] || MENU_CONFIG[role] || []);
 
-  // Flatten all menu items for drawer (expand children)
-  const allMenuItems = (MENU_CONFIG[role] || []).flatMap(item => {
+  const totalCount = fullMenu.length;
+  const hasMore = totalCount > 5;
+
+  // Bottom bar items: Kung higit sa 5 ang menu, ipakita ang unang 4. Kung hindi, ipakita lahat.
+  const bottomItems = hasMore ? fullMenu.slice(0, 4) : fullMenu;
+
+  // Kukunin ang mga paths ng items na nakalabas na sa bottom bar
+  const bottomPaths = bottomItems.map(item => item.path);
+
+  // I-filter ang menu para sa drawer upang tuluyang TANGGALIN ang mga nakalabas na sa bottom bar (No Duplication / No Double Active Highlights)
+  const drawerMenu = fullMenu.filter(item => !bottomPaths.includes(item.path));
+
+  // Flatten ang natitirang menu items para sa More drawer
+  const allMenuItems = drawerMenu.flatMap(item => {
     if (item.hasChildren) {
+      const filteredChildren = item.children.filter(c => !bottomPaths.includes(c.path));
+      if (filteredChildren.length === 0) return [];
       return [
         { type: 'header', label: item.label },
-        ...item.children.map(c => ({ ...c, type: 'link' }))
+        ...filteredChildren.map(c => ({ ...c, type: 'link' }))
       ];
     }
     return [{ ...item, type: 'link' }];
@@ -33,14 +47,31 @@ const BottomNav = () => {
     setDrawerOpen(false);
   };
 
-  // Render icon — supports Lucide components and emoji strings
-  const renderIcon = (icon, isActive, size = 20) => {
+  // Ligtas na path check para maiwasan ang double-active highlight
+  const checkActive = (path) => {
+    const current = location.pathname.replace(/\/$/, '');
+    const target = path.replace(/\/$/, '');
+    const isRoleRoot = ['/admin', '/farmer', '/at', '/brgy'].includes(target);
+    
+    if (isRoleRoot) {
+      return current === target;
+    }
+    return current === target || current.startsWith(target + '/');
+  };
+
+  // Render icon na may magkaibang kulay para sa puting bottom bar at madilim na berdeng drawer
+  const renderIcon = (icon, isActive, size = 20, isDrawer = false) => {
     if (!icon) return null;
     if (typeof icon === 'string') {
       return <span style={{ fontSize: '1.2rem', lineHeight: 1 }}>{icon}</span>;
     }
     const Icon = icon;
-    return <Icon size={size} color={isActive ? '#f5c842' : 'rgba(255,255,255,0.7)'} />;
+    if (isDrawer) {
+      // Sa loob ng green drawer: Gold (#f5c842) kapag active, Soft White kapag inactive
+      return <Icon size={size} color={isActive ? '#f5c842' : 'rgba(255,255,255,0.7)'} />;
+    }
+    // Sa puting bottom bar: Deep Forest Green (#1a4d1a) kapag active, Gray kapag inactive
+    return <Icon size={size} color={isActive ? '#1a4d1a' : '#9ca3af'} />;
   };
 
   const navItemStyle = (isActive) => ({
@@ -49,9 +80,9 @@ const BottomNav = () => {
     alignItems:     'center',
     gap:            '2px',
     textDecoration: 'none',
-    color:          isActive ? '#f5c842' : 'rgba(255,255,255,0.7)',
+    color:          isActive ? '#1a4d1a' : '#9ca3af',
     fontSize:       '0.6rem',
-    fontWeight:     isActive ? '600' : '400',
+    fontWeight:     isActive ? '700' : '500',
     minWidth:       '52px',
     padding:        '4px 0',
     background:     'none',
@@ -65,42 +96,43 @@ const BottomNav = () => {
       <div style={{
         position:        'fixed',
         bottom: 0, left: 0, right: 0,
-        backgroundColor: '#1a4d1a',
+        backgroundColor: '#ffffff',                                              // ◀── UNIFORM WHITE BACKGROUND FOR ALL PORTALS
         display:         'flex',
         justifyContent:  'space-around',
         alignItems:      'center',
         height:          '60px',
-        zIndex:          50,
-        borderTop:       '1px solid rgba(255,255,255,0.15)',
+        zIndex:          1010,
+        borderTop:       '1px solid #e5e7eb',                                    // ◀── LIGHT GRAY BORDER
+        boxShadow:       '0 -2px 10px rgba(0,0,0,0.05)',                         // ◀── CLEAN BOTTOM SHADOW
         paddingBottom:   'env(safe-area-inset-bottom)',
       }}>
-        {bottomItems.map(item => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            end={item.label === 'Dashboard'}
-            style={({ isActive }) => navItemStyle(isActive)}
-          >
-            {({ isActive }) => (
-              <>
-                {renderIcon(item.icon, isActive, 22)}
-                <span>{item.label}</span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {bottomItems.map(item => {
+          const isActive = checkActive(item.path);
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              style={navItemStyle(isActive)}
+            >
+              {renderIcon(item.icon, isActive, 22, false)}
+              <span>{item.label}</span>
+            </NavLink>
+          );
+        })}
 
-        {/* More button */}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          style={{
-            ...navItemStyle(drawerOpen),
-            color: drawerOpen ? '#f5c842' : 'rgba(255,255,255,0.7)',
-          }}
-        >
-          <Menu size={22} color={drawerOpen ? '#f5c842' : 'rgba(255,255,255,0.7)'} />
-          <span>More</span>
-        </button>
+        {/* More button — lilitaw lamang kapag lumampas sa 5 ang inyong menu items */}
+        {hasMore && (
+          <button
+            onClick={() => setDrawerOpen(true)}
+            style={{
+              ...navItemStyle(drawerOpen),
+              color: drawerOpen ? '#1a4d1a' : '#9ca3af',
+            }}
+          >
+            <Menu size={22} color={drawerOpen ? '#1a4d1a' : '#9ca3af'} />
+            <span>More</span>
+          </button>
+        )}
       </div>
 
       {/* ── MORE DRAWER ── */}
@@ -108,14 +140,14 @@ const BottomNav = () => {
         <>
           <div
             onClick={() => setDrawerOpen(false)}
-            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 60 }}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1020 }}
           />
           <div style={{
             position:        'fixed',
             bottom:          '60px', left: 0, right: 0,
-            backgroundColor: '#1a4d1a',
+            backgroundColor: '#1a4d1a',                                      
             borderRadius:    '1rem 1rem 0 0',
-            zIndex:          70,
+            zIndex:          1030,
             maxHeight:       '70vh',
             overflowY:       'auto',
             boxShadow:       '0 -4px 20px rgba(0,0,0,0.3)',
@@ -137,7 +169,7 @@ const BottomNav = () => {
               </button>
             </div>
 
-            {/* All items */}
+            {/* Drawer remaining items (Unduplicated) */}
             <div style={{ padding: '0.5rem 0' }}>
               {allMenuItems.map((item, idx) => {
                 if (item.type === 'header') {
@@ -153,8 +185,7 @@ const BottomNav = () => {
                   );
                 }
 
-                const isActive = location.pathname === item.path ||
-                                  location.pathname.startsWith(item.path + '/');
+                const isActive = checkActive(item.path);
                 return (
                   <NavLink
                     key={item.path}
@@ -174,7 +205,7 @@ const BottomNav = () => {
                     }}
                   >
                     <span style={{ minWidth: '22px', display: 'flex', alignItems: 'center' }}>
-                      {renderIcon(item.icon, isActive, 18)}
+                      {renderIcon(item.icon, isActive, 18, true)}
                     </span>
                     <span>{item.label}</span>
                   </NavLink>

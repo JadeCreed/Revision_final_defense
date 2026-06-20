@@ -130,7 +130,7 @@ class DistributionEntrySerializer(serializers.ModelSerializer):
             'signature', 'has_signature', 'signed_at',
             'encoded_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'encoded_at', 'updated_at', 'farmer_detail']
+        read_only_fields = ['id', 'encoded_at', 'updated_at', 'farmer_detail', 'farmer', 'row_number']
 
     def get_variety_name(self, obj):
         return obj.variety.name if obj.variety else ''

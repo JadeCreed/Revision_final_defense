@@ -126,45 +126,50 @@ const SeedDistributionChart = ({ distSummary }) => {
       </div>
 
       {/* Vertical bar chart */}
-      <div style={{ marginBottom:20 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:'#475569', marginBottom:12 }}>Seed Distribution by Seed Type</div>
+      {/* Vertical bar chart */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 12 }}>
+          Seed Distribution by Seed Type
+        </div>
 
-        {/* Y-axis labels + bars */}
-        <div style={{ display:'flex', gap:16, alignItems:'flex-end', height:160, paddingLeft:48, position:'relative' }}>
-          {/* Y axis ticks */}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', paddingLeft: 48, position: 'relative', height: 160 }}>
+
+          {/* Y-axis ticks — absolute, behind bars */}
           {[0, 0.25, 0.5, 0.75, 1].map(frac => {
             const val = Math.round(maxKg * frac);
             return (
               <div key={frac} style={{
-                position:'absolute', left:0, bottom:`${frac*100}%`,
-                display:'flex', alignItems:'center', gap:4,
-                transform:'translateY(50%)',
+                position: 'absolute',
+                left: 0,
+                bottom: `${frac * 160}px`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                width: '100%',
+                pointerEvents: 'none',
               }}>
-                <span style={{ fontSize:9, color:'#94a3b8', whiteSpace:'nowrap' }}>{fmtN(val)} kg</span>
-                <div style={{ width:`calc(100% - 44px)`, height:1, background:'#f1f5f9', marginLeft:4, position:'absolute', left:44 }}/>
+                <span style={{ fontSize: 9, color: '#94a3b8', whiteSpace: 'nowrap', width: 40, textAlign: 'right', flexShrink: 0 }}>
+                  {fmtN(val)} kg
+                </span>
+                <div style={{ flex: 1, height: 1, background: '#f1f5f9' }} />
               </div>
             );
           })}
 
-          {/* Bars */}
+          {/* Bars — pixel-based height */}
           {by_seed.map(seed => {
-            const cfg    = COLORS[seed.seed_key] || { color:'#64748b', light:'#f1f5f9', border:'#e2e8f0', label:seed.seed_key };
-            const heightPct = maxKg > 0 ? (seed.total_kg / maxKg) * 100 : 0;
+            const cfg = COLORS[seed.seed_key] || { color: '#64748b', light: '#f1f5f9', border: '#e2e8f0', label: seed.seed_key };
+            const heightPx = maxKg > 0 ? Math.max(4, (seed.total_kg / maxKg) * 160) : 4;
             return (
-              <div key={seed.seed_key} style={{ flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:6 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:cfg.color }}>{fmtN(seed.total_kg)} kg</div>
+              <div key={seed.seed_key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, position: 'relative' }}>
                 <div style={{
-                  width:'100%', maxWidth:80,
-                  height:`${heightPct}%`, minHeight:4,
-                  background:cfg.color, borderRadius:'6px 6px 0 0',
-                  transition:'height .8s ease',
-                  position:'relative',
-                }}>
-                  <div style={{
-                    position:'absolute', top:-20, left:'50%', transform:'translateX(-50%)',
-                    fontSize:10, color:cfg.color, fontWeight:700, whiteSpace:'nowrap',
-                  }}/>
-                </div>
+                  width: '100%',
+                  maxWidth: 80,
+                  height: `${heightPx}px`,
+                  background: cfg.color,
+                  borderRadius: '6px 6px 0 0',
+                  transition: 'height .8s ease',
+                }} />
               </div>
             );
           })}

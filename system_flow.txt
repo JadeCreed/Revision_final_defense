@@ -1,0 +1,688 @@
+SEED POLL → FINALIZED SEED VARIETIES → NOTIFICATION FLOW
+SYSTEM LOGIC
+The system has two seasons per year:
+•	Wet Season
+•	Dry Season
+When the Admin creates a Seed Poll using the "Create New Poll" form, the poll is associated with a specific Season and Year.
+Example:
+Poll Title: Wet Season Seed Preference Poll
+Season: Wet Season
+Year: 2026
+The poll choices must automatically come from the Seed Types and Seed Varieties master data.
+After the poll is published, farmers can vote for their preferred seed varieties.
+All submitted votes must be stored and displayed in the Seed Poll Results tab.
+Once the poll is closed, the Admin can review the voting results and click "Finalize Seed Varieties".
+Example Finalized Data:
+Final Seed Varieties — Wet Season 2026
+Hybrid:
+•	Bigante Plus
+•	Jackpot
+Inbred:
+•	RC-10
+•	RC-18
+After finalization, the system must create an Active Season Seed Profile.
+IMPORTANT BUSINESS RULE
+The finalized seed varieties become the official active seed varieties for the selected Season and Year.
+These varieties must be used throughout the entire system and become the only valid seed choices for:
+•	Beneficiaries Module
+•	Seed Distribution Module
+•	Reports Module
+•	Harvest Module
+•	Season Records Module
+•	GIS Map Module
+•	Crop Monitoring Module
+•	Crop Utilization Module
+•	Crop Phase Module
+•	Production Module
+Example:
+Wet Season 2026 Active Seed Varieties:
+Hybrid:
+•	Bigante Plus
+•	Jackpot
+Inbred:
+•	RC-10
+•	RC-18
+All records created under Wet Season 2026 must reference only these finalized seed varieties.
+NOTIFICATION CREATION
+After finalization, the system must automatically create a notification for Barangay President users.
+Notification Example:
+Title:
+Confirmed Seed Varieties — Wet Season 2026
+Message:
+Wet Season 2026 seed varieties have been finalized and are now available for beneficiary processing.
+HOME PAGE NOTIFICATION AREA
+The notification must appear directly below:
+Good Evening,
+[User Name]
+Barangay President — AGRICE Lucban
+Notification Card Format:
+________________________________________
+Confirmed Seed Varieties — Wet Season 2026
+Wet Season 2026 seed varieties have been finalized and are ready for beneficiary processing.
+                           [View Beneficiaries]
+________________________________________
+ACTION BUTTON BEHAVIOR
+When the Barangay President clicks:
+[View Beneficiaries]
+The system navigates to:
+Beneficiaries Module
+After clicking the action button, the notification status becomes:
+Completed = True
+When the user returns to the Home Page, the notification must no longer be displayed.
+The notification should only appear again if a new Finalized Seed Variety set is created.
+UNIFIED NOTIFICATION SYSTEM
+Remove the separate "Pending Seed Pickups" section.
+Pending Seed Pickups must become a notification and appear in the same notification area.
+All actionable notifications must use the same design and flow.
+Examples:
+•	Confirmed Seed Varieties
+•	Pending Seed Pickups
+•	Distribution Schedule
+•	Harvest Reminder
+•	New Announcement
+NOTIFICATION QUEUE
+Only one active notification should be displayed at a time.
+Example Queue:
+1.	Confirmed Seed Varieties
+2.	Pending Seed Pickups
+3.	Distribution Schedule
+4.	Harvest Reminder
+When Notification #1 is completed, Notification #2 automatically appears.
+When Notification #2 is completed, Notification #3 automatically appears.
+No blank white space should remain after a notification is removed.
+The remaining content must automatically move upward with a smooth animation.
+REMOVE "YOUR TASKS"
+Remove:
+•	My Barangay Farmers
+•	Announcements
+•	Encode Harvest Data
+•	Submit Report
+Replace this section with 4 analytics tiles.
+Example:
+Registered Farmers
+Beneficiaries
+Harvest Records
+Pending Pickups
+UPDATES AND REMINDERS
+Below the analytics tiles, display:
+Updates & Reminders
+This section contains:
+•	Announcements
+•	Deadlines
+•	Schedules
+•	System Updates
+BELL NOTIFICATION SYSTEM
+The bell icon must no longer redirect to the News page.
+When clicked, it must open a dropdown notification container with animation.
+Format:
+________________________________________
+Confirmed Seed Varieties — Wet Season 2026
+Wet Season 2026 seed varieties have been finalized.
+Jun 10, 2026 🔴 NEW
+________________________________________
+Unread notifications:
+•	Light green background
+•	Red indicator visible
+Read notifications:
+•	White background
+•	Red indicator hidden
+The bell icon must display the unread badge count.
+Example:
+🔔 5
+When a notification is opened, the unread count decreases.
+When the corresponding action is completed from the Home Page, the notification is marked completed and removed from the active notification queue.
+FINAL FLOW
+Admin Creates Poll
+↓
+Farmers Vote
+↓
+Poll Closes
+↓
+Admin Finalizes Seed Varieties
+↓
+Create Active Season Seed Profile
+↓
+Activate Seed Varieties Across:
+•	Beneficiaries
+•	Distribution
+•	Reports
+•	Harvest
+•	Season Records
+•	GIS Map
+•	Crop Monitoring
+•	Crop Utilization
+•	Crop Phase
+•	Production
+↓
+Create Notification
+↓
+Bell Notification Center
+↓
+Home Page Notification Area
+↓
+User Clicks Action Button
+↓
+Notification Completed
+↓
+Display Next Notification In Queue
+Ngayon kapag ka confirm natin nung button sa notification at pumunta na tayo sa beneficiaries menu ngayon ang gagawin ng brgy president at ito sa beneficiaries menu may button na beneficiaries pag ka pindot natin nito mag papakita yung new beneficiaries program
+makikita natin dito yung 2 seed type na base sa seed poll 
+at meron silang variety sa baba which is ito
+
+Hybrid Region (NRP/RFO)
+Bigante plusJackpot
+Inbred PhilRice (RCEF)
+RC-10RC-18
+Kasi ito yung example seed variety na gamit natin ngayon wet season 2026 
+ngayon but pumili ako dito at pinindot ko yung button create program gagawa sya ng program card na may Hybrid
+samahan ng magpapalay
+Wet Season 2030
+0/0
+encoded
+Approved: 00 batches 
+Inbred
+magpapalay
+Wet Season 2026
+0/0
+encoded
+Approved: 01 batch 
+Hybrid 
+Samahan 
+Wet Season 2026 
+0/0 Encoded Approved: 0
+Tulad nung nasa picture 
+sa loob ng program card na ito sa beneficiaries menu 
+sa inbred at hybrid makikita natin yung same format na tulad sa picture
+kapag nakapag create ng yung brgy president ng tig isang seed type program card sa inbred at hybrid sa wet season 2026 at sinubukan nung president na gumawa ulit ng isa pang beneficiaries program card kapag pinindot nya yung button na beneficiaries at already Nakagawa na sya ng tig isang program card sa inbred at hybrid na may wet season 2026 kailangan may lalabas na proper validation  na nag sasabi bawal na sya mag create pa same season o year makakapag create lang sya kapag nabago yung season o year halimbawa gumawa ulit yung admin ng bagong seed poll at nag finalize ng seed same year but dry season naman saka lang ulit sya makakagawa ng tig isang program beneficiaries card at addition yung variety na nasa New Beneficiary Program sa beneficiairies modal ay automated automatic nito na dedetect kung ano yung latest variety based sa finalize seed data so kapag nag create yung admin ng new seed poll at nag finalize seed tas nabago ang seed variety automatic na yun ang lalabas dito na variety dito sa New Beneficiary Program
+Pag ka create nila ng program card sa loob nito makikita natin yung 
+Inbred
+samahan
+Wet Season 2026 · Abang
+ReportRequest Delete
+0 of 2 farmers0%
+DraftBatch 10/10
+Add Beneficiary dito ay may search bar 
+Hybrid
+smaahna
+Wet Season 2026 · Abang
+ReportRequest Delete
+0 of 2 farmers0%
+DraftBatch 10/10
+Add Beneficiary dito ay may search bar
+
+Ito yung laman ng makikita natin na may search bar sa ibaba ng add beneficiary nila ang ma sesearch dito ay yung mga farmer na approved ng admin based sa brgy so kung yung approved farmer ang brgy ay abang then sa brgy president user na assign sa brgy abang sa beneficiaries mune ang masesearch is yung farmer na ang brgy is abang  kung yung brgy user account is assign sa ibang brgy tulad ng aliliw then ang masesearch nya farmer sa beneficiaries is yung mga taga aliliw ngayon kapag nag search tayo sa add beneficiaries ng inbred at hybrid  sa loob ng program card at pinili natin yung farmer at mapupunta tayo  sa page ng Register Farmer
+car, carlo
+2132132321321 · Abang
+ Inbred (PhilRice) Program — samahan
+Required Fields
+Area to be Planted (ha) *
+Remaining: 1.00 ha of 1.00 ha
+Data Sharing Consent *
+Farmer agrees to share data with DA PhilRice
+Select Variety *
+RC-10RC-18
+Signature / Thumbmark*
+Clear Signature
+Fill Out Optional Fields
+Confirm Registration
+Register Farmer
+CC
+car, carlo
+2132132321321 · Abang
+ Hybrid (Region) Program — smaahna
+Required Fields
+Farm Area (ha) *
+Remaining: 1.00 ha of 1.00 ha
+Select Variety *
+Bigante plusJackpot
+Signature / Thumbmark*
+Clear Signature
+Confirm Registration
+Ito ang input encode data ng mga farmer dito enencode natin yung gusto seed na matanggap ng farmer ang logic dito ay ganto sa farm area at area to be planted in both inbred and hybrid mag lalagay dito kung ilang ha ang gusto ng farmer so kung sa farmerprofile nya ay farmer A ay may 1ha record sa system natin kapag hinati nya yung ang nilagay nya na ha sa farm area ay 0.50 at sa inbred naman ay 0.50 ha din at pumili ng seed variety na gusting seed tapos signature at pindutin yung confirm beneficiaries binago ko na yung label name ng button ngayon lang after ma saved yung data mapupunta yung data sa report area ganto ang data nun 
+Report
+Republic of the Philippines · Department of Agriculture · Regional Field Office No. IV-A
+Lists of Farmer-Beneficiaries
+Province: QuezonMunicipality: LucbanIntervention: Hybrid (NRP/Region)Season: Wet Season 2026Barangay: AbangTotal Members: 2Organization: smaahna
+Batch 1Draft
+Batch 1·Variety: Bigante plus1 farmer
+Submit
+No.	RSBSA No.	Last Name	First Name	Middle Name	Ext.	Date of Birth	Res. Municipality	Res. Barangay	Farm Municipality	Farm Barangay	Gender	IP	Senior Citizen	PWD	ARBs	4Ps	Farm Area (ha)	QTY (bags)	Contact No.	Signature
+1	2132132321321	car	carlo	—	ds	12/12/99	Lucban	Abang	Lucban	Abang	M	N	N	N	N	N	0.50	—	09121212122	View
+Example lang ito 
+makikita mo dito na may submit button kapag pinindot ito ang batch na ito with the data of carlo ay mapupunta sa admin user sa beneficiaries menu nya sa admin beneficiaries menu meron dun tatlong Seed Beneficiaries
+Manage farmer beneficiary masterlist and batch approvals.
+2
+Total Events
+0
+Pending Review
+0
+Approved Batches
+0
+Farmers Served
+All EventsPending ReviewApproved Batches
+💧 Wet☀️ Dry
+InbredWet Season 2026
+samahan
+Abang
+0/2
+farmers encoded
+Approved: 0 · Encoded: 0 · Remaining: 20%
+HybridWet Season 2026
+smaahna
+Abang
+1/2
+farmers encoded
+Approved: 0 · Encoded: 1 · Remaining: 1
+Ito yung data sa beneficiaries menu ng admin Nakita mo na may tatlong tabs na
+ All Events | Pending Review | Approved Batches
+pag ka submit ng brgy president nung batch maalin man sa seed type hybrid man o inbred kasi pareho lang naman ang  logic ng seed type na ito sa beneficiaries mag susubmit ng batch after encoding the farmer data in theres program card seed type tapos yung admin sa pending review makikita nya yung brgy card kapag pinindot nya yung makikita nung admin yung batch na inaaproved kaso may problem dito sa pending review sa code ko kapag nag submit ng batch sa isang seed type tapos nag submit din yung same brgy president ng batch sa isa pang seed type in short kapag may submitted pending batch yung dalawang seed type sa isang brgy 
+Na awaiting admin to approved sa loob ng pending review makikita natin na brgy container card tulad nito Brgy. Abang
+smaahna
+NRP · Wet Season 2026
+2
+batches pending
+ ito yung text sa card nya sa brgy Abang ay may submitted batch dalawa isang batch sa inbred at isang batch sa hybrid ngayon kapag pinindot ko yung card makikita ko yung NRP · Wet Season 2026
+smaahna
+Brgy. Abang
+1 pending batch
+SubmittedBatch 1
+1 farmer · Encoded by abang dela
+Submitted: Jun 4, 2026, 09:01 PM
+View DetailsApproveReject
+Makikita natin yung text sa loob ng card dito isang batch lang muna ang nag papakita wala yung isa pang batch kaya ang nangyayare iaaproved ko muna yung unang batch  sa isang seed type tapos I rerefresh ko pa yung webste para lumabas yung isa pang batch  After ma approved ng admin yung mga batches pupunta ito sa approved batches tabs at sa brgy president user beneficiaries menu sa report area yung awaiting admin status ay mag babago  
+Batch 1ApprovedBatch 2Draft
+Batch 11 farmer
+Approved
+No.	Farmer Name	RSBSA No.	Area to be Planted (ha)	No. of Bags (20kg)	Rice Variety Received	Crop Estab (D/T)	Expected Sowing Date	Data Sharing	2025 DS YIELD	Authorized Rep.	Date Received	Signature
+1	car, carlo	2132132321321	0.50	—	RC-10	—	—	✓	To be encoded in Yield	—	—	View
+
+example lang ito sa isang seed type ito naman yung sa hybrid 
+Batch 1ApprovedBatch 2Draft
+Batch 1·Variety: Bigante plus1 farmer
+Approved
+No.	RSBSA No.	Last Name	First Name	Middle Name	Ext.	Date of Birth	Res. Municipality	Res. Barangay	Farm Municipality	Farm Barangay	Gender	IP	Senior Citizen	PWD	ARBs	4Ps	Farm Area (ha)	QTY (bags)	Contact No.	Signature
+1	2132132321321	car	carlo	—	ds	12/12/99	Lucban	Abang	Lucban	Abang	M	N	N	N	N	N	0.50	—	09121212122	View
+Nakita natin na approved na sila take notes naayos ko na yung  error sa pending review sa admin beneficiaries after nito kapag may approved batch na tayo sa brgy president user beneficiaries menu pupunta na tayo sa distribution menu sa brgy president padin sa distribution menu naman ganto ang logic yung approved bathces  natin ng admin mula sa beneficiaries menu ang kukunin lang natin dito is yung data ng nasa loob ng approved batches na galing sa beneficiaries tapos sa distribution menu sa landing page nito ito ang text output 
+Distribution
+Abang · Wet Season 2026
+Seed Distribution Phase
+Once seeds arrive, encode missing distribution data here. Search a farmer or select a program below to get started.
+Total to Distribute
+2
+approved farmers (both programs)
+Successfully Distributed
+2/2
+encoded / total approved both seed types
+Search Farmer
+Search farmers who have been approved in Beneficiaries batches.
+Programs
+Inbred
+samahan
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Hybrid
+smaahna
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Makikita natin na may search bar din ang logic ng search bar dito sa beneficiaries menu ay ganto ang pwede lang ma search na farmer dito ay yung approved farmer lang sa batches na approved ng admin maalin sa seed type na may approved batch ng admin mula sa beneficiaries menu so ang ma sesearch lang natin dito is yung farmer mula dun tapos kapag lumabas yung data ng data at pinindot natin ito mapupunta tayo dito
+car, carlo
+C
+car, carlo
+2132132321321 · Abang
+Total Farm: 1.00 ha
+Inbred (PhilRice)
+From Beneficiaries
+Area Planted
+0.50 ha
+Data Sharing
+Agreed
+Number of Bags (20kg/bag) *
+Suggested: 1 bag (20kg) · 0.5ha
+20kg
+Rice Variety Received *
+Expected Sowing Date (Month/Week) *
+Date Received *
+Authorized Representative
+Crop Establishment (D/T) *SelectDirect Seeding (D)Transplanting (T)
+2025 DS YIELD
+Harvest data will be encoded in Yield Encode after harvest.
+Confirm Seed Distributed
+Hybrid (Region)
+From Beneficiaries
+Farm Area
+0.50 ha
+Variety
+Bigante plus
+QTY (bags) *
+Suggested: 0.5 bags (7.5kg) · 0.5ha
+7.5kg
+Confirm Seed Distributed
+
+makikita natin na may dalawang container dito 
+isa sa inbred at isa sa hybrid kapag yung farmer carlo ay may data lang para sa inbred yung UI design ng hybrid ay bawal mag encode kasi walang data yung farmer na approved batch dun pero kung meron pwede syang mag encode ganun lang din vice versa kapag si Farmer carlo ay may approved batches data lang sa hybrid program card sa beneficiaries menu naka locked yung inbred side hindi pwede mag encode yung data nung dalawang seed na ito ay independent ibig sabihin kapag nag encode lang ako ng data sa inbred kahit pwede ako mag encode sa hybrid ang mag sasaved lang muna   na data ay yung para lang sa inbred at yung data nun ay gagamitin sa gis map at crop phase menu kasi itong encode na ito yung tinatawag nating seed distribution dito na tayo nag eencode ng mga farmer na may seed distribution data na pag katapos nun kapag balak ko naman mag encode sa hybrid at nag lagay ako ng data at pinindot yung button confirm mag sasaved ang data nung farmer na yun sa bilang isang seed distribution Nakita natin na approved na sila take notes naayos ko na yung  error sa pending review sa admin beneficiaries after nito kapag may approved batch na tayo sa brgy president user beneficiaries menu pupunta na tayo sa distribution menu sa brgy president padin sa distribution menu naman ganto ang logic yung approved bathces  natin ng admin mula sa beneficiaries menu ang kukunin lang natin dito is yung data ng nasa loob ng approved batches na galing sa beneficiaries tapos sa distribution menu sa landing page nito ito ang text output Distribution
+Abang · Wet Season 2026
+Seed Distribution Phase
+Once seeds arrive, encode missing distribution data here. Search a farmer or select a program below to get started.
+Total to Distribute
+2
+approved farmers (both programs)
+Successfully Distributed
+2/2
+encoded / total approved both seed types
+Search Farmer
+Search farmers who have been approved in Beneficiaries batches.
+Programs
+Inbred
+samahan
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Hybrid
+smaahna
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Makikita natin na may search bar din ang logic ng search bar dito sa beneficiaries menu ay ganto ang pwede lang ma search na farmer dito ay yung approved farmer lang sa batches na approved ng admin maalin sa seed type na may approved batch ng admin mula sa beneficiaries menu so ang ma sesearch lang natin dito is yung farmer mula dun tapos kapag lumabas yung data ng data at pinindot natin ito mapupunta tayo dito
+car, carlo
+C
+car, carlo
+2132132321321 · Abang
+Total Farm: 1.00 ha
+Inbred (PhilRice)
+From Beneficiaries
+Area Planted
+0.50 ha
+Data Sharing
+Agreed
+Number of Bags (20kg/bag) *
+Suggested: 1 bag (20kg) · 0.5ha
+20kg
+Rice Variety Received *
+Expected Sowing Date (Month/Week) *
+Date Received *
+Authorized Representative
+Crop Establishment (D/T) *SelectDirect Seeding (D)Transplanting (T)
+2025 DS YIELD
+Harvest data will be encoded in Yield Encode after harvest.
+Confirm Seed Distributed
+Hybrid (Region)
+From Beneficiaries
+Farm Area
+0.50 ha
+Variety
+Bigante plus
+QTY (bags) *
+Suggested: 0.5 bags (7.5kg) · 0.5ha
+7.5kg
+Confirm Seed Distributed
+makikita natin na may dalawang container dito
+isa sa inbred at isa sa hybrid kapag yung farmer carlo ay may data lang para sa inbred yung UI design ng hybrid ay bawal mag encode kasi walang data yung farmer na approved batch dun pero kung meron pwede syang mag encode ganun lang din vice versa kapag si Farmer carlo ay may approved batches data lang sa hybrid program card sa beneficiaries menu naka locked yung inbred side hindi pwede mag encode yung data nung dalawang seed na ito ay independent ibig sabihin kapag nag encode lang ako ng data sa inbred kahit pwede ako mag encode sa hybrid ang mag sasaved lang muna   na data ay yung para lang sa inbred at yung data nun ay gagamitin sa gis map at crop phase menu kasi itong encode na ito yung tinatawag nating seed distribution dito na tayo nag eencode ng mga farmer na may seed distribution data na pag katapos nun kapag balak ko naman mag encode sa hybrid at nag lagay ako ng data at pinindot yung button confirm mag sasaved ang data nung farmer na yun sa bilang isang seed distribution
+ngayon ang problem ko sa current code ko okay na yung logic ko sa gis map crop monitoring pumapasok ang data ng seed distribution at yung computation nya ang problem ko nalang is ito dahil nga hinati natin yung total hectar record ng isang farmer meron sya farm area data sa hybrid sa beneficiaries at area to be planted naman sa inbred kapag sinubmit natin ito sa admin at na approved pag dating sa distribution menu at senearch natin yung farmer na yun pwede tayo mag encode sa both seed type ng kung ilang seed bags na natanggap nila car, carlo
+C
+car, carlo
+2132132321321 · Abang
+Total Farm: 1.00 ha
+Inbred (PhilRice)
+From Beneficiaries
+Area Planted
+0.50 ha
+Data Sharing
+Agreed
+Number of Bags (20kg/bag) *
+Suggested: 1 bag (20kg) · 0.5ha
+20kg
+Rice Variety Received *
+Expected Sowing Date (Month/Week) *
+Date Received *
+Authorized Representative
+Crop Establishment (D/T) *SelectDirect Seeding (D)Transplanting (T)
+2025 DS YIELD
+Harvest data will be encoded in Yield Encode after harvest.
+Confirm Seed Distributed
+Hybrid (Region)
+From Beneficiaries
+Farm Area
+0.50 ha
+Variety
+Bigante plus
+QTY (bags) *
+Suggested: 0.5 bags (7.5kg) · 0.5ha
+7.5kg
+Confirm Seed Distributed ito yung data output sa distribution encode page 
+dito ay may automatics which is yung 
+Number of Bags (20kg/bag) *
+Suggested: 1 bag (20kg) · 0.5ha at yung QTY (bags) *
+Suggested: 0.5 bags (7.5kg) · 0.5ha kasi yung pwede lang ilagay na number input field dito is based lang sa computation natin sa gusto nilang Area Planted
+0.50 ha Farm Area
+0.50 ha
+kasi ang logic nito for 1 ha = 1 bag of seed with(15kg) in hybrid and inbred 1ha = 2bags of seed(40kg) so dahil yung  Area Planted
+0.50 ha nya at yung Farm Area
+0.50 ha nya sa dalwang seed ay hinati nya yung pwede nya lang matanggap na bags is hindi pwedeng lumagpas sa 1 for inbred at sa 0.50 naman sa hybrid ito tenesting ko na para alam mo From Beneficiaries
+Farm Area
+0.50 ha
+Variety
+Bigante plus
+QTY (bags) *
+Suggested: 0.5 bags (7.5kg) · 0.5ha
+15kg
+Exceeds limit. Max 0.5 bags (7.5kg) for 0.5ha.
+From Beneficiaries
+Area Planted
+0.50 ha
+Data Sharing
+Agreed
+Number of Bags (20kg/bag) *
+Suggested: 1 bag (20kg) · 0.5ha
+40kg
+Exceeds limit. Max 1 bags (20kg) for 0.5ha.  itong automation na to is okay na yung logic nito ang problema ko nalang ay ito nakikita mo sa picture na hindi ko pa pinipindot yung save button ng seed type pero sa gis map may data na agad ng which is mali dapat papasok lang yung data sa gis map kapag pinindot ko na yung button nila kasi nag eeror din sa scenario na ito sa farmer car, carlo
+2132132321321 · Abang
+Total Farm: 1.00 ha dahil hinati nya yung total hectar nya pwede tayo mag bigay ng seed bags sa dalawang seed type kasi kung isa lang isang seed type lang muna ang pwedeng ma encodedan at naka locked pa yung isa ngayon dahil parehong pwede mag encode sa dalawang seed type ang nangyayare kahit i save ko muna yung data sa inbred tapos tiningnan ko sa gis map same padin yung results may data padin ng seed distribution sa hybrid and vice versa which is mali dapat kung ano lang yung pindutin ko na button based sa seed type yun lang ang mag sasaved kasi nga sabi ko dapat independent yung data nung dalawang seed type sa distribution para hindi maging magulo  naayos ko na naman yung issue sa pag sasaved ng data sa seed distribution na ipapakita sag is map pagkatapos nila habang patuloy na nag eencode yung mga brgy user president ng data sa distribution at sa distribution menu after ng brgy president mag encode ng mga data sa landing page nya sa dalawang seed type program nya sa baba na galing sa beneficiaries 
+Distribution
+Abang · Wet Season 2026
+Seed Distribution Phase
+Once seeds arrive, encode missing distribution data here. Search a farmer or select a program below to get started.
+Total to Distribute
+2
+approved farmers (both programs)
+Successfully Distributed
+2/2
+encoded / total approved both seed types
+Search Farmer
+Search farmers who have been approved in Beneficiaries batches.
+Programs
+Inbred
+samahan
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Hybrid
+smaahna
+Wet Season 2026 · Abang
+1/1
+encoded
+1 approved batchView Masterlist
+Kapag pinindot ko yung isa dito makikita ko yung updated batch sa distribution which is ito 
+Distributionsamahan
+Republic of the Philippines · Department of Agriculture
+Distribution Masterlist
+Province: QuezonMunicipality: LucbanProgram: Inbred (PhilRice)Season: Wet Season 2026Barangay: AbangOrganization: samahan
+Batch 1Pending
+Batch 1 PendingSubmit to Admin
+No.	RSBSA No.	Name	Area Planted	No. of Bags	Rice Variety	Crop Estab.	Sowing Date	Date Received	Auth. Rep.	Data Sharing	Signature
+1	2132132321321	car, carlo	0.50	1	RC-10	TP	june	06/05/26	jade	✓	View
+Halimbawa lang ito 
+ito naman yung example output sa hybrid 
+Distributionsmaahna
+Republic of the Philippines · Department of Agriculture
+Distribution Masterlist
+Province: QuezonMunicipality: LucbanProgram: Hybrid (Region)Season: Wet Season 2026Barangay: AbangOrganization: smaahna
+Batch 1Pending
+Batch 1 PendingSubmit to Admin
+No.	RSBSA No.	Name	Contact	Farm Area (ha)	QTY (bags)	Variety	Signature
+1	2132132321321	car, carlo	09121212122	0.50	1	Bigante plus	View
+
+makikita natin na may submit to admin din sya tulad sa beneficiaries pero ang kaibahan nito yung batch na may season at year na active ay hindi na sya connected sa beneficiaries menu batch before ito nay un update na mga data kapag kapag nag submit batch yung brgy president sa distribution menu hindi maaapektuhan yung mga batch na nasa beneficiaries menu kasi separated na sila kumukuha lang ng approved  batch  na data  na inapproved ng admin yung distribution menu sa beneficiaries pero once na submit na ng brgy president yung batch na may data ng farmer hindi na yun pwedeng ma update sa beneficiaries tulad ng Gantong scenario si car, carlo ay na encode ko na sa inbred program card tapos ito na yung data nya Batch 1ApprovedBatch 2Draft
+Batch 11 farmer
+Approved
+No.	Farmer Name	RSBSA No.	Area to be Planted (ha)	No. of Bags (20kg)	Rice Variety Received	Crop Estab (D/T)	Expected Sowing Date	Data Sharing	2025 DS YIELD	Authorized Rep.	Date Received	Signature
+1	car, carlo	2132132321321	0.50	1	RC-10	TP	june	✓	To be encoded in Yield	jade	06/05/26	View
+Nakikita natin na already approved na sya pero may isang issue dito kapag pumunta ako sa page na may search bar ng farmer approved which is ito Programs
+Inbred
+samahan
+Wet Season 2026 · Abang
+ReportRequest Delete
+1 of 2 farmers50%
+DraftBatch 20/10
+Add Beneficiary
+Registered Farmers
+Showing 1–1 of 1
+Overall / 2Page 1 of 1
+1
+car, carlo
+2132132321321 · —
+Batch 1
+Signed 
+Previous
+Page 1 of 1
+Next
+Nakikita natin na sa picture na may edit icon na ang ibig sabihin ay pwede pang ma edit yung data nya yung edit icon na ito is nagana nag uupdate yung data ang problema kapag ito ay nasa batch na isang seed type at yung batch nya sa seed type na yun is na approved ng admin kapag yung batch nya ay already approved tapos sinubukan natin pindutin yung edit icon or delete icon dapat may lalabas na toast bar na bawal na ma edit kapag approved na ng admin yung batch na kabilang sya sa isang seed type program card so halimbawa si 
+car, carlo ay nag encode ng data nya sa inbred tapos na submit yung batch at na approved na ng admin bawal na ma pindot yung edit button at  yung delete button icon dapat may proper validation dun tapos kapag sinubukan nya mag pa encode sa ibang seed type at hindi pa sya na eencode dahil bago palang sya mag papaencode at kapag na encode na at hindi pa na susubmit yung batch pwede pa nya mapindot yung edit icon at yung delete button ang delete button ay ma reremove yung isang farmer sa loob ng table row tapos babalik sya sa search bar at yung remaining hectar nya is babalik in short pwede pa ulit sya ma encode kaso kapag yung datin batch na inasilan nya ay na submit na at awaiting to approved ng admin at kakaencode lang ulit sa kanya papasok na sya bagong batch 
+
+
+ sa distribution na yung new data  at na encode na nung brgy president yung ibang data tulad ng seed bags at iba pa hindi n anito apektado yung beneficiaries kaya kapag nag submit yung brgy president 
+ito yung logic kung bakit dapat pag kakuha nung distribution menu ng approved batch at pag nakapag encode na sya at gusto nya mag submit ng batch sa admin distribution menu 
+ang curren problem ko is eto dapat may proper validation sa beneficiaries menu sa brgy user lalo na yung edit icon at delete at sa distribution naman kapag ng sumbit ako ng batch sa admin at pupunta ito sa distribution menu ng admin user doon i approved ng admin sa distribution menu yung batch ko sa distribution menu sa brgy user dapat hindi connected yung batch na isusubmit ng brgy president sa distribution sa batch ng beneficiaries kasi yung hawak na data ng brgy sa distribution na batch yun na yung updated kaya kapag na approved ito ng admin hindi na dito connected yung batch submittion ng beneficiaries menu sa brgy user kasi dati dahil nga nasa iisang app lang yung logic ng beneficiaries menu at distribution minsan nagiging connected yung submit batch nila dun ako nag kakaerror kaya dapat yung submit batch nilang dalawa is separated na kasi ganto yan sa admin user ko may reports menu ako dun mag gegenerated ako ng automated report kung saan ang logic nun is kapag namili ako kung anong data yung gusto ko kunin mag a-auto fill yung yung mga column kasi ang plano ko is gumawa ng template ng documents gamit ang csv tapos sa template na yun dun papasok lahat ng data na kailagan ko automatically kaya sa system ko ay may submit batch sa beneficiaries menu at sa distribution menu kasi kapag na approved yung batch ng admin sa approved batch na tabs sa beneficiaries menu naka lock na yung mga data na yun ibig sabihin nung locked is yun ang kukunin na data o mag a-auto fill sa template na gagawin ko kasi yung template naman na gagawin ko is tulad lang nung itsura ng mga report area ng beneficiaries at distribution based sa dalawang seed type kasi ang plano ko gagawa ako ng isang template sa seed type na nandun lahat ng column ng beneficiaries menu at distribution for example nag encode ako ng data sa beneficiaries menu tapos na submit ko yung batch at na approved so yung data na yun is naka locked para sa auto fill sa report gagawa kasi ako ng isang template na nandun lahat ng column needed both distriubtion at beneficiaries menu at kaibahan lang is yung template based on seed type kasi mag kaiba naman ng input filed o column na kinukuha yung inbred at hybrid hindi sila pareho kaya yung data na approved batch ng admin sa beneficiaries menu dalawang menu ang gagamit nun yung distribution menu kapag na approved na yung batch sa beneficiaires kukunin ng distribution menu yung data para i update para lagyan ng seed bag at iba pang data based sa seed type data na kailangan tapos proceed na yung distribution menu sa sarili nyang flow na yung data nya na nag encoded ng seed distribution pupunta sa gis map at sa crop phase menu tapos yung isa naman gagamit ng data ng approved batch ng beneficiaries na naka locked sa approved batches sa tabs ng beneficiaries menu ng admin yung ang kukunin ng report menu na data para automatically fill in ng data sa template ng ginawa ko na hindi na aapektuhan yung ginagawang pag eencode ng brgy president sa distribution kasi naka locked na yung data na yun para sa report menu kaya sabi ko dalawa ang gagamit ng data ng approved batch ng beneficiaires menu ngayon kaya may submit batch din yung distribution menu dapat same lang din ito nung sa beneficiaires menu ng admin na kapag nag submit yung brgy president ng batch na galing sa distribution menu ng brgy president dapat may tatlo din tabs sa distribution menu ng admin na separatly sa beneficiaries menu ng admin same sila ng logic sa pag approved at pag locked ng data kapag na approved na pero dapat hindi nila naaapektuhan yung isat isa
+
+
+tuloy natin yung flow habang nagpatuloy na nag eencode yung mga brgy president ng seed distribution sa kani-kanilang brgy may scenario na habang nangyayare itong pag eencode ng mga brgy president ng data sa distribution may mga farmer na nag uumpisa na mag tanim gamit yung own seed nila 
+kasi dito sa system namin may tatlong seed type(inbred,hybrid,farmer saved seed/own seed) ngayon yung dalawang seed type na inbred at hybrid sila lang yung may seed distribution data sa map sila yung seed type na galing sa government kaya meron sila seed distribution data sila kaya yung farmer saved seed ay walang seed distribution data 
+ngayon ang scenario habang nag eencode yung mga brgy president ng distribution dahil nga may mga farmer na nag sisimula na mag tanim seed gamit yung farmer saved seed/own seed ang AT(agricultural technician) ay pumupunta sa farmer field based sa assign brgy nila while yung brgy president ay nag eencode ng seed distribution data ngayon dahil binibigay palang naman yung seed ng both inbred at hybrid na seed bags at may mga nag sisimula na mag tanim na farmer gamit yung own seed nila ang at kapag nasa farmer field ang nakikita nila is yung mga farmer na nag tanim ng farmer saved seed na walang pang seed bag ng both seed type o kahit isa lang depende kasi sa gusto nila kung anong seed type yung gusto nilang makuha ngayon sa AT user ko may monitor farmer dun kung saan pwede nilang ma search yung farmer na  naka assign sa kanila kung ano man yung brgy ng farmer nay un tapos kapag pumili yung AT ng farmer na kailangan na e encode yung status may lalabas na modal at ito yung mga input field Record Crop Phase
+CC
+car, carlo
+Farmer ID: 2132132321321 · Brgy. Abang
+Distributed: Inbred — RC-10
+Crop Phase *
+Crop Establishment
+Tillering
+Flowering
+Ripening
+Harvesting
+Seed Source *
+HybridInbredOwn Seed
+Observation Status *
+NormalDelayedDamaged
+Date Observed *
+Area Monitored (ha)
+Remarks / Field Notes (optional)
+Save Observation
+Ngayon makikita natin na may mga crop phase area ngayon yung at pipiliin nya yung own seed tab o yung tinatawag natin na farmer saved seed at pipili sya ng crop phase kapag bagong encode palang yung seed type ng farmer na yun ang unang crop phase dapat ay crop establishment at dapat sunod-sunod ito from 
+
+Crop Establishment > Tillering > Flowering > Ripening > Harvesting ngayon kasi ang flow ng AT encode ko sa monitor menu ay pwedeng ma click yung crop phase kahit alin sa kanila which is mali flow dapat kapag yung seed type ay wala pang record ng crop monitor phase ng AT ang unang phase dapat ay crop establishment tapos kapag sinubukan pindutin ng AT yung flowering na hindi pa dumadaan sa tillering dapat may lalabas na proper validation toast saying yung proper error message at ang pwede nga lang ma pindot is yung tillering phase na kasunod sa crop establishment at dapat may Gantong logic kapag yung isang seed type ay may record na ng crop phase tapos senearch ulit ng AT yung farmer na yun tapos pumili sya ng seed type dapat sa crop phase makikita yung crop establishment or current phase nung farmer na may indicator na yun yung crop phase ng farmer na  yun na already encode ngayon para alam ng AT kung ano yung ma encode na para ang pipindutin nya nalang is yung tillering o yung kasunod na phase itong sinasabi ko is example flow lang ng mga crop phase hindi lang ito sa crop establishment at tillering dapat apply din ito sa limang crop phase 
+Itong AT crop phase sabi nya natin na kailangan may season and year stamp ito para alam natin kung anong season at year ang nilalagyan natin ng data kasi for example ang active season natin ay wet season 2026 year tapos nag encode ako ng mga data ng farmer sa mga seed type at pumapasok ito sa gis map at crop phase menu at sa mga analytics nito ngayon kapag gumawa ang admin ng new seed poll at nag finalize ng bagong seed varieties sa new active season o year na yun kailangan yung mga data ng farmer ko na enecode ko sa past season wet 2026 ay uulit sa una o mawawala at  mag sasaved sya sa kung ano mang season o year ko sya enencode para pwede akong mag filterize ng data at ma view yung mga past data ko sa crop phase menu bilang isang AT user at kapag may new active season o year for example kung dati ang active season at year natin is wet season 2026 tapos nag encode tayo kay farmer carlo ng crop phase na Crop Establishment>Tillering?Flowering>Ripenin>Harvesting   ng data sa wet season 2026 
+at nag create ang admin ng new seed poll na dry season 2026 kailangan yung past data na ginawa ko is ma sasaved sa kung anong season at year sila belong to sa AT crop phase menu ngayon meron akong view history 
+ngayon kapag maayos na yung pag eencode ng AT at sa isang seed type ay may nakarating na sa harvesting yung farmer na may seed type na ang crop phase ay harvesting mapupunta yung data nito sa harvest menu ng brgy president user dito mag eencode ang brgy president ng harvest ng farmer na ang seed type ay nasa harvesting ibig sabihin kasi yung farmer na may harvesting phase ay nag haharvest na ng kanyang seed type at variety nito ngayon kailangan na ng brgy president na mag encode ng harvest o yield ng isang farmer na may harvesting phase tapos ang mag ka search ng farmer na yun pipili kung anong seed type yung  may harvesting sya tapos mag eencode kung anong variety kung ilang harvest bag,harvest date at notes/remarks dito sa harvest bags may computation dito ganto  sya sa
+HYBRID Rice Seeds:
+  Sa 1 ha = 1 bag 15 kg per hectare
+  Meaning= for 1 ha ang matatanggap nya sa hybrid ay 1 bag na may 15kg ang
+  Target Yield: 5,000 kg/ha (at dry weight) so ibig sabihin kung ang natanggap ng farmer ay 1 bag ng hybrid tapos tinamin nya to ang normal yield nya dapat ay 5,000kg sa isang bag ng rice paddy ang fix kilo nito ay 50kg so kapag ang nilagay ng brgy president sa harvest bags ay 100 it mean 100bags ng rice paddy sa computation 100kgx50kg = 5000kg so kapag  na meet ng farmer ibig sabihin 100% 
+
+≥ 100% Exceeded Target
+80% to < 100% Achieved Target
+70% to < 80% Near Target
+50% to < 70% Below Target
+< 50% Critical 
+INBRED Rice Seeds:
+  For 1ha : 1 bag=20kg,2 bags 40 kg per hectare so in 1 hectar the bags they get is 2 bags that is 40kg
+  Meaning kapag 1 ha ang ibibigay na bag ay 2 bags with 40kg kapag half ng hectar 1 bag 20kg
+  Target Yield: 4,000 kg/ha  
+OWN_SEED (Farmer's Own Stock):
+  Target Yield: 3,000kg   
+
+
+-------------------------------------
+
+ang curren problem ko is eto dapat may proper validation sa beneficiaries menu sa brgy user lalo na yung edit icon at delete at sa distribution naman kapag ng sumbit ako ng batch sa admin at pupunta ito sa distribution menu ng admin user doon i approved ng admin sa distribution menu yung batch ko sa distribution menu sa brgy user dapat hindi connected yung batch na isusubmit ng brgy president sa distribution sa batch ng beneficiaries kasi yung hawak na data ng brgy sa distribution na batch yun na yung updated kaya kapag na approved ito ng admin hindi na dito connected yung batch submittion ng beneficiaries menu sa brgy user kasi dati dahil nga nasa iisang app lang yung logic ng beneficiaries menu at distribution minsan nagiging connected yung submit batch nila dun ako nag kakaerror kaya dapat yung submit batch nilang dalawa is separated na kasi ganto yan sa admin user ko may reports menu ako dun mag gegenerated ako ng automated report kung saan ang logic nun is kapag namili ako kung anong data yung gusto ko kunin mag a-auto fill yung yung mga column kasi ang plano ko is gumawa ng template ng documents gamit ang csv tapos sa template na yun dun papasok lahat ng data na kailagan ko automatically kaya sa system ko ay may submit batch sa beneficiaries menu at sa distribution menu kasi kapag na approved yung batch ng admin sa approved batch na tabs sa beneficiaries menu naka lock na yung mga data na yun ibig sabihin nung locked is yun ang kukunin na data o mag a-auto fill sa template na gagawin ko kasi yung template naman na gagawin ko is tulad lang nung itsura ng mga report area ng beneficiaries at distribution based sa dalawang seed type kasi ang plano ko gagawa ako ng isang template sa seed type na nandun lahat ng column ng beneficiaries menu at distribution for example nag encode ako ng data sa beneficiaries menu tapos na submit ko yung batch at na approved so yung data na yun is naka locked para sa auto fill sa report gagawa kasi ako ng isang template na nandun lahat ng column needed both distriubtion at beneficiaries menu at kaibahan lang is yung template based on seed type kasi mag kaiba naman ng input filed o column na kinukuha yung inbred at hybrid hindi sila pareho kaya yung data na approved batch ng admin sa beneficiaries menu dalawang menu ang gagamit nun yung distribution menu kapag na approved na yung batch sa beneficiaires kukunin ng distribution menu yung data para i update para lagyan ng seed bag at iba pang data based sa seed type data na kailangan tapos proceed na yung distribution menu sa sarili nyang flow na yung data nya na nag encoded ng seed distribution pupunta sa gis map at sa crop phase menu tapos yung isa naman gagamit ng data ng approved batch ng beneficiaries na naka locked sa approved batches sa tabs ng beneficiaries menu ng admin yung ang kukunin ng report menu na data para automatically fill in ng data sa template ng ginawa ko na hindi na aapektuhan yung ginagawang pag eencode ng brgy president sa distribution kasi naka locked na yung data na yun para sa report menu kaya sabi ko dalawa ang gagamit ng data ng approved batch ng beneficiaires menu ngayon kaya may submit batch din yung distribution menu dapat same lang din ito nung sa beneficiaires menu ng admin na kapag nag submit yung brgy president ng batch na galing sa distribution menu ng brgy president dapat may tatlo din tabs sa distribution menu ng admin na separatly sa beneficiaries menu ng admin same sila ng logic sa pag approved at pag locked ng data kapag na approved na pero dapat hindi nila naaapektuhan yung isat isa naiitindihan mo kaya yung logic ko
+
+
+----------------------------------------
+
+
+
+
+
+how can i do that The one thing you must fix right now is adding const [rejectType, setRejectType] = useState('beneficiary'); to AdminDistribution.jsx state declarations, otherwise the reject button in the Pending tab will throw an error. kasi ang plano ko sa buong system is based sa active season and year lahat ng data na ginamit dun from seed distribution to gis map to 5 crop phase in AT kasi AT ang nag eencode nito tapos mag pupunta din sa crop phase menu for analytics purposses na more on gantt chart at mga graph bar chart graph pie chart etc kung anong graph ang bagay at suited dba ang lalabas na data dito sa crop menu ay yung data ng mga enencode ng brgy at AT sa active season ang gusto ko mag add ng filter button na hiwalay yung season at year tapos ang gusto ko kasi kapag gumawa ng bagong seed poll yung admin sa ibang season at same year panibagong cycle yun ng data tapos yung mga data sa past season at year na ginamit natin sa gis map crop phase menu production for harvesting ay mag sasave sa filterize button natin kung baga ang halimbawa nito is tulad nito sa gis map nakikita natin na may season filter dba at may data ngayon yung data na to ay mag sasaved sa season oh year na ginamit natin tapos kapag gumawa ng new seed poll yung admin mawawala yung data dito at mag sasaved kung anong season at year ginamit yung data na yun panibagong season naman para while encoding a new data sa new season at same year tapos gusto ko makita yung past record ay lalabas sa map yung past data ng pinili ko na season at year tapos pwede na hindi naaapektuhan yung current active data ko sa current active season at year ko pero dito nakikita natin sa gis season filter na mag kasama yung season at year which is dapat hiwalay kasi pag mag kasama sila hahaba yung data dapat nakakapili ako kung anong season at year yung gusto ko makita ngayon kapag wala pang ganun year at season na data may proper validation kasi may dalawang season sa isang year which is dry and wet which is for example may past data nako sa wet season 2026 tapos meron na din akong past data sa dry season 2026 ngayon for example lang na ang active year ko is 2027 tapos wet season tapos dahil nga pinag hiwalay natin yung button filter na season at year kapag ang pinili ko sa season is dry tapos ang pinili ko na year is 2026 mag papakita yung past data na ginamit natin dun tapos kapag binago ko yung season ginawa kong wet mag papakita yung past data or record na ginawa natin dun tapos ng hindi naaapektuhan yung current data na ginagawa natin sa current active season at year kasi kung mag kasama sa iisang filterize button yung season at year hahang bali tatlo row yung laman tulad nito wet season 2027 wet season 2026 dry season 2026 so parang ganto yung laman ng filterize button kesa sa gantong UI approach season button year button with drop down wet 2027 dry 2026 dba mas maiksi ganto yung balak kung gawin sa gis map crop monitoring at crop utilization at crop phase menu at production at mga analytics tapos yung pag eencode ng mga user like AT para alam nila kung anong active season at year yung enencode nila dapat din mag lagay tayo ng area sa at na may filterize button din na pwede nyang ma view yung past record na enencode nya sa mga user kasi sa brgy user kasi kailangan din nababago yung data ng mga famer sa AT user for example wet season yung current active natin tapos nag encode yung AT kay Farmer carlo sa lahat ng seed type tapos gumawa ng new seed poll yung admin tapos kung nababago na yung data sa gis map at crop phase at production at sa iba pa dapat new data encode ulit yung gagawin nung AT baka kasi new active season na like dry season 2026 tapos nandun padin yung mga data na enencode ng AT dapat umuulit yun at nasasave sa filterize button tulad sa admin user na gis map crop phase production at iba pa sa brgy president naman ang trabaho nya kasi ay mag encode ng beneficiaries kung sino ang may gusto mabigyan ng seed bag sa dalawang seed type na inbred at hybrid tapos ipapasa yung data sa distribution menu kung saan ilalagay naman nung brgy president yung seed bag na natanggap ng farmer pag ka pindot ng button based sa seed type kasi independent yung data nung dalawang seed type na pupunta yung data ng farmer bilang seed distribution sa gis map at crop phase menu tapos habang ginagawa yung ng mga brgy president may mga farmer na nag tatanin na gamit yung kanilang own seed o farmer saved seed na ang trabaho naman ng AT is pumunta sa field para i check yung status ng isang farmer so pag nakita ng AT na ay nag tanim si farmer carlo ng farmer saved seed tapos nasa crop establishment phase na ito i eencode yun ng AT tapos papasok yung sa gis map sa crop monitoring area kasama ng seed distribution tapos kapag naman si farmer carlo ay nabigyan ng seed bag sa dalawang seed o kahit sa isang seed type lang papasok naman yung sa container breakdown sa gis map yung logic sa gis map sa crop monitoring is okay naman kunting linis nalang ng data para maging malinis at tama tapos kapag may mga farmer na nasa harvesting phase na dito ay pwede ng mag conduct yung brgy president ng encode about sa harvest ng mga farmer yung ay sa part ng harvest menu sa brgy president user yung data din dito ay ang gusto ko may filterize data din na umuulit yung encode kapag new season o year tapos dapat may area na pwede ma view yung mga past record na ginawa nila ngayon sa kada encode ng brgy president sa harvest ng farmer sa tatlong seed type pupunta yung data nito sa production menu kung saan naadun yung mga computation at analytics naman about harvesting o yield ng mga farmer dun din dapat may mga graph like bar chart pie chart etc kung anong graph o analytics yung bagay sa ganun klasing data ngayon dapat din sa production menu ay may filterize button na nababago yung mga graph data o results base sa pinili ko na season o year na hindi naaapektuhan yung current active data na meron tayoi sa current o latest season o year na meron tapos yung mga data sa crop phase at production menu ay based sa tatlong seed type na independent dapat kasi hindi naman pare-pareho ang data na meron sila tulad nalang ng halimbawa ng seed distribution data walang ganto yung farmer saved seed o own seed eto nga pala yung current UI design ko sa mga interface nila ngayon pwede mo kaya sabihin sakin yung pwede kong gawin para maging malinis itong system na ito kasi sa ngayon kapag may current active season at year ako tapos may mga data nayun tulad sa gis map lumalabas naman yun mga data dun at sa crop phase menu at sa production menu pero kapag nag new season at year na tapos nag encode ulit ako based sa flow tas pag tiningna ko yung gis map hindi lumalabas yung data based sa new active season at year na ginawa ko at sa crop phase menu ganun din yung data padin ng past season at year ang lumalabas dapat new data na ganun din sa production at sa mga brgy president at AT user pwede kaba may bigay ng idea para dito Ang nangyayari pala ay hindi isang beses lang nag-eencode ang AT sa farmer.
+Ganito talaga ang flow:
+Step 1
+Na-distribute na ang seed.
+Step 2
+Pumunta si AT sa field.
+Na-observe niya:
+Farmer A
+Own Seed
+
+Current Phase:
+Crop Establishment
+
+Date Observed:
+June 10, 2026
+
+Area Monitored:
+1.0 ha
+Save.
+________________________________________
+Step 3
+After ilang linggo.
+Bumalik ulit si AT sa parehong field.
+Pag sinearch ulit si Farmer A.
+Makikita:
+Current Phase:
+Crop Establishment
+Dahil iyon pa lang ang latest record.
+________________________________________
+Pag nakita ni AT na lumaki na ang palay.
+Babaguhin niya:
+Tillering
+Mag-eencode ulit:
+Date Observed:
+July 15, 2026
+Save.
+________________________________________
+Step 4
+Next visit.
+Flowering na.
+Encode ulit.
+Flowering
+August 10, 2026
+________________________________________
+Step 5
+Next visit.
+Ripening na.
+Encode ulit.
+Ripening
+September 5, 2026
+________________________________________
+Step 6
+Next visit.
+Harvesting na.
+Encode ulit.
+Harvesting
+October 1, 2026
+
+
+Yan ang flow ng AT ngayon ang mga data na galing sa AT dalawa ang gagamit gis map at crop menu sa crop phase menu more on analytics ng crop phase at seed distribution sa
+Gis map ang napasok na data dun ay yung data sa distribution menu sa brgy president na nag eencode ng seed bag base sa dalawa seed type after makapag encode ng brgy president pumupunta yun sa gis map tapos yung isang pang data sa  gis map ay galing sa AT user na nag eencode ng farmer status at may logic na  yung gis kung pano lumalabas at nag papakita yung data nun okay nay un wag na pakielaman yung logic kung pano pinapakita ng gis map yung data sa active season na ginagamit sa wet season 2026 ngayon ang gusto kong gawin sa gis map ay mag lagay ng season at filter button ang logic naman nito yung data na nasa gis map based sa active season na enencode sa lahat kapag nag create ang admin ng new seed poll at mag finalize ng seed yung past data na enecode natin sa  gis map na wet season 2026 ay masasave sa filter button kung saan kapag nag create ang admin ng new seed poll for example dry season 2026 o wet season 2027 basta bago yung season o year ngayon yun kapag iba na ang ating active season at year for example dry season 2026 yung data ng gis map ay bago na empty dahil bagong create ng admin magkakaroon lang yun ng data kapag nag encode ulit yung mga User tulad ng brgy president nag encode ulit ng distribution at AT na monitoring crop phase at kapag harvestin na yung phase ng isang seed type mag eencode na yung brgy president ng harvesting kung anong harvest ng farmer sa seed type na yun na harvesting phas na tapos yung data na yun ay pupunta sa gis map sa crop utilization sa  gis map kasi dalawa yung tab sa gis map crop monitoring at crop utilization separated yung data nito dahil ang data sa crop utilization ay mang gagaling sa harvest menu ng brgy president user kailangan yung crop utilization din ay may global filterize by season or year na nababago o umuulit din kapag nag create ng new seed poll ang purpose nung filter button sa gis map ay kapag pinili ko ay wet season tapos sa year ay 2026 mag papakita yung data sa crop monitoring ng past data ng wet season 2026 ng hindi na aapektuhan yung current data ng active season at year natin sa gis map at kapag nasa crop utilization tayo tapos nag filter din ako ng wet season 2026 lalabas din yung dating past data ng gis map tapos kapag  ni refresh ko yung page o web babalik yung data sa current active season na meron tayo pati yung filter babalik sa tamang active season at year na ginagamit natin na pinapakita yung data natin sa bagong gawa na seed poll na may dry season 2026
+----------------------------------------------------------------------------------
+Crop phase analytics
+
+i have a system and i need to fix something in the AT user of my system i have monitor menu in this system i have 4 user admin,AT(agricultural technician),brgy president,and farmer now in my monitor menu if we click the encode button it pop up or show up a modal what i want to do it in own seed seed type i have 3 seed type hybrid,inbred and own seed or farmer saved seed now ngayon kapag pinindot ko yung own seed at pinindot ko yung crop establishment sa crop phase meron liman pamimilian(Crop Establishment,Tillering,Flowering,Ripening,Harvesting) kapag pinindot ko yung crop establishment may lalabas na Crop Establishment Method * at ang choices dun is(Direct Seeding (D)Transplanting (T)) sa inbred at hybrid meron din silang ganung data na Crop Establishment Method *(Direct Seeding (D)Transplanting (T))  ngayon ang gusto kong mangyare is kailagan na sasaved din sa system yung ganun data ng lahat ng seed type kasi pwede kong gawan ng analytics ito like mga graph o kung ano mang graph ang bagay dito ngayon meron pa tayo dito tinatawag na date observed ibig sabihin nito nirerecord ng AT kung kelan sila pumunta sa field at nag observed na ang inobserve nila is yung pinili nating seed type ngayon kailagan na nakukuha din natin lahat ng data na yun sa lahat ng seed type para gawan din ng analytics ngayon meron din tayo ditong area monitored na tinatawag(ha) dito naman is connected ito sa farm area at area to be planted ng dalawang seed type ganto kasi yung sa brgy president user nag eencode sya ng data kung sino ang farmer na gusto maging beneficiaries na mabibigyan ng seed galing sa government ang binibigay na seed ay yung inbred at hybrid lamang wala yung own seed o farmer saved seeed nag eencode yung brgy president sa beneficairires menu doon nagawa sya ng dalawang program card based sa seed type tapos sa loob noon dun nya i sesearch yung mga farmer na nasa brgy nya for example yung brgy president ay assign sa brgy Abang ngayon yung mga farmer na ang brgy record ay sa brgy Abang yun ang masesearch sa search bar sa loob ng seed type program sa beneficiaries menu ang tanging ma sesearch lang dun is yung approved by the admin na account lamang ngayon after mag search ng pangalan at may lumabas pa pinindot yung name nung farmer mapupunta sa encode page kung saan mag rerecord yung brgy president ng data based sa seed type for example sa admin account ko may approved farmer ako na ang total hectar nya sa record ay 1 ha ngayon sa brgy president sabi natin gumagawa sila ng seed type program at ang tig isang program card lang ang pwede nilang magawa sa active season ngayon kapag nakagawa na ng hybrid at inbred program card tig isa ang brgy president at pinindot nya yung inbred card program at napunta sya sa page kung saan dun mag sesearch sya ng approved farmer tapos kapag may lumabas na farmer at pinindot nya yun mapupunta yun sa encode page kung saan may mga input field sa encode page may mga input field dun at isa na dun yung area to be planted which ang logic ng input field na yun is kung anong balak o plano ng farmer kung ilang hectar yung plano nya pag  taniman ng seed variety na makukuha nya so kung sa record ay ang total hectar ng farmer A is 1 ha tapos ang nilagay nya na sa input field is 0.50 .0.70.0.60 ibig sabihin kapag hinati ginawa nyang ganun yun tapos na complete na i fill up yung ibang input field tulad ng signature at iba pa at kapag pinindot ng brgy president yung button na Confirm Beneficiaries ma sasaved yung data ng farmer A na yun at mapupunta sa report area ngayon for example ang nilagay nya na ha sa input field ng inbred na ang label is area to be planted is 0.50 tapos na saved na yun ibig sabihin dahil 1 ha ang total hectar ng farmer A na  yun may natitirang 0.50 ha pa sya ibig sabihin pwede pa sya mag pa encode sa ibang seed type tulad ng hybrid sa hybrid naman kapag nag  search  tayo ng farmer ang input pupunta din yung sa kanyang sarili encode page kasi hindi naman pareho ang input field na kinukuha ng inbred at hybrid sa hybrid encode page may input field sya na Farm Area (ha) * dito is na rerecord kung anong plano din ng farmer na pag taniman ng seed variety na pinili nya na gusto nyang matanggap so kapag senearch ng brgy president si Farmer A na nakapag encode na sa inbred card pero may tira pa sya hectar pwede pa sya ma search tapos pag nasa encode page na may may automatic dun na logic kung saan nag su-suggest kung ilang hectar ang kanyang natitira para ilagay kapag nilagay nya is 0.50 ha ibig sabihin na meet na nya yung total hectar basis nya sa farmer record tapos kapag na saved na yung data na yung mapupunta din yung sa report page ng hybrid mag kaiba ang report page area ng inbred at hybrid kaya dapat independent yung data nila ngayon sa ating AT user na monitor menu sabi natin kanina meron tayo tatlong seed type at meron silang area monitored ha ngayon ang gusto ko gawan din natin ng analytics yung area monitored ay yung farm area at area to be planted data na nilagay ng isang farmer na na saved  dahil sa brgy president dalawang seed type lang ang meron dun ang analytics natin sa area monitored at area to be planted at farm area is yung dalawang seed type lang ang gusto ko kung mang yare na analytics dito is malaman kung na meet ba nila yung plano hectar na pag taniman sa inbred at hybrid based sa record ng AT sa actual area monitored kasi ang AT ang pumupunta sa farmer farm field tapos mag  lalagay tayo ng tamang analytics kung na meet halog ng lahat ng farmer na naka record sa system yung kanilang planong taniman kapag may mga farmer na hindi nasunod dapat pinapakita din yun ng analytics natin kuna ilang farmer ang hindi nasunod ang plano at sa nasunod ang plano at iba pang klasing analytics na bagay nito at mga graph na bagay dito para madaling maintindihan ng admin dapat may season at year time stamp din ito kasi ang mga analytics sa crop phase at production menu at kasama na mababago o uulit ang data nila kapag nag create ng bagong seed poll ang admin at ma sasaved yung mga past data ng mga analytics ng crop phase menu at production at hindi lang crop phase menu at production menu madami pa area ang may gantong logic na umuulit yung data nila based sa active season at dapat bawat analytics ng crop phase at  production at may another filter din based sa seed type para nakikita din natin yung mga graph nila based sa seed type tapos may mga data analytics din tayo na ang pinapakita ang yung overall data ng lahat ng farmer sa lahat ng klase ng seed type dapat may ganun filter data sa bawat seed type at overall seed type tapos yung filterize data na naka based sa active season o year.ngayon another data i want to do an analytics is still in monitor menu is when the brgy president click delayed tab in the observation status inside the delayed status will show another input field with the label Delay Duration (days) this input field ay meron ang lahat ng seed type kaya kaya dapat sa pag gagawa ng analytics meron silang lahat na sari-sariling pinapakita na data tapos yung overall yung aggregated na data nilang lahat  at isang pang gawan ng analytics is yung damaged tabs may lalabas na Cause of Damage dito kapag may AT na nag submit ng data ng isang farmer na may cause of damage kailagan na sasaved din yung at nag papakita ng tamang analytiscs graph and other more kung anong man ang tamang graph para sa mga yun yun lang ngayon yun mga data na ito ay pupunta sa crop phase menu at gis map menu crop monitoring yung crop phase na ni record natin sa isang farmer sa bawat seed type ay tama naman na lumalabas sa gis map ko kaya okay na yung gis map ko kasi ang kinukuha lang nito pupunta tulad ng nasa picture ngayon ito naman yung current content ng crop phase ko yung ibang analytics buko sa Phase Timeline by Seed Type na gantt chart hindi ko gets yun kasi kaya pwede mong baguhin i mag suggested ka ng tamang mga analytics graph or UI design tulad nito ang wag mo lang babaguhin ay yung gantt chart kasi sabi ng adviser namin ay mag add daw ng gantt chart sa crop phase menu kung saan may standard days na sinusunod ang bawat data tulad ng seed distribution at yung limang crop phase ngayon nakikita naman natin sa picture na sa tabs ng tatlong seed type sa own seed yung phase nya ay walang seed distribution which is tama naman kasi wala naman seed distribution tayo sa own seed ang meron lang is yung hybrid at inbred ngayon makikita natin sa gantt chart na meron ako is may kulay gray na progress bar dba yung ay ang standard days ng isang phase ang logic nito sa loob ng gray progress bar na standard kapag may nag encode ng data maykakaroon ng color based kung label indicator ng kanilang phase which is sa seed distribution ang color is gray sa limang phase is kung anong color ang nasa picture ang logic nung color progress bar sa loob ng standard gray progress bar is from the start of the encode ng data hanggang kung kelan wala ng ng eencode ng data ng phase by date  na yun for example nag encode yung brgy president ng seed distribution data base sa standard days kailangan may lalabas na progress bar na color gray sa loob ng standard gray progress bar tapos kapag may nag encode na AT user sa limang crop phase at based sa date observed na nilagay na data ng isang AT  dun ma mapupunta yung range ng progress bar  kung ano yung may pinakang mataas na date observed for example ito yung halimbawa nun yung sa own seed data sa gantt chart makikita natin sa picture na ang start ng standard gray progress bar nya ay sa june sa wet season tapos kapag may AT na nag encode ng crop phase data for example sa  own seed ang pinili nya is crop establishment tapos ang nilagay nya  na date observed is june 10 2026 based sa active season at year natin yung length or haba ng color sa loob ng gray standard progres bar na madadagdagan ng 10 days so hahaba yun color blue kasi ang standard days natin sa is sa crop establishment ay 20 days tapos kapag may at ibang AT na nag  encode ng crop establishment na mas matagal sa june 10 2026 for example may isang AT na nag encode sa own seed crop establishment ng june 15 2025 then madadagdagan 5 days yung color blue na progress bar tapos kapag wala ng AT na nag eencode na data sa own seed crop establishment na ang last na date observed is june 15 2026 at wala ng sumunod dun then hanggang dun lang yung progress bar ng own seed crop  establishment pero kapag may AT na nag encode ng own seed crop establishment ay sobra sa standard na nirerecord natin  yun kahit na may isang AT na nag record ng data na own seed crop establishment na sobra yung date observed sa nilagay nating  standard days makukuha padin natin yung data at ang gagawin natin gagawan natin ng analytics kung saan ipapakita natin na may mga farmers na delayed so papasok sya sa delayed analytics tapos kailangan ipakita natin kung sino yung mga farmers na may delayed data ngayon mali pala yung logic natin sa colored progress bar sa loob ng standard kasi dba ang sinabi ko kanina kapag may AT na nag encode ng pinakamataaas na date observer yun ang range o length ng progress bar which is baguhin natin ang gawin natin sa pag andar ng lenght ng colored progress bar ay ito pag sasama-samahin natin lahat ng date observer tapos kukunin natin yung mga date nila at kung anong date observed ang may pinaka maraming farmer na record yung ang length ng colored progress bar natin so halimabawa ang normal start ng crop establishment is june with 20days gray standard ngayon kapag may 30 farmer tayo na already encoded na ang phase is crop establishment sa own seed tapos lima dun may pare-parehong observed date na june 10 o ibang date example lang so for example yung limang farmer ay may same date observed na june 10 2026 so 10days yun tapos na rest of the 25 farmer sa encoded crop establishment ay mag kakaiba iba ng date observed na ang total farmer nila is mga 3 o 2 o 4 na may pare-parehong date observed at nila nalagpasan yung limang farmer na pare-pareho ang date yung ang lenght ng colored progress bar tapos kapag may AT na nag encode nga ng date observed na lagpas sa standard days natin ma co-consider sya as delayed farmer sa own seed itong logic ko ay hindi lang para sa crop establishment sa lahat ito ng phase.kapag naman may scenario na sa 30 farmer encoded ay sa crop crop establishment 15 farmer dun ay may pare-parehong observer date kaso ang observed date nila is lagpas sa standard days tapos yung 15 na farmer na yung na lagpas ang date observed sa standard ay ma co-considered as delayed sa analytiscs tapos sa lenght naman ng colored progress bar ang kukunin nito ay yung sumunod na madaming pare-parehong observed date na hindi lagpas sa standard ganun ang logic na gusto ko itong logic na ito ay hindi lang sa crop establishment at sa own seed sa lahat ito ng seed type dapat ganito gumagana yung colored progress bar  ng bawat phase kasi ang dalawang season ay may duration ng month ang wet season ang duration month nya is june-oct tapos ang dry season naman ay nov-may itong month nato ang duration nila for example bago ang active season ngayon ngayon sa system is wet season 2026 so dapat ang month sa tass ng gantt chart is june hanggang oct lang tapos kapag ang active season natin ay dry ang nasa taas na month dapat ng gantt chart natin is november hanggang may ito kasing mga  month nato based sa season ay whole process ng isang cyc so for example ang active seasn at year natin ngayon is wet season tapos nag simulan na mag encode ng beneficiaries ang brgy president tapos na submit na approved pumunta sa distribution menu para mag encode ng seed bags na ibibigay sa farmer tapos yung data nun magiging seed distribution data na gagamitin sa gis map crop monitoring at crop phase menu for standard tapos while the crop phase ay patuloy na umaandar at nababago tapos harvesting na phase na sa ibang seed type tapos nag eencode na ng harvest data yung brgy president tapos yung data sa harvest menu ng brgy president ay mapupunta sa production menu ng admin para sa analytics ng mga computation sa ulitization 
+
+------------------------------------------------------------------------
+the beneficiaries is okay now what i want is the complete fix of my crop phase menu and right data to show and also our plan about how the data in crop phase menu will reset and save the past record by season or year na kapag ang active season ko ngayon is wet season 2026 tapos nag create si amdin ng new seed poll with different season dry season 2026 o year babalik sa simula yung mga data tulad ng analytics at iba ba kasi yung data nila is connected sila isat-isa based sa process ng data galing sa brgy president sa beneficiaries beneficiaries encoded>distriubtion distribution encode>AT crop phase encode show in gis map tapos yung raw data ng AT at brgy president na seed distribution ay pupunta sa crop phase menu tapos kapag harvesting yung phase yung brgy president ay mag eencode na ng mga harvest ng farmer tapos next season na ulit isang cycle na yun uulit lang ulit ng uulit yung process ng data kaya naman kapag gumawa ng bagong seed poll new data hanggang matapos yung cycle para sa next season naman
+

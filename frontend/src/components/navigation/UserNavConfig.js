@@ -32,7 +32,7 @@ const AT_NAV = [
   { label: 'Farmers', path: '/at/farmers',           icon: Users       },
   { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor     },
   { label: 'GIS Map', path: '/at/gis',               icon: Map         },
-  { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
+  // { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
 ];
 
 // ── BRGY PRESIDENT: 5 nav items ──
@@ -62,8 +62,8 @@ export const USER_NAV = {
 // Farmer = green (nature), AT = blue (technical), Brgy = warm green
 export const ROLE_COLORS = {
   FARMER: { primary: '#1a4d1a', accent: '#f5c842' },  // dark green
-  AT:     { primary: '#1e4d35', accent: '#f5c842' },  // teal green
-  BRGY:   { primary: '#2d4d1a', accent: '#f5c842' },  // olive green
+  AT:     { primary: '#1a4d1a', accent: '#f5c842' },  // teal green
+  BRGY:   { primary: '#1a4d1a', accent: '#f5c842' },  // olive green
 };
 
 // ── ROLE LABELS ──

@@ -90,26 +90,121 @@ const buildSeedTypeBreakdown = (plots) => {
   return result;
 };
 
-const buildBrgyUtil = (harvestRecords) => {
-  const result = {};
+// Priority order for tiebreaking
+const UTIL_TIER_PRIORITY = ['Exceeded Target', 'Achieved Target', 'Near Target', 'Below Target', 'Critical'];
+
+const buildBrgyUtil = (harvestRecords, plots = []) => {
+  // Build harvesting-phase farmer set per brgy from plots (AT monitoring data)
+  const brgyHarvestingFarmers = {};
+  plots.forEach(p => {
+    const phase = normalizePhase(p.land_type);
+    if (phase === 'Harvesting') {
+      const brgy = ALLOWED_BRGYS.find(b => normBrgy(b) === normBrgy(p.barangay)) || p.barangay;
+      if (!brgy) return;
+      if (!brgyHarvestingFarmers[brgy]) brgyHarvestingFarmers[brgy] = new Set();
+      brgyHarvestingFarmers[brgy].add(p.farmer);
+    }
+  });
+
+  const brgyEncodedFarmers = {};
   harvestRecords.forEach(rec => {
-    const brgy = ALLOWED_BRGYS.find(b => normBrgy(b) === normBrgy(rec.barangay)) || rec.barangay;
-    if (!brgy) return;
-    const util = computeUtilPct(rec);
-    const area = parseFloat(rec.harvest_area_ha) || 0;
-    const mt   = (parseFloat(rec.harvest_bags) || 0) * 50 / 1000;
-    if (!result[brgy]) result[brgy] = { util_vals: [], total_area: 0, total_mt: 0, farmer_ids: new Set() };
-    if (util !== null) result[brgy].util_vals.push(util);
-    result[brgy].total_area += area;
-    result[brgy].total_mt += mt;
-    result[brgy].farmer_ids.add(rec.farmer);
+    const rawBrgy = rec.barangay;
+    if (!rawBrgy) return;
+    const brgy = ALLOWED_BRGYS.find(b => normBrgy(b) === normBrgy(rawBrgy)) || rawBrgy;
+    if (!brgyEncodedFarmers[brgy]) brgyEncodedFarmers[brgy] = new Set();
+    brgyEncodedFarmers[brgy].add(rec.farmer);
+    if (!brgyHarvestingFarmers[brgy]) brgyHarvestingFarmers[brgy] = new Set();
+    brgyHarvestingFarmers[brgy].add(rec.farmer);
   });
-  Object.values(result).forEach(b => {
-    b.avg_util = b.util_vals.length > 0
-      ? b.util_vals.reduce((a, v) => a + v, 0) / b.util_vals.length : null;
-    b.farmer_count = b.farmer_ids.size;
-    delete b.farmer_ids; delete b.util_vals;
+
+  const result = {};
+  const allBrgys = new Set([
+    ...Object.keys(brgyHarvestingFarmers),
+    ...harvestRecords.map(r => {
+      const rawBrgy = r.barangay;
+      return ALLOWED_BRGYS.find(b => normBrgy(b) === normBrgy(rawBrgy)) || rawBrgy;
+    }).filter(Boolean),
+  ]);
+
+  allBrgys.forEach(brgy => {
+    const totalUnique = brgyHarvestingFarmers[brgy]?.size || 0;
+    const encodedCount = brgyEncodedFarmers[brgy]?.size || 0;
+
+    const brgyRecs = harvestRecords.filter(r => {
+      const b = ALLOWED_BRGYS.find(b2 => normBrgy(b2) === normBrgy(r.barangay)) || r.barangay;
+      return b === brgy;
+    });
+
+    const seedTierFarmerSets = {};
+    SEED_TYPES.forEach(st => {
+      seedTierFarmerSets[st.key] = {};
+      UTIL_TIERS.forEach(t => { seedTierFarmerSets[st.key][t.key] = new Set(); });
+    });
+
+    brgyRecs.forEach(rec => {
+      const seed = rec.seed_source || 'OWN_SEED';
+      const util = computeUtilPct(rec);
+      const tier = getUtilTier(util);
+      if (!tier) return;
+      if (!seedTierFarmerSets[seed]) {
+        seedTierFarmerSets[seed] = {};
+        UTIL_TIERS.forEach(t => { seedTierFarmerSets[seed][t.key] = new Set(); });
+      }
+      seedTierFarmerSets[seed][tier.key].add(rec.farmer);
+    });
+
+    const seedTierCounts = {};
+    SEED_TYPES.forEach(st => {
+      seedTierCounts[st.key] = { tierCounts: {}, total: 0 };
+      UTIL_TIERS.forEach(t => {
+        const count = seedTierFarmerSets[st.key][t.key]?.size || 0;
+        if (count > 0) {
+          seedTierCounts[st.key].tierCounts[t.key] = count;
+          seedTierCounts[st.key].total += count;
+        }
+      });
+    });
+
+    const tierSumPct = {};
+    if (totalUnique > 0) {
+      SEED_TYPES.forEach(st => {
+        UTIL_TIERS.forEach(t => {
+          const count = seedTierFarmerSets[st.key]?.[t.key]?.size || 0;
+          if (count > 0) {
+            const pct = (count / totalUnique) * 100;
+            tierSumPct[t.key] = (tierSumPct[t.key] || 0) + pct;
+          }
+        });
+      });
+    }
+
+    let dominantTierKey = null;
+    let maxPct = -1;
+    UTIL_TIER_PRIORITY.forEach(tierKey => {
+      const pct = tierSumPct[tierKey] || 0;
+      if (pct > maxPct) { maxPct = pct; dominantTierKey = tierKey; }
+    });
+    const dominantTier = dominantTierKey
+      ? UTIL_TIERS.find(t => t.key === dominantTierKey) || null : null;
+
+    const totalAreaHa = brgyRecs.reduce((s, r) => s + (parseFloat(r.harvest_area_ha) || 0), 0);
+    const totalProductionMt = brgyRecs.reduce((s, r) => s + ((parseFloat(r.harvest_bags) || 0) * 50) / 1000, 0);
+
+    result[brgy] = {
+      barangay: brgy,
+      totalUniqueHarvestingFarmers: totalUnique,
+      encodedFarmerCount: encodedCount,
+      seedTierCounts,
+      tierSumPct,
+      dominantTier,
+      total_area_ha: totalAreaHa,
+      total_production_mt: totalProductionMt,
+      farmer_count: encodedCount,
+      // legacy compat
+      avg_util: dominantTier ? (tierSumPct[dominantTier.key] || 0) : null,
+    };
   });
+
   return result;
 };
 
@@ -219,10 +314,13 @@ const SeedTypeBreakdownCard = ({ seedKey, phaseCounts, totalFarmers, totalApprov
 };
 
 // ── Util Seed Type Card — same as admin ───────────────────────
-const UtilSeedTypeCard = ({ seedKey, tierCounts, total, encodedFarmers, totalApprovedFarmers }) => {
+const UtilSeedTypeCard = ({ seedKey, tierCounts, totalUniqueFarmers, total, encodedFarmers, totalApprovedFarmers }) => {
   const cfg = SEED_TYPE_MAP[seedKey] || { label: seedKey, color: '#64748b', bg: '#f8fafc', border: '#e2e8f0' };
   const [animated, setAnimated] = useState(false);
-  const displayDenominator = totalApprovedFarmers > 0 ? totalApprovedFarmers : total;
+
+  // Support both new (totalUniqueFarmers) and legacy (totalApprovedFarmers/total) props
+  const denominator = totalUniqueFarmers > 0 ? totalUniqueFarmers
+    : (totalApprovedFarmers > 0 ? totalApprovedFarmers : total);
 
   useEffect(() => {
     setAnimated(false);
@@ -234,10 +332,15 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, encodedFarmers, totalApp
     .map(tier => ({
       ...tier,
       count:   tierCounts[tier.key] || 0,
-      percent: displayDenominator > 0 ? Math.round(((tierCounts[tier.key] || 0) / displayDenominator) * 100) : 0,
+      percent: denominator > 0
+        ? Math.round(((tierCounts[tier.key] || 0) / denominator) * 100) : 0,
     }))
     .filter(t => t.count > 0)
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => {
+      if (b.percent !== a.percent) return b.percent - a.percent;
+      const priority = ['Exceeded Target','Achieved Target','Near Target','Below Target','Critical'];
+      return priority.indexOf(a.key) - priority.indexOf(b.key);
+    });
 
   const dominant = tierList[0] || null;
   const others   = tierList.slice(1);
@@ -274,26 +377,13 @@ const UtilSeedTypeCard = ({ seedKey, tierCounts, total, encodedFarmers, totalApp
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
             <span style={{ fontSize: '1.05rem', fontWeight: 800, color: dominant.color }}>{dominant.label}</span>
-            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>
-              {totalApprovedFarmers > 0
-                ? `${Math.round((encodedFarmers / totalApprovedFarmers) * 100)}%`
-                : `${dominant.percent}%`}
-            </span>
+            <span style={{ fontSize: '1.15rem', fontWeight: 800, color: dominant.color }}>{dominant.percent}%</span>
           </div>
           <div style={{ height: 6, backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: '999px', overflow: 'hidden' }}>
-            <div style={{
-              height: '100%',
-              width: animated ? `${totalApprovedFarmers > 0
-                ? Math.max(2, Math.round((encodedFarmers / totalApprovedFarmers) * 100))
-                : Math.max(2, dominant.percent)}%` : '0%',
-              backgroundColor: dominant.color, borderRadius: '999px',
-              transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)',
-            }} />
+            <div style={{ height: '100%', width: animated ? `${Math.max(2, dominant.percent)}%` : '0%', backgroundColor: dominant.color, borderRadius: '999px', transition: 'width 0.6s cubic-bezier(0.34,1,0.64,1)' }} />
           </div>
           <p style={{ margin: '0.4rem 0 0', fontSize: '0.65rem', color: '#64748b' }}>
-            {totalApprovedFarmers > 0
-              ? `${encodedFarmers} of ${totalApprovedFarmers} approved farmers encoded`
-              : `${dominant.count} of ${total} farmer${total !== 1 ? 's' : ''}`}
+            {dominant.count} of {denominator} farmer{denominator !== 1 ? 's' : ''}
           </p>
         </div>
       )}
@@ -376,7 +466,7 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
     return LucbanGIS.features.filter(f => assignedSet.has(normBrgy(f.properties?.ADM4_EN)));
   }, [assignedBarangays]);
 
-  const brgyUtilData = useMemo(() => buildBrgyUtil(harvestRecords), [harvestRecords]);
+  const brgyUtilData = useMemo(() => buildBrgyUtil(harvestRecords, plots), [harvestRecords, plots]);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 900);
@@ -466,7 +556,8 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
     const getPolygonColor = (name) => {
       if (activeTab === 'utilization') {
         const util = brgyUtilData[name];
-        return util?.avg_util != null ? getUtilColor(util.avg_util) : NO_DATA_COLOR;
+        if (!util || !util.dominantTier) return NO_DATA_COLOR;
+        return util.dominantTier.color;
       }
       return getDominantPhaseColor(name);
     };
@@ -602,7 +693,30 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
                 <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
                   {roleLabel.replace('Agricultural Technician', 'AT').replace('Barangay President', 'Brgy. Pres.')} overview
                 </span>
-                <span style={{ marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.62rem', fontWeight: 700 }}>LIVE</span>
+                {(() => {
+                  const seen = new Set();
+                  const phaseCounts = {};
+                  plots.forEach(p => {
+                    const phase = normalizePhase(p.land_type);
+                    const key = `${p.farmer}::${p.seed_source}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    phaseCounts[phase] = (phaseCounts[phase] || 0) + 1;
+                  });
+                  const sorted = Object.entries(phaseCounts).sort((a, b) => {
+                    if (b[1] !== a[1]) return b[1] - a[1];
+                    return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+                  });
+                  const dominant = sorted[0]?.[0];
+                  const phCfg = dominant ? PHASE_MAP[dominant] : null;
+                  if (!phCfg) return <span style={{ marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.62rem', fontWeight: 700 }}>LIVE</span>;
+                  return (
+                    <span style={{ marginLeft: 'auto', backgroundColor: phCfg.color + '33', border: `1px solid ${phCfg.color}88`, borderRadius: '999px', padding: '0.15rem 0.6rem', fontSize: '0.62rem', fontWeight: 700, color: 'white', display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: phCfg.color, display: 'inline-block', flexShrink: 0 }} />
+                      {dominant}
+                    </span>
+                  );
+                })()}
               </div>
               {activeTab === 'monitoring' ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -677,6 +791,7 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
                 key={utilizationTab}
                 seedKey={utilizationTab}
                 tierCounts={seedTierCounts[utilizationTab]?.tierCounts || {}}
+                totalUniqueFarmers={[...new Set(harvestRecords.map(r => r.farmer))].length}
                 total={seedTierCounts[utilizationTab]?.total || 0}
                 encodedFarmers={encodedCount}
                 totalApprovedFarmers={summary?.total_approved_farmers ?? 0}
@@ -697,11 +812,43 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
             <button onClick={handleBack} style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '0.5rem', color: 'white', padding: '0.35rem 0.55rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', fontWeight: 600 }}>
               <ChevronLeft size={14} /> Back
             </button>
-            <span style={{ marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>
-              {activeTab === 'monitoring'
-                ? `${uniqueFarmers}${totalApproved ? `/${totalApproved}` : ''} farmers`
-                : `${encodedCount}${totalApprovedInBrgy ? `/${totalApprovedInBrgy}` : ''} encoded`}
-            </span>
+            {(() => {
+              if (activeTab === 'utilization') {
+                const util = brgyUtilData[activeBarangay];
+                const label = util?.totalUniqueHarvestingFarmers > 0
+                  ? `${encodedCount}/${util.totalUniqueHarvestingFarmers} encoded`
+                  : encodedCount > 0 ? `${encodedCount} encoded` : 'No harvest data';
+                const color = util?.dominantTier?.color || '#94a3b8';
+                return (
+                  <span style={{ marginLeft: 'auto', backgroundColor: color + '33', border: `1px solid ${color}66`, borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>
+                    {label}
+                  </span>
+                );
+              }
+              // Monitoring: show dominant phase
+              const brgyPhaseCounts = {};
+              brgyPlots.forEach(p => {
+                const phase = normalizePhase(p.land_type);
+                brgyPhaseCounts[phase] = (brgyPhaseCounts[phase] || 0) + 1;
+              });
+              const sorted = Object.entries(brgyPhaseCounts).sort((a, b) => {
+                if (b[1] !== a[1]) return b[1] - a[1];
+                return PHASE_ORDER.indexOf(b[0]) - PHASE_ORDER.indexOf(a[0]);
+              });
+              const dominant = sorted[0]?.[0];
+              const phCfg = dominant ? PHASE_MAP[dominant] : null;
+              if (!phCfg) return (
+                <span style={{ marginLeft: 'auto', backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap' }}>
+                  {uniqueFarmers}{totalApproved ? `/${totalApproved}` : ''} farmers
+                </span>
+              );
+              return (
+                <span style={{ marginLeft: 'auto', backgroundColor: phCfg.color + '33', border: `1px solid ${phCfg.color}66`, borderRadius: '999px', padding: '0.2rem 0.75rem', fontSize: '0.68rem', fontWeight: 700, color: 'white', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: phCfg.color, display: 'inline-block', flexShrink: 0 }} />
+                  Dominant: {dominant}
+                </span>
+              );
+            })()}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1rem' }}>
             <div style={{ width: 42, height: 42, borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -727,7 +874,7 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
             ) : (
               <>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: '0.75rem', padding: '0.6rem 0.75rem', textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'white' }}>{totalApprovedInBrgy ? `${encodedCount}/${totalApprovedInBrgy}` : encodedCount}</p>
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'white' }}>{(() => { const uniqueH = brgyUtilData[activeBarangay]?.totalUniqueHarvestingFarmers || 0; return uniqueH > 0 ? `${encodedCount}/${uniqueH}` : `${encodedCount}`; })()}</p>
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.6rem', color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', fontWeight: 700 }}>Encoded</p>
                 </div>
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: '0.75rem', padding: '0.6rem 0.75rem', textAlign: 'center' }}>
@@ -789,6 +936,7 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
               key={utilizationTab}
               seedKey={utilizationTab}
               tierCounts={seedTierCounts[utilizationTab]?.tierCounts || {}}
+              totalUniqueFarmers={brgyUtilData[activeBarangay]?.totalUniqueHarvestingFarmers || encodedCount}
               total={seedTierCounts[utilizationTab]?.total || 0}
               encodedFarmers={encodedCount}
               totalApprovedFarmers={totalApprovedInBrgy}

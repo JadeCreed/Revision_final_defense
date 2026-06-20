@@ -533,6 +533,11 @@ const BrgyBeneficiaries = () => {
   // OPEN EDIT PAGE
   // ─────────────────────────────────────────
   const openEdit = (entry) => {
+    // Haharangin ang pag-edit sa frontend kung hindi draft o rejected ang batch
+    if (entry.batch_status !== 'DRAFT' && entry.batch_status !== 'REJECTED') {
+      showToast('error', 'Cannot edit this farmer — the batch is no longer in Draft.');
+      return;
+    }
     setEditEntry(entry);
     setEncodeForm({
       farm_area_ha: entry.farm_area_ha || '',
@@ -610,6 +615,23 @@ const BrgyBeneficiaries = () => {
     });
   };
 
+  // Hybrid only: hinahanap ang katugmang open DRAFT batch para sa variety
+  const findOpenBatchForVariety = (varietyId) => {
+    for (const b of batches) {
+      if (b.status !== 'DRAFT') continue;
+      const det = batchDetails[b.id];
+      const entries = det?.entries || [];
+      if (entries.length >= 10) continue;
+      if (entries.length === 0) return b;
+      const sameVariety = entries.every(e => String(e.variety) === String(varietyId));
+      if (sameVariety) return b;
+    }
+    return null;
+  };
+
+  // const doSaveEntry = async () => {
+
+
   const doSaveEntry = async () => {
     setConfirmSnack(null);
     setSaving(true);
@@ -619,12 +641,12 @@ const BrgyBeneficiaries = () => {
         // Update existing entry
         const payload = {
           farm_area_ha: eventIsHybrid ? Number(encodeForm.farm_area_ha) : null,
-          qty_bags: encodeForm.show_optional && encodeForm.qty_bags
-            ? Number(encodeForm.qty_bags) : null,
+          // qty_bags: encodeForm.show_optional && encodeForm.qty_bags
+          //   ? Number(encodeForm.qty_bags) : null,
           area_planted: eventIsInbred ? Number(encodeForm.area_planted) : null,
-          crop_establishment: encodeForm.show_optional ? encodeForm.crop_establishment : null,
-          expected_sowing_date: encodeForm.show_optional ? encodeForm.expected_sowing_date : null,
-          date_received: encodeForm.show_optional ? encodeForm.date_received : null,
+          // crop_establishment: encodeForm.show_optional ? encodeForm.crop_establishment : null,
+          // expected_sowing_date: encodeForm.show_optional ? encodeForm.expected_sowing_date : null,
+          // date_received: encodeForm.show_optional ? encodeForm.date_received : null,
           data_sharing: eventIsInbred ? encodeForm.data_sharing : false,
           variety: encodeForm.selected_variety_id || null,
         };
@@ -637,16 +659,39 @@ const BrgyBeneficiaries = () => {
       } else {
         // New entry
         let activeBatch = currentBatch;
-        const batchFull = (activeBatch?.entry_count || 0) >= 10 || (batchData?.entry_count || 0) >= 10;
-        // If a rejected batch is reopened, backend turns it into DRAFT.
-        // Only create a new batch when there is no usable DRAFT batch or current one is full.
-        if (!activeBatch || activeBatch.status !== 'DRAFT' || batchFull) {
-          const nb = await createBatch(currentEvent.id);
-          activeBatch = nb.data;
-          setCurrentBatch(activeBatch);
-          refreshBatchId = activeBatch.id;
+        const targetVarietyId = encodeForm.selected_variety_id || eventFinalVarieties[0]?.id || null;
+
+        if (eventIsHybrid) {
+          // Awtomatikong pinagbubukod ang bawat variety sa sarili nitong batch
+          activeBatch = findOpenBatchForVariety(targetVarietyId);
+          if (!activeBatch) {
+            const nb = await createBatch(currentEvent.id, targetVarietyId);
+            activeBatch = nb.data;
+            setCurrentBatch(activeBatch);
+            setBatches(prev => [...prev, activeBatch]);
+            setBatchDetails(prev => ({
+              ...prev,
+              [activeBatch.id]: { ...activeBatch, entries: [] }
+            }));
+            refreshBatchId = activeBatch.id;
+          }
+        } else {
+          const batchFull = (activeBatch?.entry_count || 0) >= 10 || (batchData?.entry_count || 0) >= 10;
+          if (!activeBatch || activeBatch.status !== 'DRAFT' || batchFull) {
+            const nb = await createBatch(currentEvent.id);
+            activeBatch = nb.data;
+            setCurrentBatch(activeBatch);
+            setBatches(prev => [...prev, activeBatch]);
+            setBatchDetails(prev => ({
+              ...prev,
+              [activeBatch.id]: { ...activeBatch, entries: [] }
+            }));
+            refreshBatchId = activeBatch.id;
+          }
         }
+
         const entryRes = await addEntryToBatch(activeBatch.id, {
+
           farmer_id: currentFarmer.id,
           farm_area_ha: eventIsHybrid ? Number(encodeForm.farm_area_ha) : null,
           qty_bags: encodeForm.show_optional && encodeForm.qty_bags
@@ -1361,14 +1406,22 @@ const BrgyBeneficiaries = () => {
                       {(listPage - 1) * PAGE_SIZE + idx + 1}
                     </div>
                     <div>
+
                       <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#1a1a1a', margin: 0 }}>{entry.farmer_name}</p>
                       <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>
-                        {entry.farmer_rsbsa || '—'} · {entry.farm_area_ha ? `${entry.farm_area_ha} ha` : '—'}
+                        {entry.farmer_rsbsa || '—'} · {entry.farm_area_ha ? `${entry.farm_area_ha} ha` : entry.area_planted ? `${entry.area_planted} ha` : '—'}
                       </p>
-                      <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
-                        Batch {entry.batch_number}
+                      <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', display: 'flex', alignItems: 'center', gap: '0.375rem', flexWrap: 'wrap' }}>
+                        <span>Batch {entry.batch_number}</span>
+                        {entry.variety_name && (
+                          <span style={{ backgroundColor: '#eff6ff', color: '#1e40af', padding: '0.1rem 0.5rem', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700, border: '1px solid #bfdbfe' }}>
+                            {entry.variety_name}
+                          </span>
+                        )}
+                        <StatusBadge status={entry.batch_status} />
                       </p>
                     </div>
+
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
                     {/* Signature badge — clickable */}
@@ -1387,7 +1440,8 @@ const BrgyBeneficiaries = () => {
                       <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700 }}>Unsigned</span>
                     )}
                     {/* Edit — only in DRAFT/REJECTED */}
-                    {((entry.batch_status === 'DRAFT' || entry.batch_status === 'REJECTED') || (batchData?.status === 'DRAFT' || batchData?.status === 'REJECTED')) && (
+                    {/* Edit — ibabatay lamang sa mismong batch status ng entry para maging tama ang kontrol ng button */}
+                    {(entry.batch_status === 'DRAFT' || entry.batch_status === 'REJECTED') && (
                       <>
                         <button className="btn-sm" onClick={() => openEdit(entry)}
                           style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1e40af', padding: '0.25rem' }}>
@@ -1459,7 +1513,7 @@ const BrgyBeneficiaries = () => {
           {/* Program type label */}
           <div style={{ backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.75rem', padding: '0.625rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem' }}>
             <span style={{ fontWeight: 700, color: GREEN.accent }}>
-              {eventIsHybrid ? '🌾 Hybrid (Region) Program' : '🌾 Inbred (PhilRice) Program'} — {currentEvent?.organization_name}
+              {eventIsHybrid ? ' Hybrid (Region) Program' : ' Inbred (PhilRice) Program'} — {currentEvent?.organization_name}
             </span>
           </div>
 

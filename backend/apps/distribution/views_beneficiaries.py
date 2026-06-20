@@ -145,13 +145,25 @@ class DistributionBatchListCreateView(APIView):
                 return Response({"error": "Access denied."}, status=403)
 
         last_batch = event.batches.order_by('-batch_number').first()
+        requested_variety_id = request.data.get('variety_id')
+
         if last_batch and last_batch.status == 'DRAFT' and not last_batch.is_full():
-            return Response({
-                "error": f"Batch {last_batch.batch_number} is still incomplete. "
-                         f"Please finish encoding before creating a new batch."
-            }, status=400)
+            # Pinapayagan ang parallel draft batches para sa Hybrid program kung magkaiba ang seed variety.
+            # Haharangin lamang kapag pareho ang variety ng bagong entry sa kasalukuyang hindi pa punong draft batch.
+            last_batch_variety_id = last_batch.entries.values_list('variety_id', flat=True).first()
+            same_variety = (
+                requested_variety_id is None
+                or last_batch_variety_id is None
+                or str(last_batch_variety_id) == str(requested_variety_id)
+            )
+            if same_variety:
+                return Response({
+                    "error": f"Batch {last_batch.batch_number} is still incomplete. "
+                             f"Please finish encoding before creating a new batch."
+                }, status=400)
 
         next_number = (last_batch.batch_number + 1) if last_batch else 1
+
         batch = DistributionBatch.objects.create(
             event=event,
             batch_number=next_number,
@@ -424,11 +436,12 @@ class DistributionEntryDetailView(APIView):
 
     def put(self, request, pk):
         entry = self.get_object(pk)
-        editable_statuses = ('DRAFT', 'REJECTED', 'APPROVED')
+        # Tinanggal ang 'APPROVED' para harangan ang pag-edit sa non-DRAFT/non-REJECTED batches
+        editable_statuses = ('DRAFT', 'REJECTED')
         if entry.batch.status not in editable_statuses:
             if not (request.user.role == 'ADMIN' and entry.batch.status == 'SUBMITTED'):
                 return Response(
-                    {"error": "Cannot edit entries in a submitted batch."},
+                    {"error": "Cannot edit entries from a non-DRAFT batch."},
                     status=400
                 )
 
@@ -438,6 +451,13 @@ class DistributionEntryDetailView(APIView):
             'area_planted', 'expected_yield', 'variety', 'data_sharing'
         ]
         data = {k: v for k, v in request.data.items() if k in allowed}
+
+        # Ang expected_sowing_date at authorized_representative ay non-nullable CharFields.
+        # I-normalize ang None/null sa empty string '' para hindi mag-fail ang validation kapag nakasara ang optional fields sa UI.
+        for text_field in ('expected_sowing_date', 'authorized_representative'):
+            if text_field in data and data[text_field] is None:
+                data[text_field] = ''
+
         serializer = DistributionEntrySerializer(entry, data=data, partial=True)
         if serializer.is_valid():
             serializer.save()

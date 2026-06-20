@@ -10,7 +10,7 @@ import {
   getDistributionEvent,
   getEventBatches,
   getBatchDetail,
-  updateEntry,
+  encodeDistributionEntry,
   submitDistributionBatch,
   searchFarmers,
   getBrgyDistributionContext,
@@ -546,7 +546,7 @@ const BrgyDistribution = () => {
       if (!entry) return;
       setInbredSaving(true);
       try {
-        await updateEntry(entry.entry_id, {
+        await encodeDistributionEntry(entry.entry_id, {
           qty_bags: Math.round(Number(inbredForm.number_of_bags)),
           crop_establishment: inbredForm.crop_establishment,
           expected_sowing_date: inbredForm.expected_sowing_date,
@@ -580,7 +580,7 @@ const BrgyDistribution = () => {
       if (!entry) return;
       setHybridSaving(true);
       try {
-        await updateEntry(entry.entry_id, {
+        await encodeDistributionEntry(entry.entry_id, {
           qty_bags: Math.round(Number(hybridForm.qty_bags)),
           date_received: hybridForm.date_received || null,
         });

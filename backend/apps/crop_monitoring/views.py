@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from django.db import models
 
 from apps.accounts.models import User, AgriculturalTechnicianProfile
 from apps.accounts.permissions import IsATUser, IsAdminUserRole
@@ -100,6 +101,24 @@ class ATFarmerListView(APIView):
                         'record_id': rec.id,
                         'date_observed': str(rec.date_observed),
                     }
+            # Total hectares ng farmer mula sa kanilang profile (registered sa system)
+            farmer_profile = getattr(farmer, 'profile', None)
+            total_hectares = float(farmer_profile.hectares) if farmer_profile and farmer_profile.hectares else 0
+
+            # Kabuuang area na na-encode na sa ESTABLISHMENT phase, sa LAHAT ng seed types,
+            # sa kasalukuyang season — ito ang "ginamit na" na hectares ng farmer.
+            establishment_filter = {
+                'farmer': farmer,
+                'crop_phase': 'ESTABLISHMENT',
+            }
+            if active_poll:
+                establishment_filter['poll'] = active_poll
+            monitored_hectares = CropMonitoringRecord.objects.filter(
+                **establishment_filter
+            ).exclude(area_monitored_ha__isnull=True).aggregate(
+                total=models.Sum('area_monitored_ha')
+            )['total'] or 0
+            monitored_hectares = float(monitored_hectares)
 
             results.append({
                 'id':           farmer.id,
@@ -119,6 +138,9 @@ class ATFarmerListView(APIView):
                 ),
                 'latest_record_id': latest.id if latest else None,
                 'seed_records': seed_records,
+                'total_hectares':     total_hectares,
+                'monitored_hectares': monitored_hectares,
+                'available_hectares': round(max(total_hectares - monitored_hectares, 0), 2),
             })
 
             # Gate para sa AT encode modal seed type buttons (HYBRID/INBRED).
@@ -219,11 +241,29 @@ class ATFarmerDetailView(APIView):
             return Response({'error': 'Farmer not found or not assigned to you.'}, status=404)
 
         profile = getattr(farmer, 'profile', None)
+        
+        # Poll-scoped — kasalukuyang active poll season at year lamang ang kukunin
+        active_poll = get_encoding_poll()
+        if not active_poll:
+            active_poll = get_current_poll()
+
+        # I-filter ang distribution entries para sa kasalukuyang active season at year lamang
         distribution_entries = []
-        for entry in DistributionEntry.objects.filter(
+        dist_qs = DistributionEntry.objects.filter(
             farmer=farmer,
             batch__status='APPROVED'
-        ).select_related('variety', 'batch__event__seed_type').order_by('-batch__approved_at'):
+        ).select_related('variety', 'batch__event__seed_type')
+
+        if active_poll:
+            dist_qs = dist_qs.filter(
+                batch__event__season=active_poll.season,
+                batch__event__year=active_poll.year
+            )                                                                             # ◀── PINALITAN (CURRENT SEASON ONLY)
+        else:
+            dist_qs = dist_qs.none()
+
+        for entry in dist_qs.order_by('-batch__approved_at'):
+
             distribution_entries.append({
                 'seed_type': entry.batch.event.seed_type.name if entry.batch.event.seed_type else '',
                 'variety_name': entry.variety.name if entry.variety else '',
@@ -247,6 +287,18 @@ class ATFarmerDetailView(APIView):
         latest_seed_source = latest.seed_source if latest else None
         latest_phase = latest.crop_phase if latest else None
         latest_observed = latest.date_observed.isoformat() if latest else None
+
+        # Total at monitored hectares — same logic as ATFarmerListView
+        farmer_total_hectares = float(profile.hectares) if profile and profile.hectares else 0
+        establishment_filter = {'farmer': farmer, 'crop_phase': 'ESTABLISHMENT'}
+        if active_poll:
+            establishment_filter['poll'] = active_poll
+        farmer_monitored_hectares = CropMonitoringRecord.objects.filter(
+            **establishment_filter
+        ).exclude(area_monitored_ha__isnull=True).aggregate(
+            total=models.Sum('area_monitored_ha')
+        )['total'] or 0
+        farmer_monitored_hectares = float(farmer_monitored_hectares)
 
         return Response({
             'id': farmer.id,
@@ -390,7 +442,51 @@ class ATCropMonitoringCreateView(APIView):
                 'existing_record_id': existing_record.id,
                 'existing_phase':     existing_record.crop_phase,
             }, status=400)
+        # ── AREA MONITORED — required & validated ONLY for ESTABLISHMENT phase ──
+        # Sa ibang phases (Tillering, Flowering, Ripening, Harvesting), hindi na ito
+        # tinatanggap bilang bagong input — ang area ng establishment record na lang
+        # ang dapat tinuturing na "official" area para sa seed_source na iyon.
+        area_monitored_ha = None
+        if crop_phase == 'ESTABLISHMENT':
+            area_raw = request.data.get('area_monitored_ha')
+            if area_raw in [None, '']:
+                return Response({'error': 'Area monitored (ha) is required for Crop Establishment.'}, status=400)
+            try:
+                area_monitored_ha = float(area_raw)
+            except (TypeError, ValueError):
+                return Response({'error': 'Area monitored must be a valid number.'}, status=400)
+            if area_monitored_ha <= 0:
+                return Response({'error': 'Area monitored must be greater than 0.'}, status=400)
 
+            # ── Validate against farmer's total registered hectares ──
+            farmer_profile = getattr(farmer, 'profile', None)
+            total_hectares = float(farmer_profile.hectares) if farmer_profile and farmer_profile.hectares else 0
+
+            already_monitored = CropMonitoringRecord.objects.filter(
+                farmer=farmer,
+                poll=active_poll,
+                crop_phase='ESTABLISHMENT',
+            ).exclude(area_monitored_ha__isnull=True).aggregate(
+                total=models.Sum('area_monitored_ha')
+            )['total'] or 0
+            already_monitored = float(already_monitored)
+
+            remaining = round(total_hectares - already_monitored, 2)
+
+            if total_hectares <= 0:
+                return Response({
+                    'error': 'This farmer has no registered total hectares on file. Please update their profile first.'
+                }, status=400)
+
+            if area_monitored_ha > remaining:
+                return Response({
+                    'error': (
+                        f'Area exceeds farmer\'s available hectares. '
+                        f'Total: {total_hectares} ha · Already monitored: {already_monitored} ha · '
+                        f'Available: {remaining} ha.'
+                    )
+                }, status=400)
+            
         # Build record
         record = CropMonitoringRecord.objects.create(
             farmer=farmer,
@@ -403,7 +499,7 @@ class ATCropMonitoringCreateView(APIView):
             delay_days=delay_days,
             damage_cause=damage_cause,
             crop_establishment=request.data.get('crop_establishment') or None,
-            area_monitored_ha=request.data.get('area_monitored_ha') or None,
+            area_monitored_ha=area_monitored_ha,
             sowing_date=request.data.get('sowing_date') or None,
             variety_name=request.data.get('variety_name', '').strip(),
             remarks=request.data.get('remarks', '').strip(),
@@ -530,14 +626,14 @@ class ATFarmerHistoryView(APIView):
                     pass
             if season:
                 season = season.upper()
-                months = season_months(season)
-                if months:
-                    records = records.filter(date_observed__month__in=months)
+                records = records.filter(poll__season=season) 
+                
             selected_season = {
                 'season': season,
                 'season_display': season_display(season),
                 'year': int(year) if year and year.isdigit() else None,
             }
+
         else:
             # Default: poll FK ang gamit, hindi date-based
             # para consistent ang Poll-Scoped Data Lifecycle

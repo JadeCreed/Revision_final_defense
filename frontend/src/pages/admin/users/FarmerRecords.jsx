@@ -11,6 +11,29 @@ import {
 import {
   Pagination, SortDropdown, COL_WIDTHS, NewBadge, getSeenIds,
 } from '../../../components/tables/TableBase';
+import luzonData from '../../../data/luzon_formatted.json';
+
+// ── REVERSE LOOKUP ──
+// Mula sa naka-save na municipality name (e.g. "Lucban"),
+// hanapin ang Region at Province sa luzon_formatted.json.
+// Case-insensitive para safe kahit may lumang uppercase na data sa DB.
+// Ginagamit sa Address & Farm section ng Farmer Details modal bilang
+// READ-ONLY display lang — hindi ito naka-save sa DB.
+const findRegionProvince = (municipality) => {
+  if (!municipality) return { region: '—', province: '—' };
+  const target = municipality.trim().toLowerCase();
+  for (const regionObj of luzonData) {
+    for (const provinceObj of regionObj.province_list) {
+      const found = provinceObj.municipality_list.find(
+        m => m['City/Municipality'].trim().toLowerCase() === target
+      );
+      if (found) {
+        return { region: regionObj.Region, province: provinceObj.Province };
+      }
+    }
+  }
+  return { region: '—', province: '—' };
+};
 
 const BARANGAYS = [
   'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit',
@@ -354,13 +377,47 @@ const FarmerAccountsTab = () => {
               ))}
             </div>
 
+
             <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Address & Farm</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay'],['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
+            {/* Residency Region + Province — read-only, derived from saved municipality */}
+            {(() => {
+              const { region, province } = findRegionProvince(accountsEditForm.residency_municipality);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={labelStyle}>Residency Region</label>
+                    <input
+                      value={region}
+                      readOnly
+                      style={{ ...inputStyle, backgroundColor: '#f9fafb', color: '#6b7280', cursor: 'default' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Residency Province</label>
+                    <input
+                      value={province}
+                      readOnly
+                      style={{ ...inputStyle, backgroundColor: '#f9fafb', color: '#6b7280', cursor: 'default' }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Residency Municipality + Barangay — editable */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay']].map(([l,k]) => (
                 <div key={k}><label style={labelStyle}>{l}</label>
                   <input value={accountsEditForm[k]} onChange={e => setAccountsEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
               ))}
             </div>
+            {/* Farm Municipality + Barangay — editable */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
+                <div key={k}><label style={labelStyle}>{l}</label>
+                  <input value={accountsEditForm[k]} onChange={e => setAccountsEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
+              ))}
+            </div>
+
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div>
@@ -660,13 +717,49 @@ const FarmerMasterlistTab = () => {
                   <input type={k==='date_of_birth'?'date':'text'} value={editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
               ))}
             </div>
+
+
             <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Address & Farm</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
-              {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay'],['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
+            {/* Residency Region + Province — read-only, derived from saved municipality */}
+            {(() => {
+              const { region, province } = findRegionProvince(editForm.residency_municipality);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={labelStyle}>Residency Region</label>
+                    <input
+                      value={region}
+                      readOnly
+                      style={{ ...inputStyle, backgroundColor: '#f9fafb', color: '#6b7280', cursor: 'default' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Residency Province</label>
+                    <input
+                      value={province}
+                      readOnly
+                      style={{ ...inputStyle, backgroundColor: '#f9fafb', color: '#6b7280', cursor: 'default' }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+            {/* Residency Municipality + Barangay — editable */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+              {[['Residency Municipality','residency_municipality'],['Residency Barangay','residency_barangay']].map(([l,k]) => (
                 <div key={k}><label style={labelStyle}>{l}</label>
                   <input value={editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
               ))}
             </div>
+            {/* Farm Municipality + Barangay — editable */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              {[['Farm Municipality','farm_municipality'],['Farm Barangay','farm_barangay']].map(([l,k]) => (
+                <div key={k}><label style={labelStyle}>{l}</label>
+                  <input value={editForm[k]} onChange={e => setEditForm(p => ({...p,[k]:e.target.value}))} style={inputStyle} /></div>
+              ))}
+            </div>
+
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div>
                 <label style={labelStyle}>Gender</label>

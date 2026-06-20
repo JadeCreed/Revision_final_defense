@@ -2,7 +2,7 @@
 import {
   Home, Sprout, Megaphone, Archive, Package, Wheat,
   BarChart3, Map, Users, ClipboardList, Landmark,
-  Key, Settings, User, UserCircle, Tractor, Truck
+  Settings, User, UserCircle, Tractor, Truck, FileText
 } from 'lucide-react';
 
 export const MENU_CONFIG = {
@@ -42,32 +42,26 @@ export const MENU_CONFIG = {
   AT: [
     { label: 'Home',    path: '/at',                   icon: Home        },
     { label: 'News',    path: '/at/announcements',     icon: Megaphone   },
-    { label: 'Farmers', path: '/at/farmers',           icon: Tractor     },
-    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Wheat       },
+    { label: 'Farmers', path: '/at/farmers',           icon: Users       },
+    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor     },
     { label: 'GIS Map', path: '/at/gis',               icon: Map         },
-    { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
+    // { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
   ],
 
   BRGY: [
     { label: 'Home',            path: '/brgy',                 icon: Home        },
     { label: 'News',            path: '/brgy/announcements',   icon: Megaphone   },
     { label: 'Poll',            path: '/brgy/poll',            icon: Sprout      },
-    { label: 'Farmers',         path: '/brgy/farmers',         icon: Tractor     },
+    { label: 'Farmers',         path: '/brgy/farmers',         icon: Users       },
     { label: 'Beneficiaries',   path: '/brgy/beneficiaries',   icon: Package     },
     { label: 'Distribution',    path: '/brgy/distribution',    icon: Truck       },
-    { label: 'GIS Map',       path: '/brgy/gis',             icon: Map         },
-    { label: 'Harvest',         path: '/brgy/harvest',         icon: BarChart3   },
+    { label: 'GIS Map',         path: '/brgy/gis',             icon: Map         },
+    { label: 'Harvest',         path: '/brgy/harvest',         icon: Wheat       },
     { label: 'Reports',         path: '/brgy/reports',         icon: ClipboardList },
   ],
 };
 
-export const ROLE_LABELS = {
-  ADMIN:  'Admin',
-  FARMER: 'Farmer',
-  AT:     'Agricultural Technician',
-  BRGY:   'Barangay President',
-};
-
+// ── BOTTOM NAV CONFIG FALLBACKS ──
 export const BOTTOM_NAV_CONFIG = {
   ADMIN: [
     { label: 'Dashboard', path: '/admin',                       icon: Home },
@@ -84,13 +78,65 @@ export const BOTTOM_NAV_CONFIG = {
   AT: [
     { label: 'Home',    path: '/at',                   icon: Home },
     { label: 'News',    path: '/at/announcements',     icon: Megaphone },
-    { label: 'Farmers', path: '/at/farmers',           icon: Tractor },
-    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Wheat },
+    { label: 'Farmers', path: '/at/farmers',           icon: Users },
+    { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor },
   ],
   BRGY: [
     { label: 'Home',          path: '/brgy',                 icon: Home },
     { label: 'News',          path: '/brgy/announcements',   icon: Megaphone },
     { label: 'Poll',          path: '/brgy/poll',            icon: Sprout },
-    { label: 'Farmers',       path: '/brgy/farmers',         icon: Tractor },
+    { label: 'Farmers',       path: '/brgy/farmers',         icon: Users },
   ],
+};
+
+// ── FARMER: 5 nav items ──
+const FARMER_NAV = [
+  { label: 'Home',    path: '/farmer',               icon: Home        },
+  { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
+  { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
+  { label: 'Map',     path: '/farmer/gis',           icon: Map         },
+  { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
+];
+
+// ── AT (Agricultural Technician): 6 nav items ──
+const AT_NAV = [
+  { label: 'Home',    path: '/at',                   icon: Home        },
+  { label: 'News',    path: '/at/announcements',     icon: Megaphone   }, 
+  { label: 'Farmers', path: '/at/farmers',           icon: Users       },
+  { label: 'Monitor', path: '/at/crop-monitoring',   icon: Tractor     },
+  { label: 'GIS Map', path: '/at/gis',               icon: Map         },
+  // { label: 'Reports', path: '/at/reports',           icon: ClipboardList },
+];
+
+// ── BRGY PRESIDENT: 7 nav items ──
+const BRGY_NAV = [
+  { label: 'Home',          path: '/brgy',                 icon: Home        },
+  { label: 'News',          path: '/brgy/announcements',   icon: Megaphone   },
+  { label: 'Beneficiaries', path: '/brgy/beneficiaries',   icon: Package     },
+  { label: 'Distribution',  path: '/brgy/distribution',    icon: Truck       },
+  { label: 'GIS Map',       path: '/brgy/gis',             icon: Map         },
+  { label: 'Harvest',       path: '/brgy/harvest',         icon: Wheat       },
+  { label: 'Reports',       path: '/brgy/reports',         icon: FileText    },
+];
+
+// ── EXPORTED MAP ──
+export const USER_NAV = {
+  FARMER: FARMER_NAV,
+  AT:     AT_NAV,
+  BRGY:   BRGY_NAV,
+};
+
+// ── ROLE COLORS ──
+export const ROLE_COLORS = {
+  FARMER: { primary: '#1a4d1a', accent: '#f5c842' },  // Deep Forest Green
+  AT:     { primary: '#1a4d1a', accent: '#f5c842' },  // Deep Forest Green
+  BRGY:   { primary: '#1a4d1a', accent: '#f5c842' },  // Deep Forest Green
+};
+
+// ── ROLE LABELS ──
+export const ROLE_LABELS = {
+  ADMIN:  'Admin',
+  FARMER: 'Farmer',
+  AT:     'Agricultural Technician',
+  BRGY:   'Barangay President',
 };

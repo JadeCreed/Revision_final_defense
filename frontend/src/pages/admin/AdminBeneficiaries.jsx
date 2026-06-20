@@ -120,6 +120,7 @@ const AdminBeneficiaries = () => {
   const [batchDetail, setBatchDetail]       = useState(null);
   const [batchDetailLoading, setBatchDetailLoading] = useState(false);
   const [viewBatchId, setViewBatchId]       = useState(null);
+  const [batchDetailSeedType, setBatchDetailSeedType] = useState('');
 
   // ── Reject modal ──
   const [rejectModal, setRejectModal]       = useState(null);
@@ -227,8 +228,9 @@ const AdminBeneficiaries = () => {
   // ─────────────────────────────────────────
   // ACTIONS
   // ─────────────────────────────────────────
-  const openBatchDetail = async (batchId) => {
+  const openBatchDetail = async (batchId, seedTypeName = '') => {
     setViewBatchId(batchId);
+    setBatchDetailSeedType(seedTypeName);
     setBatchDetailLoading(true);
     try {
       const res = await getBatchDetail(batchId);
@@ -236,6 +238,15 @@ const AdminBeneficiaries = () => {
     } catch { setBatchDetail(null); }
     finally { setBatchDetailLoading(false); }
   };
+  // const openBatchDetail = async (batchId) => {
+  //   setViewBatchId(batchId);
+  //   setBatchDetailLoading(true);
+  //   try {
+  //     const res = await getBatchDetail(batchId);
+  //     setBatchDetail(res.data);
+  //   } catch { setBatchDetail(null); }
+  //   finally { setBatchDetailLoading(false); }
+  // };
 
   const handleApprove = async (batchId) => {
     setActionLoading(p => ({ ...p, [batchId]: 'approve' }));
@@ -551,7 +562,7 @@ const AdminBeneficiaries = () => {
                     {/* Batch pills */}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                       {event.batches?.map(batch => (
-                        <button key={batch.id} onClick={() => openBatchDetail(batch.id)}
+                         <button key={batch.id} onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.75rem', borderRadius: '999px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#374151', transition: 'all 0.15s' }}>
                           Batch {batch.batch_number} <StatusBadge status={batch.status} /> <ChevronRight size={12} color="#9ca3af" />
                         </button>
@@ -698,7 +709,7 @@ const AdminBeneficiaries = () => {
                               </div>
                             </div>
                             <div style={{ display: 'flex', gap: '0.625rem', flexWrap: 'wrap' }}>
-                              <button onClick={() => openBatchDetail(batch.id)}
+                              <button onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
                                 style={{ padding: '0.5rem 1rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                                 <Eye size={14} /> View Details
                               </button>
@@ -826,7 +837,7 @@ const AdminBeneficiaries = () => {
                             </p>
                           </div>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => openBatchDetail(batch.id)}
+                            <button onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
                               style={{ padding: '0.375rem 0.875rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
                               <Eye size={13} /> View
                             </button>
@@ -874,47 +885,132 @@ const AdminBeneficiaries = () => {
                   Loading...
                 </div>
               ) : batchDetail ? (() => {
-                const evH = isHybrid(batchDetail.entries?.[0]?.variety_name || '');
+              
+                // Correct seed type detection: look up parent event by ID,
+                // NOT by variety_name (e.g. "Bigante plus" does not contain "HYBRID").
+                // events array is available in component scope from fetchAll().
+                const parentEvent = events.find(ev => String(ev.id) === String(batchDetail.event));
+                const evH = isHybrid(batchDetailSeedType);
+                const td = { padding: '0.625rem 0.75rem', whiteSpace: 'nowrap', fontSize: '0.78rem', borderBottom: '1px solid #f3f4f6', borderRight: '1px solid #f3f4f6' };
+                const th = { padding: '0.625rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap', fontSize: '0.72rem', textTransform: 'uppercase', borderBottom: '2px solid #e5e7eb', backgroundColor: '#f9fafb' };
                 return (
                   <>
                     <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem', minWidth: '700px' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                            {['#', 'RSBSA No.', 'Name', 'Contact', 'Farm Area (ha)',
-                              evH ? 'QTY (bags)' : 'Area Planted',
-                              evH ? 'Variety' : 'Crop Estab.',
-                              'Data Sharing', 'Signature'].map(col => (
-                              <th key={col} style={{ padding: '0.625rem 0.75rem', textAlign: 'left', fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {batchDetail.entries?.map(entry => (
-                            <tr key={entry.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                              <td style={{ padding: '0.625rem 0.75rem', color: '#9ca3af', fontWeight: 600 }}>{entry.row_number}</td>
-                              <td style={{ padding: '0.625rem 0.75rem', fontSize: '0.72rem', color: '#6b7280' }}>{entry.farmer_rsbsa || '—'}</td>
-                              <td style={{ padding: '0.625rem 0.75rem', fontWeight: 600 }}>{entry.farmer_name}</td>
-                              <td style={{ padding: '0.625rem 0.75rem', color: '#6b7280' }}>{entry.farmer_contact}</td>
-                              <td style={{ padding: '0.625rem 0.75rem' }}>{entry.farm_area_ha || '—'}</td>
-                              <td style={{ padding: '0.625rem 0.75rem' }}>{evH ? (entry.qty_bags ?? '—') : (entry.area_planted || '—')}</td>
-                              <td style={{ padding: '0.625rem 0.75rem' }}>{evH ? (entry.variety_name || '—') : (entry.crop_establishment || '—')}</td>
-                              <td style={{ padding: '0.625rem 0.75rem', textAlign: 'center' }}>{entry.data_sharing ? '✓' : '—'}</td>
-                              <td style={{ padding: '0.625rem 0.75rem' }}>
-                                {entry.has_signature ? (
-                                  <button
-                                    onClick={() => fetchAndViewSig(batchDetail.id, entry.id)}
-                                    style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700, border: `1px solid ${GREEN.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
-                                    <Eye size={11} /> View
-                                  </button>
-                                ) : (
-                                  <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 700 }}>Unsigned</span>
-                                )}
-                              </td>
+                      {evH ? (
+                        /* ── HYBRID TABLE — matches BrgyBeneficiaries Hybrid columns exactly ── */
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', minWidth: '1100px' }}>
+                          <thead>
+                            <tr>
+                              {[
+                                'No.','RSBSA No.','Last Name','First Name','Middle Name','Ext.',
+                                'Date of Birth','Res. Municipality','Res. Barangay',
+                                'Farm Municipality','Farm Barangay',
+                                'Gender','IP','Senior Citizen','PWD','ARBs','4Ps',
+                                'Farm Area (ha)','QTY (bags)','Contact No.','Signature'
+                              ].map((col, i) => (
+                                <th key={i} style={{
+                                  ...th,
+                                  color: ['Res. Municipality','Res. Barangay','Farm Municipality','Farm Barangay','IP','Senior Citizen','PWD','ARBs','4Ps'].includes(col)
+                                    ? '#dc2626' : '#374151'
+                                }}>{col}</th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {batchDetail.entries?.map((entry, idx) => {
+                              const fd = entry.farmer_detail || {};
+                              return (
+                                <tr key={entry.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
+                                  <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontWeight: 600 }}>{entry.row_number}</td>
+                                  <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.68rem', color: '#6b7280' }}>{entry.farmer_rsbsa || '—'}</td>
+                                  <td style={{ ...td, fontWeight: 700 }}>{(entry.farmer_name || '').split(',')[0]?.trim() || '—'}</td>
+                                  <td style={td}>{(entry.farmer_name || '').split(',')[1]?.trim() || '—'}</td>
+                                  <td style={td}>{fd.middle_name || '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.ext_name || '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>
+                                    {fd.date_of_birth
+                                      ? new Date(fd.date_of_birth + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' })
+                                      : '—'}
+                                  </td>
+                                  <td style={td}>{fd.residency_municipality || '—'}</td>
+                                  <td style={td}>{fd.residency_barangay || '—'}</td>
+                                  <td style={td}>{fd.farm_municipality || '—'}</td>
+                                  <td style={td}>{fd.farm_barangay || '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.gender ? fd.gender[0] : '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.ip ? 'Y' : 'N'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.senior_citizen ? 'Y' : 'N'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.pwd ? 'Y' : 'N'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.arbs ? 'Y' : 'N'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{fd.four_ps ? 'Y' : 'N'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{entry.farm_area_ha || '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                  <td style={td}>{entry.farmer_contact || '—'}</td>
+                                  <td style={{ ...td, textAlign: 'center' }}>
+                                    {entry.has_signature ? (
+                                      <button onClick={() => fetchAndViewSig(batchDetail.id, entry.id)}
+                                        style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: `1px solid ${GREEN.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                        <Eye size={10} /> View
+                                      </button>
+                                    ) : (
+                                      <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700 }}>Unsigned</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      ) : (
+                        /* ── INBRED TABLE — matches BrgyBeneficiaries Inbred columns exactly ── */
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', minWidth: '1100px' }}>
+                          <thead>
+                            <tr>
+                              {[
+                                'No.','Farmer Name','RSBSA No.',
+                                'Area to be Planted (ha)','No. of Bags (20kg)',
+                                'Rice Variety Received','Crop Estab (D/T)',
+                                'Expected Sowing Date','Data Sharing',
+                                '2025 DS YIELD','Authorized Rep.',
+                                'Date Received','Signature'
+                              ].map((col, i) => (
+                                <th key={i} style={th}>{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {batchDetail.entries?.map((entry, idx) => (
+                              <tr key={entry.id} style={{ backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
+                                <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontWeight: 600 }}>{entry.row_number}</td>
+                                <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name || '—'}</td>
+                                <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.68rem', color: '#6b7280' }}>{entry.farmer_rsbsa || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.area_planted || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.crop_establishment || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.expected_sowing_date || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>{entry.data_sharing ? '✓' : '✗'}</td>
+                                <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>To be encoded in Yield</td>
+                                <td style={td}>{entry.authorized_representative || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>
+                                  {entry.date_received
+                                    ? new Date(entry.date_received + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' })
+                                    : '—'}
+                                </td>
+                                <td style={{ ...td, textAlign: 'center' }}>
+                                  {entry.has_signature ? (
+                                    <button onClick={() => fetchAndViewSig(batchDetail.id, entry.id)}
+                                      style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: `1px solid ${GREEN.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                      <Eye size={10} /> View
+                                    </button>
+                                  ) : (
+                                    <span style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700 }}>Unsigned</span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
 
                     {/* Action buttons */}
