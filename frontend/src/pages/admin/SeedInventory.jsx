@@ -914,7 +914,7 @@ export default function SeedInventory() {
     setScheduleErrors(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: '' } }));
   };
 
-  const handleSaveSchedule = () => {
+  const handleSaveSchedule = async () => {
     const openedKeys = Object.keys(scheduleForms);
     if (openedKeys.length === 0) { showToast('error', 'Please select at least one seed variety to schedule.'); return; }
     let hasError = false; const newErrors = {};
@@ -974,6 +974,40 @@ export default function SeedInventory() {
       setScheduleSaving(false);
       return;
     }
+
+    const allExistingEntriesBeforeSave = schedules.flatMap(s => s.entries);
+    const brandNewEntries = entries.filter(entry =>
+      !allExistingEntriesBeforeSave.find(existing => existing.seedTypeId === entry.seedTypeId)
+    );
+
+    if (brandNewEntries.length > 0) {
+      try {
+        await Promise.all(brandNewEntries.map(entry =>
+          createSeedDelivery({
+            seed_type:     entry.seedTypeDbId,
+            variety:       entry.varietyId || null,
+            season:        entry.season,
+            year:          Number(entry.year),
+            source:        isHybrid(entry.seedTypeName) ? 'REGION' : 'PHILRICE',
+            total_bags:    Number(entry.total_bags),
+            delivery_date: entry.delivery_date,
+            lot_number:    entry.lot_number,
+            remarks:       entry.remarks,
+            status:        'SCHEDULED',
+          })
+        ));
+        await loadInventory();
+        try {
+          const triggerKey = 'agrice_seed_schedule_trigger';
+          const payload = JSON.stringify({ timestamp: Date.now() });
+          localStorage.setItem(triggerKey, payload);
+          window.dispatchEvent(new StorageEvent('storage', { key: triggerKey, newValue: payload, storageArea: localStorage }));
+        } catch {}
+      } catch (err) {
+        showToast('error', err.response?.data?.error || err.response?.data?.detail || 'Saved locally but failed to sync to server.');
+      }
+    }
+
 
     let updated;
     const firstEntry = entries[0];

@@ -453,8 +453,8 @@ def _build_brgy_report_data(user, poll_id=None):
             inbred_bags      += bags
             inbred_kg_total  += round(bags * 20, 2)
 
-    total_dist_bags = hybrid_bags + inbred_bags
-    total_dist_kg   = hybrid_kg_total + inbred_kg_total
+    total_dist_bags = round(hybrid_bags + inbred_bags, 2)
+    total_dist_kg   = round(hybrid_kg_total + inbred_kg_total, 2)
 
     # ── BY SEED TYPE ───────────────────────────────────────────────
     by_seed_type = []
@@ -594,12 +594,12 @@ def _build_brgy_report_data(user, poll_id=None):
         'summary': {
             'total_farmers':       total_farmers,
             'total_beneficiaries': total_beneficiaries,
-            'total_dist_bags':     total_dist_bags,
-            'total_dist_kg':       total_dist_kg,
-            'hybrid_bags':         hybrid_bags,
-            'hybrid_kg':           hybrid_kg_total,
-            'inbred_bags':         inbred_bags,
-            'inbred_kg':           inbred_kg_total,
+            'total_dist_bags':     round(total_dist_bags, 2),
+            'total_dist_kg':       round(total_dist_kg, 2),
+            'hybrid_bags':         round(hybrid_bags, 2),
+            'hybrid_kg':           round(hybrid_kg_total, 2),
+            'inbred_bags':         round(inbred_bags, 2),
+            'inbred_kg':           round(inbred_kg_total, 2),
             'total_area_ha':       round(total_area, 2),
             'total_production_mt': round(total_mt, 2),
             'avg_yield_t_ha':      round(avg_yield, 2),

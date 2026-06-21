@@ -467,11 +467,19 @@ class AdminDistributionPendingView(APIView):
         return Response(serializer.data)
 
 
+
+
+
+
+
+
+
 class AdminDistributionStatsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        active_poll = get_current_poll()
+        # Kukunin ang encoding_poll o current_poll para masigurong filtered kahit tapos na ang botohan
+        active_poll = get_encoding_poll() or get_current_poll()
 
         if request.user.role == 'BRGY':
             brgy = getattr(request.user, 'barangay', None)
@@ -487,17 +495,60 @@ class AdminDistributionStatsView(APIView):
         else:
             return Response({"error": "Access denied."}, status=403)
 
+        # HINDI i-fifilter ang total_events sa active_poll para mabilang ang lahat ng program (hindi mag-reset)
+        total_events_count = events_qs.count()
+
+        # Ang batches at entries lang ang sasailalim sa seasonal filter (mag-reset sa bagong poll)
         if active_poll:
-            events_qs  = events_qs.filter(season=active_poll.season,  year=active_poll.year)
             batches_qs = batches_qs.filter(event__season=active_poll.season, event__year=active_poll.year)
             entries_qs = entries_qs.filter(batch__event__season=active_poll.season, batch__event__year=active_poll.year)
 
         return Response({
-            "total_events":        events_qs.count(),
+            "total_events":        total_events_count,
             "pending_batches":     batches_qs.filter(status='SUBMITTED').count(),
             "approved_batches":    batches_qs.filter(status='APPROVED').count(),
             "total_farmers_served": entries_qs.filter(batch__status='APPROVED').count(),
         })
+    
+
+
+# class AdminDistributionStatsView(APIView):
+#     permission_classes = [IsAuthenticated]
+
+#     def get(self, request):
+#         active_poll = get_current_poll()
+
+#         if request.user.role == 'BRGY':
+#             brgy = getattr(request.user, 'barangay', None)
+#             if not brgy:
+#                 return Response({"error": "No barangay assigned."}, status=400)
+#             events_qs  = DistributionEvent.objects.filter(barangay=brgy)
+#             batches_qs = DistributionBatch.objects.filter(event__barangay=brgy)
+#             entries_qs = DistributionEntry.objects.filter(batch__event__barangay=brgy)
+#         elif request.user.role == 'ADMIN':
+#             events_qs  = DistributionEvent.objects.all()
+#             batches_qs = DistributionBatch.objects.all()
+#             entries_qs = DistributionEntry.objects.all()
+#         else:
+#             return Response({"error": "Access denied."}, status=403)
+
+#         if active_poll:
+#             events_qs  = events_qs.filter(season=active_poll.season,  year=active_poll.year)
+#             batches_qs = batches_qs.filter(event__season=active_poll.season, event__year=active_poll.year)
+#             entries_qs = entries_qs.filter(batch__event__season=active_poll.season, batch__event__year=active_poll.year)
+
+#         return Response({
+#             "total_events":        events_qs.count(),
+#             "pending_batches":     batches_qs.filter(status='SUBMITTED').count(),
+#             "approved_batches":    batches_qs.filter(status='APPROVED').count(),
+#             "total_farmers_served": entries_qs.filter(batch__status='APPROVED').count(),
+#         })
+
+
+
+
+
+
 
 
 class AdminConfirmSeedDeliveryView(APIView):

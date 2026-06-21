@@ -4,13 +4,13 @@ import {
   getDistributionEvents, getAdminPendingBatches,
   getDistributionStats, approveBatch, rejectBatch,
   unlockBatch, getBatchDetail, adminConfirmDeleteEvent,
-  getEventBatches,
+  getEventBatches, getFinalSeeds,
 } from '../../api/axios';
 import {
   ClipboardList, Clock, CheckCircle, XCircle,
   ChevronRight, ChevronLeft, Users, Wheat,
   MapPin, Unlock, Eye, Search, AlertCircle,
-  Send, FileText, Package,
+  History,
 } from 'lucide-react';
 
 const GREEN = {
@@ -102,6 +102,12 @@ const TABS = [
 const AdminBeneficiaries = () => {
   const [activeTab, setActiveTab]   = useState('events');
   const [events, setEvents]         = useState([]);
+  const [currentSeason, setCurrentSeason] = useState(null);
+  const [currentYear, setCurrentYear]     = useState(null);
+  const [view, setView]                   = useState('active'); // 'active' | 'history'
+  const [historySeason, setHistorySeason] = useState('');
+  const [historyYear, setHistoryYear]     = useState('');
+
   const [pending, setPending]       = useState([]);
   const [stats, setStats]           = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -157,15 +163,27 @@ const AdminBeneficiaries = () => {
   const fetchAll = useCallback(async () => {
     try {
       setLoading(true);
-      const [evRes, pRes, sRes] = await Promise.all([
+      const [evRes, pRes, sRes, fsRes] = await Promise.all([
         getDistributionEvents(),
         getAdminPendingBatches(),
         getDistributionStats(),
+        getFinalSeeds(),
       ]);
       const evData = evRes.data || [];
       setEvents(evData);
       setPending(pRes.data || []);
       setStats(sRes.data);
+
+      if (fsRes.data && fsRes.data.length > 0) {
+        setCurrentSeason(fsRes.data[0].season);
+        setCurrentYear(fsRes.data[0].year);
+      } else {
+        const latestEv = evData[0];
+        if (latestEv) {
+          setCurrentSeason(latestEv.season);
+          setCurrentYear(latestEv.year);
+        }
+      }
 
       // Build approved-by-brgy map
       const byBrgy = {};
@@ -215,7 +233,11 @@ const AdminBeneficiaries = () => {
     return Object.values(groups);
   })();
 
-  const filteredEvents = events.filter(ev => {
+  const activeEvents = events.filter(ev => 
+    ev.season === currentSeason && String(ev.year) === String(currentYear)
+  );
+
+  const filteredEvents = activeEvents.filter(ev => {
     const q = eventSearch.toLowerCase();
     const matchSearch = !q ||
       ev.organization_name?.toLowerCase().includes(q) ||
@@ -223,6 +245,19 @@ const AdminBeneficiaries = () => {
       ev.intervention?.toLowerCase().includes(q);
     const matchSeason = !filterSeason || ev.season === filterSeason;
     return matchSearch && matchSeason;
+  });
+
+  const yearsList = Array.from(new Set(events.map(ev => ev.year))).sort((a, b) => b - a);
+
+  const filteredHistoryEvents = events.filter(ev => {
+    const q = eventSearch.toLowerCase();
+    const matchSearch = !q ||
+      ev.organization_name?.toLowerCase().includes(q) ||
+      ev.barangay?.toLowerCase().includes(q) ||
+      ev.intervention?.toLowerCase().includes(q);
+    const matchSeason = !historySeason || ev.season === historySeason;
+    const matchYear = !historyYear || String(ev.year) === String(historyYear);
+    return matchSearch && matchSeason && matchYear;
   });
 
   // ─────────────────────────────────────────
@@ -238,15 +273,6 @@ const AdminBeneficiaries = () => {
     } catch { setBatchDetail(null); }
     finally { setBatchDetailLoading(false); }
   };
-  // const openBatchDetail = async (batchId) => {
-  //   setViewBatchId(batchId);
-  //   setBatchDetailLoading(true);
-  //   try {
-  //     const res = await getBatchDetail(batchId);
-  //     setBatchDetail(res.data);
-  //   } catch { setBatchDetail(null); }
-  //   finally { setBatchDetailLoading(false); }
-  // };
 
   const handleApprove = async (batchId) => {
     setActionLoading(p => ({ ...p, [batchId]: 'approve' }));
@@ -401,7 +427,6 @@ const AdminBeneficiaries = () => {
             { label: 'Total Events',     value: events.length,              Icon: ClipboardList },
             { label: 'Pending Review',   value: stats.pending_batches,      Icon: Clock        },
             { label: 'Approved Batches', value: stats.approved_batches,     Icon: CheckCircle  },
-            // { label: 'Farmers Served',   value: stats.total_farmers_served, Icon: Users        },
           ].map(({ label, value, Icon }) => (
             <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '1.125rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', animation: 'slideUp 0.3s ease' }}>
               <Icon size={18} color={GREEN.primary} />
@@ -454,124 +479,241 @@ const AdminBeneficiaries = () => {
       ══════════════════════════════════════════ */}
       {activeTab === 'events' && (
         <div style={{ animation: 'fadeIn 0.25s ease' }}>
-          {/* Search + filter */}
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
-            <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
-              <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              <input value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search by barangay, organization, or program..." style={{ padding: '0.625rem 0.875rem 0.625rem 2.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.875rem', width: '100%', outline: 'none', boxSizing: 'border-box' }} />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {['WET', 'DRY'].map(s => (
-                <button key={s} onClick={() => setFilterSeason(filterSeason === s ? '' : s)}
-                  style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${filterSeason === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: filterSeason === s ? GREEN.light : 'white', color: filterSeason === s ? GREEN.primary : '#6b7280', fontWeight: filterSeason === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
-                  {s === 'WET' ? ' Wet season' : 'Dry season'}
+          {view === 'history' ? (
+            /* ── PORTAL HISTORY VIEW — ALIGNED WITH AT MONITOR DESIGN ── */
+            <div style={{ animation: 'fadeIn 0.2s ease' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '1rem', fontSize: '0.8rem' }}>
+                <button onClick={() => { setView('active'); setEventSearch(''); }}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: GREEN.primary, fontWeight: 700, fontSize: '0.8rem', padding: 0, display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                  <ChevronLeft size={14} /> Back to Active Season
                 </button>
-              ))}
-              {(filterSeason || eventSearch) && (
-                <button onClick={() => { setFilterSeason(''); setEventSearch(''); }}
-                  style={{ padding: '0.375rem 0.625rem', border: '1.5px solid #fca5a5', borderRadius: '999px', backgroundColor: '#fee2e2', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                  <XCircle size={11} /> Clear
-                </button>
-              )}
-            </div>
-          </div>
+              </div>
 
-          {filteredEvents.length === 0 ? (
-            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
-              <ClipboardList size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
-              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>
-                {events.length === 0 ? 'No programs yet' : 'No results found'}
-              </p>
-              <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
-                BRGY Presidents create programs from their portal.
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {filteredEvents.map((event, idx) => {
-                const evH = isHybrid(event.seed_type_name || event.intervention || '');
-                const tagColor = evH ? '#1e40af' : GREEN.primary;
-                const tagBg    = evH ? '#eff6ff' : GREEN.light;
-                const tagBorder = evH ? '#bfdbfe' : GREEN.border;
-                return (
-                  <div key={event.id} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${tagBorder}`, animation: `slideUp ${0.3 + idx * 0.05}s ease` }}>
-                    {/* Delete request badge */}
-                    {event.delete_requested && (
-                      <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: '0.5rem', padding: '0.5rem 0.875rem', marginBottom: '0.875rem', fontSize: '0.75rem', color: '#854d0e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span>⚠️ BRGY requested deletion</span>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button onClick={() => setDeleteConfirm(event)}
-                            style={{ padding: '0.25rem 0.625rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>
-                            Approve Delete
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                // Cancel delete request by updating field
-                                showToast('success', 'Delete request cancelled.');
-                                fetchAll();
-                              } catch {}
-                            }}
-                            style={{ padding: '0.25rem 0.625rem', backgroundColor: 'white', color: '#854d0e', border: '1px solid #fde68a', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>
-                            Dismiss
-                          </button>
-                        </div>
-                      </div>
-                    )}
+              <div style={{ backgroundColor: GREEN.primary, borderRadius: '1rem', padding: '1.25rem', marginBottom: '1.25rem', color: 'white' }}>
+                <h2 style={{ fontWeight: 800, fontSize: '1.1rem', margin: 0 }}>Program History</h2>
+                <p style={{ fontSize: '0.72rem', opacity: 0.7, margin: '0.25rem 0 0' }}>
+                  View and filter all historical programs across all past seasons and years.
+                </p>
+              </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                      <div>
-                        <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
-                          <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
-                            {event.seed_type_name || (evH ? 'Hybrid' : 'Inbred')}
-                          </span>
-                          <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.season_display} {event.year}</span>
-                        </div>
-                        <h3 style={{ fontWeight: 700, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>{event.organization_name}</h3>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
-                          <MapPin size={13} color="#9ca3af" />
-                          <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.barangay}</span>
-                          {event.variety_name && (
-                            <>
-                              <Wheat size={13} color="#9ca3af" />
-                              <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.variety_name}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0 }}>
-                          {event.total_encoded}<span style={{ fontSize: '0.875rem', fontWeight: 400, color: '#9ca3af' }}>/{event.total_members}</span>
-                        </p>
-                        <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>farmers encoded</p>
-                      </div>
-                    </div>
-
-                    <div style={{ marginBottom: '0.625rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-                        <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
-                          Approved: {event.total_approved} · Encoded: {event.total_encoded} · Remaining: {event.total_remaining}
-                        </span>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: GREEN.primary }}>
-                          {event.total_members > 0 ? Math.round((event.total_encoded / event.total_members) * 100) : 0}%
-                        </span>
-                      </div>
-                      <ProgressBar value={event.total_encoded} max={event.total_members} color={tagColor} />
-                    </div>
-
-                    {/* Batch pills */}
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      {event.batches?.map(batch => (
-                         <button key={batch.id} onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.75rem', borderRadius: '999px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#374151', transition: 'all 0.15s' }}>
-                          Batch {batch.batch_number} <StatusBadge status={batch.status} /> <ChevronRight size={12} color="#9ca3af" />
-                        </button>
+              {/* Filters Panel */}
+              <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
+                <p style={{ fontWeight: 700, fontSize: '0.85rem', color: '#374151', margin: '0 0 0.875rem' }}>Filter Records</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', alignItems: 'center' }}>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Season</label>
+                    <select value={historySeason} onChange={e => setHistorySeason(e.target.value)} style={{ padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', fontSize: '0.8rem', outline: 'none' }}>
+                      <option value="">All seasons</option>
+                      <option value="DRY">Dry Season</option>
+                      <option value="WET">Wet Season</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Year</label>
+                    <select value={historyYear} onChange={e => setHistoryYear(e.target.value)} style={{ padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', fontSize: '0.8rem', outline: 'none' }}>
+                      <option value="">All years</option>
+                      {yearsList.map(y => (
+                        <option key={y} value={y}>{y}</option>
                       ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.7rem', fontWeight: 700, color: '#6b7280', display: 'block', marginBottom: '0.25rem', textTransform: 'uppercase' }}>Search</label>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={14} color="#9ca3af" style={{ position: 'absolute', left: '0.5rem', top: '50%', transform: 'translateY(-50%)' }} />
+                      <input value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search program..." style={{ padding: '0.45rem 0.5rem 0.45rem 1.75rem', border: '1px solid #d1d5db', borderRadius: '0.5rem', width: '100%', fontSize: '0.8rem', outline: 'none', boxSizing: 'border-box' }} />
                     </div>
                   </div>
-                );
-              })}
+                </div>
+              </div>
+
+              {/* Historical List */}
+              {filteredHistoryEvents.length === 0 ? (
+                <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+                  <ClipboardList size={36} color="#d1d5db" style={{ display: 'block', margin: '0 auto 0.75rem' }} />
+                  <p style={{ fontWeight: 700, color: '#6b7280', margin: 0, fontSize: '0.85rem' }}>No historical records match these filters.</p>
+                </div>
+              ) : (
+                <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', minWidth: '800px' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb', borderBottom: '2px solid #e5e7eb' }}>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Barangay</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Program / Organization</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'left', fontWeight: 700, color: '#374151' }}>Seed Type</th>
+                        <th style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 700, color: '#374151' }}>Farmers Encoded</th>
+                        
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredHistoryEvents.map((event, idx) => {
+                        const evH = isHybrid(event.seed_type_name || event.intervention || '');
+                        const tagColor = evH ? '#1e40af' : GREEN.primary;
+                        const tagBg    = evH ? '#eff6ff' : GREEN.light;
+                        const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                        return (
+                          <tr key={event.id} className="row-hover" style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
+                            <td style={{ padding: '0.75rem 1rem', fontWeight: 700 }}>{event.barangay}</td>
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <p style={{ margin: 0, fontWeight: 600 }}>{event.organization_name}</p>
+                              <p style={{ margin: '0.125rem 0 0', fontSize: '0.72rem', color: '#9ca3af' }}>{event.season_display} {event.year}</p>
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                                {event.seed_type_name || (evH ? 'Hybrid' : 'Inbred')}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem', textAlign: 'center', fontWeight: 700 }}>
+                              {event.total_encoded} / {event.total_members}
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {event.batches?.map(batch => (
+                                  <button key={batch.id} onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '0.15rem', padding: '0.2rem 0.5rem', borderRadius: '999px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600, color: '#374151' }}>
+                                    Batch {batch.batch_number}
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+          ) : (
+            /* ── PORTAL ACTIVE SEASON VIEW — DEFAULT ── */
+            <>
+              {/* Search + filter */}
+              <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1.25rem', border: '1px solid #f3f4f6' }}>
+                <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
+                  <Search size={15} color="#9ca3af" style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                  <input value={eventSearch} onChange={e => setEventSearch(e.target.value)} placeholder="Search by barangay, organization, or program..." style={{ padding: '0.625rem 0.875rem 0.625rem 2.5rem', border: '1.5px solid #e5e7eb', borderRadius: '0.5rem', fontSize: '0.875rem', width: '100%', outline: 'none', boxSizing: 'border-box' }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {['WET', 'DRY'].map(s => (
+                      <button key={s} onClick={() => setFilterSeason(filterSeason === s ? '' : s)}
+                        style={{ padding: '0.375rem 0.875rem', border: `1.5px solid ${filterSeason === s ? GREEN.primary : '#e5e7eb'}`, borderRadius: '999px', backgroundColor: filterSeason === s ? GREEN.light : 'white', color: filterSeason === s ? GREEN.primary : '#6b7280', fontWeight: filterSeason === s ? 700 : 400, fontSize: '0.78rem', cursor: 'pointer' }}>
+                        {s === 'WET' ? ' Wet season' : 'Dry season'}
+                      </button>
+                    ))}
+                    {(filterSeason || eventSearch) && (
+                      <button onClick={() => { setFilterSeason(''); setEventSearch(''); }}
+                        style={{ padding: '0.375rem 0.625rem', border: '1.5px solid #fca5a5', borderRadius: '999px', backgroundColor: '#fee2e2', color: '#dc2626', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                        <XCircle size={11} /> Clear
+                      </button>
+                    )}
+                  </div>
+                  <button onClick={() => { setView('history'); setEventSearch(''); }}
+                    style={{ padding: '0.375rem 0.875rem', border: '1.5px solid #d1d5db', borderRadius: '999px', backgroundColor: 'white', color: '#374151', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', transition: 'all 0.15s' }} className="card-hover">
+                    <History size={13} /> View History
+                  </button>
+                </div>
+              </div>
+
+              {filteredEvents.length === 0 ? (
+                <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '3rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6' }}>
+                  <ClipboardList size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+                  <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>
+                    {events.length === 0 ? 'No programs yet' : 'No results found'}
+                  </p>
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>
+                    BRGY Presidents create programs from their portal.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  {filteredEvents.map((event, idx) => {
+                    const evH = isHybrid(event.seed_type_name || event.intervention || '');
+                    const tagColor = evH ? '#1e40af' : GREEN.primary;
+                    const tagBg    = evH ? '#eff6ff' : GREEN.light;
+                    const tagBorder = evH ? '#bfdbfe' : GREEN.border;
+                    return (
+                      <div key={event.id} style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1.25rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: `1px solid ${tagBorder}`, animation: `slideUp ${0.3 + idx * 0.05}s ease` }}>
+                        {/* Delete request badge */}
+                        {event.delete_requested && (
+                          <div style={{ backgroundColor: '#fef9c3', border: '1px solid #fde68a', borderRadius: '0.5rem', padding: '0.5rem 0.875rem', marginBottom: '0.875rem', fontSize: '0.75rem', color: '#854d0e', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>⚠️ BRGY requested deletion</span>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button onClick={() => setDeleteConfirm(event)}
+                                style={{ padding: '0.25rem 0.625rem', backgroundColor: '#dc2626', color: 'white', border: 'none', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>
+                                Approve Delete
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    // Cancel delete request by updating field
+                                    showToast('success', 'Delete request cancelled.');
+                                    fetchAll();
+                                  } catch {}
+                                }}
+                                style={{ padding: '0.25rem 0.625rem', backgroundColor: 'white', color: '#854d0e', border: '1px solid #fde68a', borderRadius: '0.375rem', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 700 }}>
+                                Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <div>
+                            <div style={{ display: 'flex', gap: '0.375rem', marginBottom: '0.375rem', flexWrap: 'wrap' }}>
+                              <span style={{ backgroundColor: tagBg, color: tagColor, padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, border: `1px solid ${tagBorder}` }}>
+                                {event.seed_type_name || (evH ? 'Hybrid' : 'Inbred')}
+                              </span>
+                              <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.season_display} {event.year}</span>
+                            </div>
+                            <h3 style={{ fontWeight: 700, fontSize: '1rem', color: '#1a1a1a', margin: 0 }}>{event.organization_name}</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: '0.25rem' }}>
+                              <MapPin size={13} color="#9ca3af" />
+                              <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.barangay}</span>
+                              {event.variety_name && (
+                                <>
+                                  <Wheat size={13} color="#9ca3af" />
+                                  <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>{event.variety_name}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: tagColor, margin: 0 }}>
+                              {event.total_encoded}<span style={{ fontSize: '0.875rem', fontWeight: 400, color: '#9ca3af' }}>/{event.total_members}</span>
+                            </p>
+                            <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.125rem 0 0' }}>farmers encoded</p>
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: '0.625rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
+                              Approved: {event.total_approved} · Encoded: {event.total_encoded} · Remaining: {event.total_remaining}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 600, color: GREEN.primary }}>
+                              {event.total_members > 0 ? Math.round((event.total_encoded / event.total_members) * 100) : 0}%
+                            </span>
+                          </div>
+                          <ProgressBar value={event.total_encoded} max={event.total_members} color={tagColor} />
+                        </div>
+
+                        {/* Batch pills */}
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {event.batches?.map(batch => (
+                            <button key={batch.id} onClick={() => openBatchDetail(batch.id, event.seed_type_name || event.intervention || '')}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.25rem 0.75rem', borderRadius: '999px', border: '1px solid #e5e7eb', backgroundColor: 'white', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, color: '#374151', transition: 'all 0.15s' }}>
+                              Batch {batch.batch_number} <StatusBadge status={batch.status} /> <ChevronRight size={12} color="#9ca3af" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -666,8 +808,8 @@ const AdminBeneficiaries = () => {
                       backgroundColor: 'rgba(255,255,255,0.16)', color: 'white',
                       border: '1px solid rgba(255,255,255,0.18)', borderRadius: '999px',
                       padding: '0.35rem 0.65rem', fontSize: '0.75rem', fontWeight: 700,
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      whiteSpace: 'nowrap', lineHeight: 1.1,
+                      display: 'inline-flex', alignItems: 'center',
+                      justifyContent: 'center', lineHeight: 1,
                     }}>
                       {allBrgyBatches.length} pending batch{allBrgyBatches.length !== 1 ? 'es' : ''}
                     </span>
@@ -943,12 +1085,13 @@ const AdminBeneficiaries = () => {
                                   <td style={{ ...td, textAlign: 'center' }}>{fd.arbs ? 'Y' : 'N'}</td>
                                   <td style={{ ...td, textAlign: 'center' }}>{fd.four_ps ? 'Y' : 'N'}</td>
                                   <td style={{ ...td, textAlign: 'center' }}>{entry.farm_area_ha || '—'}</td>
-                                  <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                  {/* Pinanatiling laging blangko (—) sa Beneficiaries Tab kahit may laman sa Distribution */}
+                                  <td style={{ ...td, textAlign: 'center' }}>—</td>
                                   <td style={td}>{entry.farmer_contact || '—'}</td>
                                   <td style={{ ...td, textAlign: 'center' }}>
                                     {entry.has_signature ? (
                                       <button onClick={() => fetchAndViewSig(batchDetail.id, entry.id)}
-                                        style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.2rem 0.5rem', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 700, border: `1px solid ${GREEN.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
+                                        style={{ backgroundColor: GREEN.soft, color: GREEN.accent, padding: '0.2rem 0.5rem', borderRadius: '999px', border: `1px solid ${GREEN.border}`, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>
                                         <Eye size={10} /> View
                                       </button>
                                     ) : (
@@ -984,18 +1127,15 @@ const AdminBeneficiaries = () => {
                                 <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name || '—'}</td>
                                 <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.68rem', color: '#6b7280' }}>{entry.farmer_rsbsa || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.area_planted || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                {/* Pinanatiling laging blangko (—) sa Beneficiaries Tab kahit may laman sa Distribution */}
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.crop_establishment || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.expected_sowing_date || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.data_sharing ? '✓' : '✗'}</td>
                                 <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>To be encoded in Yield</td>
-                                <td style={td}>{entry.authorized_representative || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>
-                                  {entry.date_received
-                                    ? new Date(entry.date_received + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' })
-                                    : '—'}
-                                </td>
+                                <td style={td}>—</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>
                                   {entry.has_signature ? (
                                     <button onClick={() => fetchAndViewSig(batchDetail.id, entry.id)}

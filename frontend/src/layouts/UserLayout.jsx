@@ -7,7 +7,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { Bell, X, LogOut, User, ChevronRight } from 'lucide-react'; // ✅ single import
-import { getGisActivePoll } from '../api/axios';
+import { getGisActivePoll, getAnnouncements } from '../api/axios';
 import { USER_NAV, ROLE_COLORS, ROLE_LABELS } from '../components/navigation/UserNavConfig';
 import BottomNav from '../components/navigation/BottomNav';   
 import logo from '../assets/logo.png';
@@ -28,56 +28,6 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
   const [notifs, setNotifs] = useState(readNotifs);
   const unread = notifs.filter(n => !n.read).length;
 
-  const syncSeedNotif = () => {
-    if (role !== 'BRGY') return;
-    try {
-      const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
-      if (!seeds) return;
-
-      const season = seeds.season || 'WET';
-      const year = seeds.year || new Date().getFullYear();
-      const notifId = `seed_${season}_${year}`;
-      const dismissKey = `brgy_seed_dismissed_${season}_${year}`;
-      const isDismissed = localStorage.getItem(dismissKey) === 'true';
-
-      const existing = readNotifs();
-      const alreadyExists = existing.find(n => n.id === notifId);
-
-      if (alreadyExists) {
-        if (isDismissed && !alreadyExists.read) {
-          const updated = existing.map(n =>
-            n.id === notifId ? { ...n, read: true } : n
-          );
-          localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-          setNotifs(updated);
-        } else {
-          setNotifs([...existing]);
-        }
-        return;
-      }
-
-      const infoText = Array.isArray(seeds.varieties)
-        ? seeds.varieties
-            .map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`)
-            .filter(Boolean)
-            .join(' · ')
-        : 'New seed varieties have been confirmed.';
-
-      const newNotif = {
-        id: notifId,
-        title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
-        info: infoText,
-        date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-        read: isDismissed,
-        route: '/brgy',
-      };
-
-      const next = [newNotif, ...existing];
-      localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
-      setNotifs(next);
-    } catch {}
-  };
-
   useEffect(() => {
     const handler = (e) => {
       if (dropRef.current && !dropRef.current.contains(e.target)) setOpen(false);
@@ -87,51 +37,53 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
   }, []);
 
   useEffect(() => {
-    const syncBRGYSeedNotif = () => {
+    // ── BRGY: Synchronize all MAO announcements (Schedules, Allocations, Finalized Seeds) ──
+    const syncBRGYAnnouncements = () => {
       if (role !== 'BRGY') return;
-      try {
-        const seeds = JSON.parse(localStorage.getItem('brgy_final_seeds_notif') || 'null');
-        if (!seeds) return;
+      getAnnouncements()
+        .then(res => {
+          const relevant = (res.data || []).filter(a =>
+            a.title?.startsWith('Seed Schedule —') ||
+            a.title?.startsWith('Seed Allocation —') ||
+            a.title?.startsWith('Finalized Seed Varieties —') ||
+            a.title?.startsWith('Seed Preference Poll Now Open —')
+          );
+          if (relevant.length === 0) return;
 
-        const season = seeds.season || 'WET';
-        const year = seeds.year || new Date().getFullYear();
-        const notifId = `seed_${season}_${year}`;
-        const dismissKey = `brgy_seed_dismissed_${season}_${year}`;
-        const isDismissed = localStorage.getItem(dismissKey) === 'true';
+          const existing = readNotifs();
+          let next = [...existing];
+          let changed = false;
 
-        const existing = readNotifs();
-        const alreadyExists = existing.find(n => n.id === notifId);
+          relevant.forEach(ann => {
+            const notifId = `ann_${ann.id}`;
+            const found = next.find(n => n.id === notifId);
+            if (found) {
+              if (found.read !== ann.is_read) {
+                next = next.map(n => n.id === notifId ? { ...n, read: ann.is_read } : n);
+                changed = true;
+              }
+            } else {
+              next = [{
+                id:    notifId,
+                title: ann.title,
+                info:  ann.content,
+                date:  ann.formatted_date || new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+                read:  ann.is_read,
+                route: `/brgy/announcements/${ann.id}`,
+              }, ...next];
+              changed = true;
+            }
+          });
 
-        if (alreadyExists) {
-          if (isDismissed && !alreadyExists.read) {
-            const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
-            localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-            setNotifs(updated);
-          } else {
-            setNotifs([...existing]);
+          if (changed) {
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+            setNotifs(next);
           }
-          return;
-        }
-
-        const infoText = Array.isArray(seeds.varieties)
-          ? seeds.varieties.map(fs => `${fs.seed_type?.name || ''}: ${(fs.varieties || []).map(v => v.name).join(', ')}`).filter(Boolean).join(' · ')
-          : 'New seed varieties have been confirmed.';
-
-        const newNotif = {
-          id: notifId,
-          title: `Confirmed Seed Varieties — ${seeds.season_display || ''} ${year}`.trim(),
-          info: infoText,
-          date: new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-          read: isDismissed,
-          route: '/brgy',
-        };
-
-        const next = [newNotif, ...existing];
-        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
-        setNotifs(next);
-      } catch {}
+        })
+        .catch(() => {});
     };
 
+    // ── AT: Final Seeds ──
     const syncATSeedNotif = () => {
       if (role !== 'AT') return;
       try {
@@ -174,6 +126,7 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       } catch {}
     };
 
+    // ── AT: Masterlist Status ──
     const syncATMasterlistNotif = () => {
       if (role !== 'AT') return;
       try {
@@ -212,6 +165,7 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       } catch {}
     };
 
+    // ── FARMER: Confirmed Seeds ──
     const syncFARMERNotifs = () => {
       if (role !== 'FARMER') return;
 
@@ -268,15 +222,65 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       }
     };
 
-    if (role === 'BRGY') syncBRGYSeedNotif();
+    // <--- I-PASTE ANG BUONG CODE NA ITO SA ILALIM:
+
+    // ── FARMER: Kukunin lamang ang distribution schedule mula sa kanilang Barangay President ──
+    const syncFARMERAnnouncements = () => {
+      if (role !== 'FARMER') return;
+      getAnnouncements()
+        .then(res => {
+          // Farmer will only receive seed distribution schedules posted by their BP
+          const relevant = (res.data || []).filter(a =>
+            a.title?.startsWith('Seed Distribution')
+          );
+          if (relevant.length === 0) return;
+
+          const existing = readNotifs();
+          let next = [...existing];
+          let changed = false;
+
+          relevant.forEach(ann => {
+            const notifId = `ann_${ann.id}`;
+            const found = next.find(n => n.id === notifId);
+            if (found) {
+              if (found.read !== ann.is_read) {
+                next = next.map(n => n.id === notifId ? { ...n, read: ann.is_read } : n);
+                changed = true;
+              }
+            } else {
+              next = [{
+                id:    notifId,
+                title: ann.title,
+                info:  ann.content,
+                date:  ann.formatted_date || new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+                read:  ann.is_read,
+                route: `/farmer/announcements/${ann.id}`, // Dadalhin ang Farmer sa tamang schedule page
+              }, ...next];
+              changed = true;
+            }
+          });
+
+          if (changed) {
+            localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+            setNotifs(next);
+          }
+        })
+        .catch(() => {});
+    };
+
+
+    // Execute triggers based on role (Critical Fix Applied)
+    if (role === 'BRGY') {
+      syncBRGYAnnouncements();
+    }
     if (role === 'AT') {
       syncATSeedNotif();
       syncATMasterlistNotif();
     }
     if (role === 'FARMER') {
-      syncFARMERNotifs();
+      syncFARMERNotifs();       // <--- NANANATING BUO AT GUMAGANA (UNTOUCHED)
+      syncFARMERAnnouncements(); // <--- IDINAGDAG PARA SA DYNAMIC LOCAL DISTRIBUTION NOTIFS
     }
-
     const onStorage = (e) => {
       if (!e || !e.key) return;
 
@@ -286,9 +290,8 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       }
 
       if (role === 'BRGY') {
-        if (e.key === 'brgy_final_seeds_notif' || e.key.startsWith('brgy_seed_dismissed_')) {
-          setNotifs(readNotifs());
-          syncBRGYSeedNotif();
+        if (e.key === 'agrice_seed_schedule_trigger' || e.key === 'agrice_seed_delivered_trigger' || e.key.startsWith('brgy_seed_dismissed_')) {
+          syncBRGYAnnouncements();
         }
       }
 
@@ -306,13 +309,12 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
       }
 
       if (role === 'FARMER') {
-        if (
-          e.key === NOTIF_KEY ||
-          e.key === 'farmer_final_seeds_notif' ||
-          e.key.startsWith('farmer_seed_dismissed_')
-        ) {
+        if (e.key === 'farmer_final_seeds_notif' || e.key.startsWith('farmer_seed_dismissed_')) {
           setNotifs(readNotifs());
           syncFARMERNotifs();
+        }
+        if (e.key === 'agrice_seed_schedule_trigger' || e.key === 'agrice_seed_delivered_trigger') {
+          syncFARMERAnnouncements();
         }
       }
     };
@@ -402,7 +404,11 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
                     <span style={{ fontSize: '0.7rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>{notif.date}</span>
                   </div>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: notif.read ? '#6b7280' : '#166534', lineHeight: 1.45 }}>{notif.info}</p>
+                <p style={{ margin: 0, fontSize: '0.75rem', color: notif.read ? '#6b7280' : '#166534', lineHeight: 1.45 }}>
+                  {notif.info && notif.info.length > 80 
+                    ? notif.info.slice(0, 80) + '...' 
+                    : notif.info}
+                </p>
               </button>
             ))}
           </div>

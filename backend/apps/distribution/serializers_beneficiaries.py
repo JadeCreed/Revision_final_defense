@@ -271,6 +271,10 @@ class DistributionEventSerializer(serializers.ModelSerializer):
     total_encoded    = serializers.SerializerMethodField()
     total_approved   = serializers.SerializerMethodField()
     total_remaining  = serializers.SerializerMethodField()
+    # Effective (display) value — read lang, hindi nito babaguhin ang DB column input
+    total_members    = serializers.SerializerMethodField()
+    # Ang totoong writable field para sa pag-create/update — nakatago sa response
+    # pero tinatanggap ang 'total_members' bilang input gamit ang source mapping
     batch_count      = serializers.SerializerMethodField()
     created_by_name  = serializers.SerializerMethodField()
     status_display   = serializers.CharField(source='get_status_display', read_only=True)
@@ -280,7 +284,10 @@ class DistributionEventSerializer(serializers.ModelSerializer):
     )
     seed_type_name   = serializers.SerializerMethodField()
     variety_name     = serializers.SerializerMethodField()
-
+    total_members_input = serializers.IntegerField(
+        source='total_members', write_only=True, required=False, min_value=0
+    )
+    
     class Meta:
         model  = DistributionEvent
         fields = [
@@ -288,7 +295,7 @@ class DistributionEventSerializer(serializers.ModelSerializer):
             'seed_type', 'seed_type_name',
             'variety',   'variety_name',
             'season', 'season_display', 'year',
-            'organization_name', 'total_members',
+            'organization_name', 'total_members','total_members_input',
             'status', 'status_display',
             'seed_delivered', 'seed_delivered_at',
             'total_encoded', 'total_approved', 'total_remaining',
@@ -308,14 +315,27 @@ class DistributionEventSerializer(serializers.ModelSerializer):
     def get_variety_name(self, obj):
         return obj.variety.name if obj.variety else ''
 
+
     def get_total_encoded(self, obj):
         return obj.get_total_encoded()
 
     def get_total_approved(self, obj):
         return obj.get_total_approved()
+    
+    def get_total_members(self, obj):
+        # Kukunin ang tunay na bilang ng active approved farmers sa barangay para sa season na ito
+        active_farmers_count = User.objects.filter(
+            role='FARMER',
+            status='APPROVED',
+            is_active=True,
+            barangay=obj.barangay
+        ).count()
+        return max(obj.total_members, active_farmers_count, obj.get_total_encoded())
+    
 
     def get_total_remaining(self, obj):
         return max(0, obj.total_members - obj.get_total_encoded())
+
 
     def get_batch_count(self, obj):
         return obj.batches.count()
@@ -335,6 +355,7 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
     total_encoded        = serializers.SerializerMethodField()
     total_approved       = serializers.SerializerMethodField()
     total_remaining      = serializers.SerializerMethodField()
+    total_members        = serializers.SerializerMethodField()
     total_distribution_encoded = serializers.SerializerMethodField()
     batch_count          = serializers.SerializerMethodField()
     approved_batch_count = serializers.SerializerMethodField()
@@ -362,6 +383,8 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
     def get_seed_type_name(self, obj):
         return obj.seed_type.name if obj.seed_type else ''
 
+
+
     def get_total_encoded(self, obj):
         return obj.get_total_encoded()
 
@@ -370,6 +393,16 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
     
     def get_total_distribution_encoded(self, obj):
         return obj.get_total_distribution_encoded()
+    
+    def get_total_members(self, obj):
+        # Kukunin ang tunay na bilang ng active approved farmers sa barangay para sa season na ito
+        active_farmers_count = User.objects.filter(
+            role='FARMER',
+            status='APPROVED',
+            is_active=True,
+            barangay=obj.barangay
+        ).count()
+        return max(obj.total_members, active_farmers_count, obj.get_total_encoded())
 
     def get_total_remaining(self, obj):
         return max(0, obj.total_members - obj.get_total_encoded())

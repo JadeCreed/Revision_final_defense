@@ -45,48 +45,119 @@ def get_visible_announcements(user):
       1. is_active = True
       2. target_role matches user's role OR is ALL
       3. target_barangays matches user's barangay OR is empty (all)
+      4. For FARMER: If announcement is posted by a BRGY President, only show
+         if they have approved beneficiary data (DistributionBatch status='APPROVED')
+         for the current active poll season/year.
     """
     # Start with all active announcements
     qs = Announcement.objects.filter(is_active=True)
 
     # Filter by role
-    # Shows announcements targeted at this user's role OR targeted at ALL
     qs = qs.filter(
         Q(target_role='ALL') | Q(target_role=user.role)
     )
 
     if user.role == 'AT':
         try:
-            # Get all barangay names assigned to this AT
             user_barangays = list(
                 user.at_profile.barangays.values_list('name', flat=True)
             )
         except Exception:
             user_barangays = []
     else:
-        # FARMER and BRGY — single barangay on User model
         single = getattr(user, 'barangay', '') or ''
         user_barangays = [single] if single else []
 
-    # Filter by barangay
-    # An announcement is visible if:
-    #   - target_barangays is empty (means ALL barangays) OR
-    #   - user's barangay is in the target_barangays list
-
     visible_ids = []
-    for ann in qs.only('id', 'target_barangays'):
+    for ann in qs:
         target_list = ann.get_target_barangays()
+        is_visible = False
 
         if not target_list:
-            # Empty target = ALL barangays → always visible
-            visible_ids.append(ann.id)
+            is_visible = True
         elif user_barangays:
-            # Check if ANY of user's barangays match the target list
             if any(brgy in target_list for brgy in user_barangays):
-                visible_ids.append(ann.id)
-        # If user has no barangay at all → only sees ALL-barangay announcements
+                is_visible = True
+
+        # ── FARMER LEVEL BENEFICIARY SCOPING CONSTRAINT ──
+        # Kung Farmer ang tinitingnan, at ang announcement ay local (mula sa BRGY President):
+        # Sisiguraduhin natin na may APPROVED beneficiary batch siya sa active season/year ng poll.
+        if is_visible and user.role == 'FARMER' and ann.posted_by and ann.posted_by.role == 'BRGY' and ann.target_role == 'FARMER':
+            from apps.seed_poll.utils import get_current_poll
+            from apps.distribution.models import DistributionBatch
+            
+            poll = get_current_poll()
+            if poll:
+                # Query kung may approved distribution batch ang farmer na ito para sa active poll
+                has_approved_record = DistributionBatch.objects.filter(
+                    status='APPROVED',
+                    event__season=poll.season,
+                    event__year=poll.year,
+                    entries__farmer=user,
+                    event__barangay=user.barangay
+                ).exists()
+                
+                # Kung walang approved beneficiary data sa active season, sasalain (filter out) ang announcement
+                if not has_approved_record:
+                    is_visible = False
+            else:
+                is_visible = False
+
+        if is_visible:
+            visible_ids.append(ann.id)
 
     return Announcement.objects.filter(id__in=visible_ids).order_by('-created_at')
+
+
+#  def get_visible_announcements(user):
+#     """
+#     Returns queryset of active announcements visible to this user.
+#     Filters by:
+#       1. is_active = True
+#       2. target_role matches user's role OR is ALL
+#       3. target_barangays matches user's barangay OR is empty (all)
+#     """
+#     # Start with all active announcements
+#     qs = Announcement.objects.filter(is_active=True)
+
+#     # Filter by role
+#     # Shows announcements targeted at this user's role OR targeted at ALL
+#     qs = qs.filter(
+#         Q(target_role='ALL') | Q(target_role=user.role)
+#     )
+
+#     if user.role == 'AT':
+#         try:
+#             # Get all barangay names assigned to this AT
+#             user_barangays = list(
+#                 user.at_profile.barangays.values_list('name', flat=True)
+#             )
+#         except Exception:
+#             user_barangays = []
+#     else:
+#         # FARMER and BRGY — single barangay on User model
+#         single = getattr(user, 'barangay', '') or ''
+#         user_barangays = [single] if single else []
+
+#     # Filter by barangay
+#     # An announcement is visible if:
+#     #   - target_barangays is empty (means ALL barangays) OR
+#     #   - user's barangay is in the target_barangays list
+
+#     visible_ids = []
+#     for ann in qs.only('id', 'target_barangays'):
+#         target_list = ann.get_target_barangays()
+
+#         if not target_list:
+#             # Empty target = ALL barangays → always visible
+#             visible_ids.append(ann.id)
+#         elif user_barangays:
+#             # Check if ANY of user's barangays match the target list
+#             if any(brgy in target_list for brgy in user_barangays):
+#                 visible_ids.append(ann.id)
+#         # If user has no barangay at all → only sees ALL-barangay announcements
+
+#     return Announcement.objects.filter(id__in=visible_ids).order_by('-created_at')
 
 # ═══════════════════════════════════════════════════════════
 # ADMIN VIEWS
@@ -102,56 +173,55 @@ class AdminAnnouncementListCreateView(APIView):
          Admin creates a new announcement.
          posted_by is automatically set to request.user.
     """
-    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        qs = Announcement.objects.all()
+        if request.user.role == 'ADMIN':
+            qs = Announcement.objects.all()
+        elif request.user.role == 'BRGY':
+            qs = Announcement.objects.filter(posted_by=request.user)
+        else:
+            return Response({"error": "Access denied."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Filter by active status
         is_active = request.query_params.get('is_active')
         if is_active is not None:
             qs = qs.filter(is_active=is_active.lower() == 'true')
 
-        # Filter by target role
         role = request.query_params.get('role')
         if role and role.upper() != 'ALL':
-            qs = qs.filter(
-                Q(target_role=role.upper()) | Q(target_role='ALL')
-            )
+            qs = qs.filter(Q(target_role=role.upper()) | Q(target_role='ALL'))
 
-        # Search by title or content
         search = request.query_params.get('search')
         if search:
-            qs = qs.filter(
-                Q(title__icontains=search) |
-                Q(content__icontains=search)
-            )
+            qs = qs.filter(Q(title__icontains=search) | Q(content__icontains=search))
 
         qs = qs.order_by('-created_at')
-
-        # Pagination
-        paginator   = StandardPagination()
-        page        = paginator.paginate_queryset(qs, request)
-        serializer  = AnnouncementAdminSerializer(
-            page, many=True, context={'request': request}
-        )
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(qs, request)
+        serializer = AnnouncementAdminSerializer(page, many=True, context={'request': request})
         return paginator.get_paginated_response(serializer.data)
 
     def post(self, request):
+        if request.user.role not in ('ADMIN', 'BRGY'):
+            return Response({"error": "Access denied."}, status=status.HTTP_403_FORBIDDEN)
+        
         try:
-            serializer = AnnouncementAdminSerializer(
-                data=request.data,
-                context={'request': request}
-            )
+            data = request.data.copy()
+            # Kung BRGY President, awtomatikong i-restrict sa kanyang Barangay at Farmers lamang
+            if request.user.role == 'BRGY':
+                data['target_role'] = 'FARMER'
+                data['target_barangays_list'] = [request.user.barangay]
+            
+            serializer = AnnouncementAdminSerializer(data=data, context={'request': request})
             if serializer.is_valid():
                 serializer.save(posted_by=request.user)
                 return Response(serializer.data, status=status.HTTP_201_CREATED)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+
 class AdminAnnouncementDetailView(APIView):
     """
     GET    /api/announcements/admin/<id>/   Get one announcement
@@ -320,3 +390,5 @@ class UserUnreadCountView(APIView):
         unread_count = recent.exclude(id__in=read_ids).count()
 
         return Response({"unread_count": unread_count})
+    
+    

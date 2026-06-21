@@ -17,6 +17,114 @@ from .serializers import (
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
 
 
+def _auto_announce_schedule(delivery, user):
+    """Tinatawag kapag may bagong SeedDelivery na na-save bilang SCHEDULED.
+    Ito ang nagpapadala ng 'Seed Schedule —' notification sa mga Barangay President."""
+    try:
+        from apps.announcements.models import Announcement
+        variety_label = f" ({delivery.variety.name})" if delivery.variety else ''
+        Announcement.objects.create(
+            title=f"Seed Schedule — {delivery.seed_type.name}{variety_label}",
+            content=(
+                f"Delivery on {delivery.delivery_date.strftime('%b %d, %Y')} · "
+                f"{delivery.total_bags} bags · {delivery.season_display} {delivery.year}"
+            ),
+            target_role='BRGY',
+            target_barangays='',
+            posted_by=user,
+            is_active=True,
+        )
+    except Exception:
+        pass
+
+
+def _compute_delivered_allocations_for_announcement(delivery):
+    """Para sa isang DELIVERED na SeedDelivery, hinahanap ang lahat ng barangay na
+    may approved beneficiary data para ma-compute ang kanya-kanyang bag allocation."""
+    from apps.distribution.models import DistributionBatch
+
+    seed_type = delivery.seed_type
+    if not seed_type:
+        return []
+
+    seed_name = (seed_type.name or '').upper()
+    is_hybrid = 'HYBRID' in seed_name or seed_name in ('NRP', 'RFO')
+
+    batches_qs = DistributionBatch.objects.filter(
+        status='APPROVED',
+        event__season=delivery.season,
+        event__year=delivery.year,
+        event__seed_type=seed_type,
+    ).prefetch_related('entries')
+
+    if delivery.variety:
+        batches_qs = batches_qs.filter(
+            models.Q(event__variety=delivery.variety) |
+            models.Q(entries__variety=delivery.variety)
+        ).distinct()
+
+    brgy_map = {}
+    for batch in batches_qs:
+        barangay = batch.event.barangay
+        if not barangay:
+            continue
+        if barangay not in brgy_map:
+            brgy_map[barangay] = {'total_ha': 0.0, 'farmer_count': 0}
+        for entry in batch.entries.all():
+            ha = float(entry.farm_area_ha or 0) if is_hybrid else float(entry.area_planted or 0)
+            if ha <= 0:
+                continue
+            brgy_map[barangay]['total_ha'] += ha
+            brgy_map[barangay]['farmer_count'] += 1
+
+    results = []
+    for barangay, data in brgy_map.items():
+        if data['total_ha'] <= 0:
+            continue
+        if is_hybrid:
+            allocated_bags = round(data['total_ha'] * 1.0, 2)
+            allocated_kg   = round(allocated_bags * 15, 2)
+        else:
+            allocated_bags = round(data['total_ha'] * 2.0, 2)
+            allocated_kg   = round(allocated_bags * 20, 2)
+        results.append({
+            'barangay':       barangay,
+            'farmer_count':   data['farmer_count'],
+            'total_ha':       round(data['total_ha'], 2),
+            'allocated_bags': allocated_bags,
+            'allocated_kg':   allocated_kg,
+        })
+    return results
+
+
+def _auto_announce_delivered(delivery, user):
+    """Gumagawa ng unread Announcement para sa mga barangay na may active allocations.
+    Gagamitin natin ang deep-link key na 'confirm-allocation-id:' sa action_url."""
+    try:
+        from apps.announcements.models import Announcement
+        variety_label = f" ({delivery.variety.name})" if delivery.variety else ''
+        allocations = _compute_delivered_allocations_for_announcement(delivery)
+        for alloc in allocations:
+            Announcement.objects.create(
+                title=f"Seed Allocation — {delivery.seed_type.name}{variety_label}",
+                content=(
+                    f"{alloc['allocated_bags']} bags ({alloc['allocated_kg']}kg) · "
+                    f"{alloc['farmer_count']} farmer{'s' if alloc['farmer_count'] != 1 else ''} · "
+                    f"{alloc['total_ha']} ha · {delivery.season_display} {delivery.year}"
+                ),
+                action_title="Confirm Received",
+                action_url=f"confirm-allocation-id:{delivery.id}",
+                target_role='BRGY',
+                target_barangays=alloc['barangay'],
+                posted_by=user,
+                is_active=True,
+            )
+    except Exception:
+        pass
+
+
+
+
 # ─────────────────────────────────────────
 # ADMIN VIEWS
 # ─────────────────────────────────────────
@@ -50,6 +158,10 @@ class SeedDeliveryListCreateView(generics.ListCreateAPIView):
             details=f"Recorded {delivery.total_bags} bags of {delivery.seed_type.name} "
                     f"delivered on {delivery.delivery_date}."
         )
+        if delivery.status == 'SCHEDULED':
+            _auto_announce_schedule(delivery, self.request.user)
+        elif delivery.status == 'DELIVERED':
+            _auto_announce_delivered(delivery, self.request.user)
 
 
 class SeedDeliveryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -64,13 +176,16 @@ class SeedDeliveryDetailView(generics.RetrieveUpdateDestroyAPIView):
         return SeedDeliverySerializer
 
     def perform_update(self, serializer):
-        delivery = serializer.save()
+        old_status = self.get_object().status
+        delivery   = serializer.save()
         SeedDeliveryAudit.objects.create(
             delivery=delivery,
             action='UPDATED',
             performed_by=self.request.user,
             details=f"Updated delivery record. Total bags: {delivery.total_bags}."
         )
+        if old_status != 'DELIVERED' and delivery.status == 'DELIVERED':
+            _auto_announce_delivered(delivery, self.request.user)
 
     def perform_destroy(self, instance):
         SeedDeliveryAudit.objects.create(
@@ -327,22 +442,26 @@ def brgy_my_seed_allocation_view(request):
     """
     from apps.distribution.models import DistributionBatch
     from apps.seed_poll.models import FinalSeed
+    # Inimport ang iyong utils para sa Seasonal Data Partitioning
+    from apps.seed_poll.utils import get_current_poll
 
     barangay = request.user.barangay
     if not barangay:
         return Response([])
 
-    final_seed = FinalSeed.objects.order_by('-confirmed_at').first()
-    if not final_seed:
+    # Kinukuha ang aktibong poll scope para sa kasalukuyang cycle
+    poll = get_current_poll()
+    if not poll:
         return Response([])
 
-    season = final_seed.season
-    year = final_seed.year
+    season = poll.season
+    year = poll.year
+
 
     delivered_deliveries = SeedDelivery.objects.filter(
         season=season,
         year=year,
-        total_bags__gt=0,
+        status='DELIVERED',
     ).select_related('seed_type', 'variety')
 
     if not delivered_deliveries.exists():
@@ -393,19 +512,18 @@ def brgy_my_seed_allocation_view(request):
         # Inbred:  1 bag = 20kg, 2 bags per ha
         #          0.5 ha = 1 bag = 20kg (minimum 1 bag, ceiling)
         if is_hybrid:
-            # Exact decimal bags for accurate kg display
-            allocated_bags_exact = total_ha * 1.0          # e.g. 0.5 ha → 0.5 bags
-            allocated_bags_kg    = round(allocated_bags_exact * 15, 2)  # e.g. 0.5 × 15 = 7.5 kg
-            # Physical bags: ceil so BRGY receives enough (min 1)
-            allocated_bags       = max(1, math.ceil(allocated_bags_exact)) if allocated_bags_exact < 1 else int(allocated_bags_exact)
+            # Exact decimal bags — no ceiling, preserve decimal accuracy
+            allocated_bags_exact = round(total_ha * 1.0, 2)
+            allocated_bags_kg    = round(allocated_bags_exact * 15, 2)
+            allocated_bags       = allocated_bags_exact  # keep decimal, e.g. 0.5
         else:
-            # Inbred: 2 bags per ha, ceil for partial ha, minimum 1 bag
-            allocated_bags_exact = total_ha * 2.0          # e.g. 0.5 ha → 1.0 bags
-            allocated_bags       = max(1, math.ceil(allocated_bags_exact))
-            allocated_bags_kg    = round(allocated_bags * 20, 2)        # e.g. 1 × 20 = 20 kg
-
+            # Inbred: 2 bags per ha — keep decimal, no ceiling
+            allocated_bags_exact = round(total_ha * 2.0, 2)
+            allocated_bags_kg    = round(allocated_bags_exact * 20, 2)
+            allocated_bags       = allocated_bags_exact  # e.g. 3.9 ha → 7.8 bags
+        
         # Format display string: "1 bag (7.5kg)" or "2 bags (15kg)"
-        bag_label = f"{allocated_bags} bag{'s' if allocated_bags != 1 else ''} ({allocated_bags_kg}kg)"
+        bag_label = f"{allocated_bags} bag{'s' if allocated_bags != 1 else ''} ({allocated_bags_kg:g}kg)"
 
         existing_alloc = BrgyAllocation.objects.filter(
             barangay=barangay,
@@ -425,9 +543,11 @@ def brgy_my_seed_allocation_view(request):
             'delivery_date':     str(delivery.delivery_date),
             'total_hectares':    round(total_ha, 2),
             'farmer_count':      farmer_count,
-            'allocated_bags':    allocated_bags,
-            'allocated_bags_kg': allocated_bags_kg,
-            'bag_label':         bag_label,
+            'allocated_bags':       allocated_bags,
+            'allocated_bags_kg':    allocated_bags_kg,
+            'bag_label':            bag_label,
+            'allocated_bags_exact': allocated_bags_exact,
+            'allocated_kg_exact':   allocated_bags_kg,
             'bag_weight_kg':     15 if is_hybrid else 20,
             'alloc_status':      existing_alloc.status if existing_alloc else 'PENDING',
             'alloc_id':          existing_alloc.id if existing_alloc else None,
@@ -435,7 +555,7 @@ def brgy_my_seed_allocation_view(request):
         })
 
     return Response(result)
-
+from apps.accounts.permissions import IsAdminUserRole, IsBPUser
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsBPUser])
@@ -448,14 +568,18 @@ def brgy_confirm_allocation_view(request):
     if not all([barangay, delivery_id, allocated_bags is not None]):
         return Response({'error': 'Missing required fields.'}, status=400)
 
+
     # Validate allocated_bags is a positive integer
     try:
-        allocated_bags_int = int(allocated_bags)
+        allocated_bags_val = float(allocated_bags)
     except (TypeError, ValueError):
         return Response({'error': 'Invalid allocated bags value.'}, status=400)
 
-    if allocated_bags_int <= 0:
+    if allocated_bags_val <= 0:
         return Response({'error': 'Allocated bags must be greater than zero.'}, status=400)
+    
+    # Store as integer only for the allocation record (physical bags received)
+    allocated_bags_int = allocated_bags_val
 
     delivery = get_object_or_404(SeedDelivery, pk=delivery_id)
 
@@ -473,7 +597,7 @@ def brgy_confirm_allocation_view(request):
         alloc = BrgyAllocation.objects.create(
             delivery=delivery,
             barangay=barangay,
-            allocated_bags=allocated_bags_int,
+            allocated_bags=round(allocated_bags_val),
             status='CONFIRMED',
             confirmed_by=request.user,
             date_confirmed=timezone.now().date(),
@@ -509,17 +633,22 @@ def brgy_schedule_notification_view(request):
     Used for Notif 2 (Confirm Received / allocated bags).
     """
     from apps.seed_poll.models import FinalSeed
+    # Inimport ang iyong utils para sa Seasonal Data Partitioning
+    from apps.seed_poll.utils import get_current_poll
 
     barangay = request.user.barangay
     if not barangay:
         return Response([])
 
-    final_seed = FinalSeed.objects.order_by('-confirmed_at').first()
-    if not final_seed:
+    # Kinukuha ang aktibong poll scope para sa kasalukuyang cycle
+    poll = get_current_poll()
+    if not poll:
         return Response([])
 
-    season = final_seed.season
-    year = final_seed.year
+    season = poll.season
+    year = poll.year
+
+
 
     deliveries = SeedDelivery.objects.filter(
         season=season,

@@ -1,5 +1,3 @@
-// src/pages/brgy/BPDashboard.jsx
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
@@ -8,7 +6,7 @@ import {
   getBrgyMyAllocation, brgyConfirmAllocation, getBRGYDashboardStats,
 } from '../../api/axios';
 import AnnouncementCard from '../../components/announcements/AnnouncementCard';
-import { Users, ChevronRight, ClipboardList, Bell, Package, CheckCircle, Calendar, Activity, MapPin, BarChart2, Truck, Wheat } from 'lucide-react';
+import { Users, ChevronRight, ClipboardList, Bell, Package, CheckCircle, Calendar, Truck, Wheat } from 'lucide-react';
 
 const getGreeting = () => {
   const hour = new Date().getHours();
@@ -37,7 +35,6 @@ const BPDashboard = () => {
   const { firstName, barangay } = useAuth();
   const navigate = useNavigate();
 
-  // ── Existing states (HINDI BINAGO) ──
   const [seedDismissed, setSeedDismissed] = useState(false);
   const [seedVisible, setSeedVisible]     = useState(true);
   const [finalSeeds, setFinalSeeds]       = useState([]);
@@ -45,13 +42,11 @@ const BPDashboard = () => {
   const [announcements, setAnnouncements] = useState([]);
   const [annLoading, setAnnLoading]       = useState(true);
 
-  // ── Bagong states ──
-  const [scheduleNotifs, setScheduleNotifs]   = useState([]);   // Notif 1
-  const [schedDismissed, setSchedDismissed]   = useState({});
-  const [myAllocations, setMyAllocations]     = useState([]);   // Notif 2
-  const [allocConfirming, setAllocConfirming] = useState({});
+  // ── Scoped Announcements at Allocations ──
+  const [scheduleAnnouncements, setScheduleAnnouncements] = useState([]); 
+  const [myAllocations, setMyAllocations]                 = useState([]);   
+  const [allocConfirming, setAllocConfirming]             = useState({});
 
-  // ── Existing useEffect 1: Final Seeds (HINDI BINAGO) ──
   useEffect(() => {
     getFinalSeeds()
       .then(res => {
@@ -78,7 +73,6 @@ const BPDashboard = () => {
       .catch(() => {});
   }, []);
 
-  // ── Existing useEffect 2: Total Farmers (HINDI BINAGO) ──
   useEffect(() => {
     getATFarmers({ barangay, limit: 1, role: 'brgy' })
       .then(res => {
@@ -90,7 +84,6 @@ const BPDashboard = () => {
       .catch(() => setTotalFarmers(null));
   }, [barangay]);
 
-  // ── Existing useEffect 3: Announcements (HINDI BINAGO) ──
   useEffect(() => {
     getAnnouncements({ limit: 3 })
       .then(res => setAnnouncements(res.data || []))
@@ -98,121 +91,81 @@ const BPDashboard = () => {
       .finally(() => setAnnLoading(false));
   }, []);
 
-  // ── NOTIF 1: Schedule — from backend SeedDelivery records ──
-  useEffect(() => {
-    const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
-
-    const pushNotif = (entry) => {
-      const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
-      const dismissKey = `brgy_sched_dismissed_${notifId}`;
-      const isDismissed = localStorage.getItem(dismissKey) === 'true';
-
-      setSchedDismissed(prev => ({ ...prev, [notifId]: isDismissed }));
-
-      try {
-        const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-        const existingNotif = existing.find(n => n.id === notifId);
-        if (existingNotif && !existingNotif.read) return;
-        if (isDismissed) return;
-
-        const seasonDisplay = entry.season === 'WET' ? 'Wet Season' : 'Dry Season';
-        const delivDate = entry.delivery_date
-          ? new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-          : '—';
-
-        const newNotif = {
-          id:    notifId,
-          title: `Seed Schedule — ${entry.seed_type_name}${entry.variety_name ? ' (' + entry.variety_name + ')' : ''}`,
-          info:  `Delivery: ${delivDate} · ${entry.total_bags} bags · ${seasonDisplay} ${entry.year}`,
-          date:  new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-          read:  false,
-          route: '/brgy',
-        };
-
-        const next = [newNotif, ...existing];
-        localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
-        emitStorageSync(NOTIF_KEY, JSON.stringify(next));
-      } catch {}
-    };
-
-    const loadScheduleNotifs = () => {
-      getBrgyMyAllocation()
-        .then(res => {
-          const allocs = res.data || [];
-          const entries = allocs.map(a => ({
-            seed_type_id: a.seed_type_id,
-            variety_id: a.variety_id,
-            seed_type_name: a.seed_type_name,
-            variety_name: a.variety_name,
-            season: a.season,
-            year: a.year,
-            delivery_date: a.delivery_date,
-            total_bags: a.allocated_bags,
-          }));
-          setScheduleNotifs(entries);
-          entries.forEach(pushNotif);
-        })
-        .catch(() => {});
-    };
-
-    loadScheduleNotifs();
-
-    const onStorage = (e) => {
-      if (e?.key === 'agrice_seed_delivered_trigger') {
-        loadScheduleNotifs();
-      }
-    };
-
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
-
-  const loadAllocations = () => {
-    getBrgyMyAllocation()
+  const loadScheduleAnnouncements = () => {
+    getAnnouncements({ search: 'Seed' })
       .then(res => {
-        const allocs = res.data || [];
-        setMyAllocations(allocs);
-
-        const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
-        allocs.forEach(alloc => {
-          if (alloc.already_confirmed || alloc.alloc_status === 'CONFIRMED') return;
-
-          const notifId = `alloc_${alloc.delivery_id}_${alloc.season}_${alloc.year}`;
-          try {
-            const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-            if (existing.find(n => n.id === notifId)) return;
-
-            const newNotif = {
-              id:    notifId,
-              title: `Seed Allocation — ${alloc.seed_type_name}${alloc.variety_name ? ' (' + alloc.variety_name + ')' : ''} · ${alloc.allocated_bags} bags`,
-              info:  `${alloc.farmer_count} farmer${alloc.farmer_count !== 1 ? 's' : ''} · ${alloc.total_hectares} ha · ${alloc.season_display} ${alloc.year}`,
-              date:  new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
-              read:  false,
-              route: '/brgy',
-            };
-            const next = [newNotif, ...existing];
-            localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
-            emitStorageSync(NOTIF_KEY, JSON.stringify(next));
-          } catch {}
-        });
+        const list = (res.data || []).filter(a => a.title?.startsWith('Seed Schedule —'));
+        setScheduleAnnouncements(list);
       })
       .catch(() => {});
   };
 
   useEffect(() => {
-    loadAllocations();
+    loadScheduleAnnouncements();
+    const onStorage = (e) => {
+      if (e?.key === 'agrice_seed_schedule_trigger' || e?.key === 'agrice_seed_delivered_trigger') {
+        loadScheduleAnnouncements();
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
+  // const loadAllocations = () => {
+  //   getBrgyMyAllocation()
+  //     .then(res => {
+  //       const allocs = res.data || [];
+  //       setMyAllocations(allocs);
+
+  //       const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
+  //       allocs.forEach(alloc => {
+  //         if (alloc.already_confirmed || alloc.alloc_status === 'CONFIRMED') return;
+
+  //         const notifId = `alloc_${alloc.delivery_id}_${alloc.season}_${alloc.year}`;
+  //         try {
+  //           const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+  //           if (existing.find(n => n.id === notifId)) return;
+
+  //           const newNotif = {
+  //             id:    notifId,
+  //             title: `Seed Allocation — ${alloc.seed_type_name}${alloc.variety_name ? ' (' + alloc.variety_name + ')' : ''} · ${alloc.allocated_bags} bags`,
+  //             info:  `${alloc.farmer_count} farmer${alloc.farmer_count !== 1 ? 's' : ''} · ${alloc.total_hectares} ha · ${alloc.season_display} ${alloc.year}`,
+  //             date:  new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }),
+  //             read:  false,
+  //             route: '/brgy',
+  //           };
+  //           const next = [newNotif, ...existing];
+  //           localStorage.setItem(NOTIF_KEY, JSON.stringify(next));
+  //           emitStorageSync(NOTIF_KEY, JSON.stringify(next));
+  //         } catch {}
+  //       });
+  //     })
+  //     .catch(() => {});
+  // };
+
+
+    // <--- IPALIT ANG MAIKSI AT MALINIS NA CODE NA ITO:
+    const loadAllocations = () => {
+      getBrgyMyAllocation()
+        .then(res => {
+          setMyAllocations(res.data || []);
+        })
+        .catch(() => {});
+    };
+
+
+
+  useEffect(() => {
+    loadAllocations();
     const onStorage = (e) => {
       if (e?.key === 'agrice_seed_delivered_trigger') {
         loadAllocations();
       }
     };
-
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
 
-  // ── Dashboard stats (BRGY) ──
   const [dashStats, setDashStats] = useState({
     total_farmers: null,
     beneficiaries: null,
@@ -228,7 +181,6 @@ const BPDashboard = () => {
       .finally(() => setStatsLoading(false));
   }, []);
 
-  // ── Existing handler (HINDI BINAGO) ──
   const handleSeedDismiss = () => {
     setSeedVisible(false);
     setTimeout(() => {
@@ -238,89 +190,90 @@ const BPDashboard = () => {
         localStorage.setItem(dismissKey, 'true');
         emitStorageSync(dismissKey, 'true');
       }
-      const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
-      try {
-        const notifId  = `seed_${finalSeeds[0]?.season}_${finalSeeds[0]?.year}`;
-        const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-        const updated  = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
-        localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-        emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-      } catch {}
       navigate('/brgy/beneficiaries');
     }, 300);
   };
 
-  // ── BAGONG handler: Dismiss schedule notif (Notif 1) ──
-  const handleSchedDismiss = (entry) => {
-    const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
-    const dismissKey = `brgy_sched_dismissed_${notifId}`;
-    localStorage.setItem(dismissKey, 'true');
-    setSchedDismissed(prev => ({ ...prev, [notifId]: true }));
+  // const handleConfirmAllocation = async (alloc) => {
+  //   const key = `${alloc.delivery_id}`;
+  //   setAllocConfirming(prev => ({ ...prev, [key]: true }));
+  //   try {
+  //     await brgyConfirmAllocation({
+  //       delivery_id:    alloc.delivery_id,
+  //       allocated_bags: alloc.allocated_bags,
+  //     });
 
-    const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
-    try {
-      const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-      const updated  = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
-      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-      emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-    } catch {}
-  };
+  //     setMyAllocations(prev =>
+  //       prev.map(a => a.delivery_id === alloc.delivery_id
+  //         ? { ...a, already_confirmed: true, alloc_status: 'CONFIRMED' }
+  //         : a)
+  //     );
+  //   } catch (err) {
+  //     console.error(err);
+  //   } finally {
+  //     setAllocConfirming(prev => ({ ...prev, [key]: false }));
+  //   }
+  // };
 
-  // ── BAGONG handler: Confirm Received (Notif 2) ──
-  const handleConfirmAllocation = async (alloc) => {
-    const key = `${alloc.delivery_id}`;
-    setAllocConfirming(prev => ({ ...prev, [key]: true }));
-    try {
-      await brgyConfirmAllocation({
-        delivery_id:    alloc.delivery_id,
-        allocated_bags: alloc.allocated_bags,
-      });
-
-      // Mark bell notif as read
-      const notifId   = `alloc_${alloc.delivery_id}_${alloc.season}_${alloc.year}`;
-      const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
-      try {
-        const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
-        const updated  = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
-        localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
-        emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
-      } catch {}
-
-      // Update local state — card disappears
-      setMyAllocations(prev =>
-        prev.map(a => a.delivery_id === alloc.delivery_id
-          ? { ...a, already_confirmed: true, alloc_status: 'CONFIRMED' }
-          : a)
-      );
-    } catch (err) {
-      console.error('Failed to confirm allocation:', err);
-    } finally {
-      setAllocConfirming(prev => ({ ...prev, [key]: false }));
+  const handleConfirmAllocation = (alloc) => {
+    if (alloc.announcement_id) {
+      // Ididirekta ang Barangay President sa Announcement page para doon mag-confirm at mag-schedule sa modal
+      navigate(`/brgy/announcements/${alloc.announcement_id}`, { state: { from: '/brgy' } });
+    } else {
+      // Fallback kung luma ang delivery at walang announcement record sa DB
+      navigate('/brgy/announcements', { state: { from: '/brgy' } });
     }
   };
 
-  const showSeedNotif = finalSeeds.length > 0 && !seedDismissed;
+  // ── PRIORITY SYSTEM LOGIC: Isa lang ang lalabas sa Home widget ──
+  const activeNotifs = [];
+
+  // Priority 1: Allocations (Confirm Received) — Pinaka-urgent para sa BRGY
+  myAllocations
+    .filter(alloc => !alloc.already_confirmed && alloc.alloc_status !== 'CONFIRMED')
+    .forEach(alloc => {
+      activeNotifs.push({
+        type: 'ALLOCATION',
+        id: `alloc_${alloc.delivery_id}`,
+        date: new Date(alloc.delivery_date),
+        data: alloc,
+      });
+    });
+
+  // Priority 2: Unread Seed Schedules
+  scheduleAnnouncements
+    .filter(a => !a.is_read)
+    .forEach(ann => {
+      activeNotifs.push({
+        type: 'SCHEDULE',
+        id: `schedule_${ann.id}`,
+        date: new Date(ann.created_at),
+        data: ann,
+      });
+    });
+
+  // Priority 3: Finalized Seeds Banner
+  if (finalSeeds.length > 0 && !seedDismissed && seedVisible) {
+    activeNotifs.push({
+      type: 'FINALIZED',
+      id: 'finalized_seeds',
+      date: new Date(finalSeeds[0]?.confirmed_at || Date.now()),
+      data: finalSeeds[0],
+    });
+  }
+
+  // I-sort mula sa pinakabagong timestamp (Most Recent First)
+  activeNotifs.sort((a, b) => b.date - a.date);
+  const currentNotif = activeNotifs[0];
 
   return (
     <div style={{ padding: '1.25rem' }}>
       <style>{`
-        @keyframes brgyPulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.5; }
-        }
-        @keyframes notifFadeIn {
-          from { opacity: 0; transform: translateY(-8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes notifFadeOut {
-          from { opacity: 1; transform: translateY(0); max-height: 200px; margin-bottom: 1rem; }
-          to   { opacity: 0; transform: translateY(-8px); max-height: 0; margin-bottom: 0; }
-        }
-        .seed-notif-enter { animation: notifFadeIn 0.3s ease forwards; }
-        .seed-notif-exit  { animation: notifFadeOut 0.3s ease forwards; overflow: hidden; pointer-events: none; }
+        @keyframes brgyPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        @keyframes notifFadeIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
 
-      {/* ── Greeting ── */}
+      {/* Greeting */}
       <div style={{ marginBottom: '0.75rem' }}>
         <p style={{ color: '#6b7280', fontSize: '0.875rem', margin: 0 }}>{getGreeting()},</p>
         <h1 style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1a1a1a', margin: '0.125rem 0 0.25rem', lineHeight: 1.2 }}>
@@ -329,200 +282,119 @@ const BPDashboard = () => {
         <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: 0 }}>Barangay President — AGRICE Lucban</p>
       </div>
 
-      {/* ── Existing: Seed Finalized Notif (HINDI BINAGO) ── */}
-      {showSeedNotif && (
-        <div
-          className={seedVisible ? 'seed-notif-enter' : 'seed-notif-exit'}
-          style={{
-            background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-            border: '1px solid #bbf7d0',
-            borderRadius: '1rem',
-            padding: '0.875rem 1rem',
-            marginBottom: '1rem',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '0.75rem',
-            boxShadow: '0 8px 18px rgba(22, 163, 74, 0.08)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: '0.9rem', backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <Bell size={18} color="#166534" />
+      {/* ── Priority Notification Container — Nagpapakita ng iisang card base sa priority ── */}
+      {currentNotif && (
+        <div style={{ marginBottom: '1rem', animation: 'notifFadeIn 0.3s ease forwards' }}>
+          
+          {/* TYPE A: Finalized Seeds Banner */}
+          {currentNotif.type === 'FINALIZED' && (
+            <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)', border: '1px solid #bbf7d0', borderRadius: '1rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', boxShadow: '0 8px 18px rgba(22, 163, 74, 0.08)' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                <div style={{ width: 38, height: 38, borderRadius: '0.9rem', backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Bell size={18} color="#166534" />
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <p style={{ fontWeight: 800, fontSize: '0.875rem', color: '#166534', margin: 0 }}>
+                    Seed varieties finalized for {finalSeeds[0]?.season_display} {finalSeeds[0]?.year}
+                  </p>
+                  <p style={{ fontSize: '0.78rem', color: '#166534', margin: '0.2rem 0 0', lineHeight: 1.4 }}>
+                    Review the confirmed list and open the beneficiary page when ready.
+                  </p>
+                </div>
+              </div>
+              <button onClick={handleSeedDismiss} style={{ flexShrink: 0, padding: '0.5rem 0.875rem', backgroundColor: '#166534', color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                <ClipboardList size={14} /> Go to Beneficiaries
+              </button>
             </div>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ fontWeight: 800, fontSize: '0.875rem', color: '#166534', margin: 0 }}>
-                Seed varieties finalized for {finalSeeds[0]?.season_display} {finalSeeds[0]?.year}
-              </p>
-              <p style={{ fontSize: '0.78rem', color: '#166534', margin: '0.2rem 0 0', lineHeight: 1.4 }}>
-                Review the confirmed list and open the beneficiary page when ready.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleSeedDismiss}
-            style={{
-              flexShrink: 0, padding: '0.5rem 0.875rem',
-              backgroundColor: '#166534', color: 'white', border: 'none',
-              borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700,
-              fontSize: '0.78rem', display: 'flex', alignItems: 'center',
-              gap: '0.3rem', whiteSpace: 'nowrap',
-            }}
-          >
-            <ClipboardList size={14} /> Go to Beneficiaries
-          </button>
+          )}
+
+          {/* TYPE B: Seed Schedule (Blue Card) */}
+          {currentNotif.type === 'SCHEDULE' && (() => {
+            const ann = currentNotif.data;
+            return (
+              <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)', border: '1px solid #bfdbfe', borderRadius: '1rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', boxShadow: '0 4px 12px rgba(30,64,175,0.08)' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '0.875rem', backgroundColor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Calendar size={18} color="#1e40af" />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e40af', margin: 0 }}>
+                      {ann.title}
+                    </p>
+                    <p style={{ fontSize: '0.78rem', color: '#1e40af', margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
+                      {ann.content}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    try {
+                      const NOTIF_KEY = 'brgy_bell_notifs_BRGY';
+                      const notifId = `ann_${ann.id}`;
+                      const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+                      const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
+                      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+                      emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
+                    } catch {}
+                    navigate(`/brgy/announcements/${ann.id}`, { state: { from: '/brgy' } });
+                  }}
+                  style={{ flexShrink: 0, padding: '0.5rem 0.875rem', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', whiteSpace: 'nowrap' }}
+                >
+                  Got It!
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* TYPE C: Allocation / Confirm Received (Green Card) */}
+          {currentNotif.type === 'ALLOCATION' && (() => {
+            const alloc = currentNotif.data;
+            const isHybrid = alloc.is_hybrid;
+            const tagColor  = isHybrid ? '#1e40af' : '#166534';
+            const tagBg     = isHybrid ? '#eff6ff' : '#f0fdf4';
+            const tagBorder = isHybrid ? '#bfdbfe' : '#bbf7d0';
+            const iconBg    = isHybrid ? '#dbeafe' : '#dcfce7';
+            return (
+              <div style={{ backgroundColor: tagBg, border: `1px solid ${tagBorder}`, borderRadius: '1rem', padding: '0.875rem 1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem', boxShadow: `0 4px 12px ${tagColor}15` }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '0.875rem', backgroundColor: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Package size={18} color={tagColor} />
+                  </div>
+                  <div style={{ minWidth: 0 }}>
+                    <p style={{ fontWeight: 800, fontSize: '0.875rem', color: tagColor, margin: 0 }}>
+                      {alloc.seed_type_name}{alloc.variety_name ? ` (${alloc.variety_name})` : ''}
+                    </p>
+                    <p style={{ margin: '0.2rem 0 0', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
+                      <span style={{ fontSize: '1.25rem', fontWeight: 800, color: tagColor, lineHeight: 1 }}>
+                        {alloc.bag_label}
+                      </span>
+                    </p>
+                    <p style={{ fontSize: '0.78rem', color: tagColor, margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', borderRadius: '999px', padding: '0.15rem 0.45rem', fontWeight: 700, backgroundColor: '#fef3c7', color: '#92400e', marginBottom: '0.18rem' }}>
+                        PENDING
+                      </span>
+                      <span style={{ display: 'block', marginTop: '0.15rem' }}>
+                        {alloc.farmer_count} farmer{alloc.farmer_count !== 1 ? 's' : ''} · {alloc.total_hectares} ha
+                      </span>
+                      <span style={{ display: 'block', fontSize: '0.72rem', marginTop: '0.1rem' }}>
+                        {alloc.season_display} {alloc.year}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => handleConfirmAllocation(alloc)} disabled={allocConfirming[alloc.delivery_id]} style={{ flexShrink: 0, padding: '0.5rem 0.875rem', backgroundColor: allocConfirming[alloc.delivery_id] ? '#d1d5db' : tagColor, color: 'white', border: 'none', borderRadius: '0.75rem', cursor: allocConfirming[alloc.delivery_id] ? 'not-allowed' : 'pointer', fontWeight: 700, fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap' }}>
+                  <CheckCircle size={14} />
+                  {allocConfirming[alloc.delivery_id] ? 'Saving...' : 'Confirm Received'}
+                </button>
+              </div>
+            );
+          })()}
+
         </div>
       )}
 
-      {/* ── NOTIF 1: Seed Schedule (blue, Got It!) ── */}
-      {scheduleNotifs
-        .filter(entry => {
-          const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
-          return !schedDismissed[notifId];
-        })
-        .map(entry => {
-          const notifId = `schedule_${entry.seed_type_id}_${entry.variety_id || 'x'}_${entry.season}_${entry.year}`;
-          const seasonDisp = entry.season === 'WET' ? 'Wet Season' : 'Dry Season';
-          const delivDate  = entry.delivery_date
-            ? new Date(entry.delivery_date + 'T00:00:00').toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
-            : '—';
-
-          return (
-            <div
-              key={notifId}
-              style={{
-                background: 'linear-gradient(135deg, #eff6ff 0%, #e0f2fe 100%)',
-                border: '1px solid #bfdbfe',
-                borderRadius: '1rem',
-                padding: '0.875rem 1rem',
-                marginBottom: '0.875rem',
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '0.75rem',
-                boxShadow: '0 4px 12px rgba(30,64,175,0.08)',
-                animation: 'notifFadeIn 0.3s ease forwards',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                <div style={{ width: 38, height: 38, borderRadius: '0.875rem', backgroundColor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Calendar size={18} color="#1e40af" />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontWeight: 800, fontSize: '0.875rem', color: '#1e40af', margin: 0 }}>
-                    Seed Schedule — {entry.seed_type_name}{entry.variety_name ? ` (${entry.variety_name})` : ''}
-                  </p>
-                  <p style={{ fontSize: '0.78rem', color: '#1e40af', margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
-                    Delivery on {delivDate} · {entry.total_bags} bags · {seasonDisp} {entry.year}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleSchedDismiss(entry)}
-                style={{
-                  flexShrink: 0, padding: '0.5rem 0.875rem',
-                  backgroundColor: '#1e40af', color: 'white', border: 'none',
-                  borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700,
-                  fontSize: '0.75rem', whiteSpace: 'nowrap',
-                }}
-              >
-                Got It!
-              </button>
-            </div>
-          );
-        })
-      }
-
-      {/* ── NOTIF 2: Confirm Received Allocation ── */}
-      {myAllocations
-        .filter(alloc => !alloc.already_confirmed && alloc.alloc_status !== 'CONFIRMED')
-        .map(alloc => {
-          const key          = `${alloc.delivery_id}`;
-          const isConfirming = allocConfirming[key];
-          const isHybrid     = alloc.is_hybrid;
-          const tagColor     = isHybrid ? '#1e40af' : '#166534';
-          const tagBg        = isHybrid ? '#eff6ff' : '#f0fdf4';
-          const tagBorder    = isHybrid ? '#bfdbfe' : '#bbf7d0';
-          const iconBg       = isHybrid ? '#dbeafe' : '#dcfce7';
-
-          return (
-            <div
-              key={key}
-              style={{
-                backgroundColor: tagBg,
-                border: `1px solid ${tagBorder}`,
-                borderRadius: '1rem',
-                padding: '0.875rem 1rem',
-                marginBottom: '0.875rem',
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: '0.75rem',
-                boxShadow: `0 4px 12px ${tagColor}15`,
-                animation: 'notifFadeIn 0.3s ease forwards',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                <div style={{ width: 38, height: 38, borderRadius: '0.875rem', backgroundColor: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <Package size={18} color={tagColor} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ fontWeight: 800, fontSize: '0.875rem', color: tagColor, margin: 0 }}>
-                    {alloc.seed_type_name}{alloc.variety_name ? ` (${alloc.variety_name})` : ''}
-                  </p>
-                  {/* Prominent bag count with kg — e.g. "1 bag (7.5kg)" */}
-                  <p style={{ margin: '0.2rem 0 0', display: 'flex', alignItems: 'baseline', gap: '0.25rem' }}>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 800, color: tagColor, lineHeight: 1 }}>
-                      {alloc.bag_label || `${alloc.allocated_bags} bag${alloc.allocated_bags !== 1 ? 's' : ''}`}
-                    </span>
-                  </p>
-                  <p style={{ fontSize: '0.78rem', color: tagColor, margin: '0.2rem 0 0', opacity: 0.85, lineHeight: 1.4 }}>
-                    <span style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      borderRadius: '999px',
-                      padding: '0.15rem 0.45rem',
-                      fontWeight: 700,
-                      textTransform: 'capitalize',
-                      backgroundColor: alloc.alloc_status === 'CONFIRMED' ? '#dcfce7' : '#fef3c7',
-                      color: alloc.alloc_status === 'CONFIRMED' ? '#166534' : '#92400e',
-                      marginBottom: '0.18rem',
-                    }}>
-                      {alloc.alloc_status || 'PENDING'}
-                    </span>
-                    <span style={{ display: 'block', marginTop: '0.15rem' }}>
-                      {alloc.farmer_count} farmer{alloc.farmer_count !== 1 ? 's' : ''} · {alloc.total_hectares} ha
-                    </span>
-                    <span style={{ display: 'block', fontSize: '0.72rem', marginTop: '0.1rem' }}>
-                      {alloc.season_display} {alloc.year}
-                    </span>
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => handleConfirmAllocation(alloc)}
-                disabled={isConfirming}
-                style={{
-                  flexShrink: 0, padding: '0.5rem 0.875rem',
-                  backgroundColor: isConfirming ? '#d1d5db' : tagColor,
-                  color: 'white', border: 'none', borderRadius: '0.75rem',
-                  cursor: isConfirming ? 'not-allowed' : 'pointer',
-                  fontWeight: 700, fontSize: '0.75rem',
-                  display: 'flex', alignItems: 'center', gap: '0.3rem',
-                  whiteSpace: 'nowrap', transition: 'all 0.15s',
-                }}
-              >
-                <CheckCircle size={14} />
-                {isConfirming ? 'Saving...' : 'Confirm Received'}
-              </button>
-            </div>
-          );
-        })
-      }
-
-      {/* ── 4 ANALYTICS TILES ── */}
+      {/* ── KPI Tiles ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '1.375rem' }}>
-
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           <div style={{ width: 36, height: 36, backgroundColor: '#dcfce7', borderRadius: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '0.625rem' }}>
             <Users size={18} color="#166534" />
@@ -569,10 +441,9 @@ const BPDashboard = () => {
           }
           <p style={{ fontSize: '0.72rem', color: '#6b7280', margin: '0.25rem 0 0', fontWeight: 600 }}>Harvest Records</p>
         </div>
-
       </div>
 
-      {/* ── Announcements (HINDI BINAGO) ── */}
+      {/* Announcements */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
           <div>

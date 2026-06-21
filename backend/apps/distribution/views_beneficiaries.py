@@ -87,7 +87,11 @@ class DistributionEventListCreateView(APIView):
 
         serializer = DistributionEventSerializer(data=request.data)
         if serializer.is_valid():
-            event = serializer.save(created_by=request.user)
+            total_members_value = serializer.validated_data.pop('total_members', None)
+            event = serializer.save(
+                created_by=request.user,
+                total_members=total_members_value if total_members_value is not None else 0,
+            )
             log_action(
                 event=event, user=request.user, action='CREATED',
                 notes=f"Created {event.intervention} event for {event.barangay}"

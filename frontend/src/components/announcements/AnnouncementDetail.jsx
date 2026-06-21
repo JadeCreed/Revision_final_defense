@@ -14,8 +14,17 @@ import { useState, useEffect }  from 'react';
 import { createPortal }         from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth }              from '../../auth/AuthContext';
-import { getAnnouncementDetail } from '../../api/axios';
+import { getAnnouncementDetail, 
+  getBrgyMyAllocation, 
+  brgyConfirmAllocation, 
+  createAnnouncement,
+  // getAdminAnnouncements,
+  // updateAnnouncement 
+ } from '../../api/axios';
+ 
 import { ROLE_COLORS }          from '../navigation/UserNavConfig';
+import { CheckCircle }          from 'lucide-react';
+
 
 const AnnouncementDetail = () => {
   const { id }    = useParams();
@@ -278,6 +287,12 @@ const AnnouncementDetail = () => {
                     onClick={() => {
                       const url = announcement.action_url.trim();
                       if (!url) return;
+                      
+                      if (url.startsWith('confirm-allocation-id:')) {
+                        setConfirmModalOpen(true);
+                        return;
+                      }
+
                       if (url.startsWith('/')) {
                         navigate(url);
                       } else {
@@ -332,7 +347,151 @@ const AnnouncementDetail = () => {
 
   // Render into document.body via Portal
   // This ensures it sits ABOVE the UserLayout navbar
-  return createPortal(content, document.body);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmSaving, setConfirmSaving]       = useState(false);
+  const [brgyAllocDetails, setBrgyAllocDetails] = useState(null);
+  const [brgyAllocLoading, setBrgyAllocLoading] = useState(false);
+  const [distTitle, setDistTitle]               = useState('');
+  const [distContent, setDistContent]           = useState('');
+
+  // Mga bagong structured fields para sa distribution form:
+
+  const [distDate, setDistDate]                 = useState('');
+  const [distTime, setDistTime]                 = useState('');
+  const [distVenue, setDistVenue]               = useState('Barangay Hall / Multi-Purpose Center');
+
+  const isConfirmAllocationUrl = announcement?.action_url?.startsWith('confirm-allocation-id:');
+  const deliveryId = isConfirmAllocationUrl ? announcement.action_url.split(':')[1] : null;
+
+ useEffect(() => {
+    if (confirmModalOpen && deliveryId) {
+      setBrgyAllocLoading(true);
+      getBrgyMyAllocation()
+        .then(res => {
+          const list = res.data || [];
+          const match = list.find(a => String(a.delivery_id) === String(deliveryId));
+          if (match) {
+            setBrgyAllocDetails(match);
+            setDistTitle(`Seed Distribution Schedule — ${match.seed_type_name} (${match.variety_name})`);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setBrgyAllocLoading(false));
+    }
+  }, [confirmModalOpen, deliveryId]);
+
+  const handleConfirmAndPost = async () => {
+    if (!brgyAllocDetails || !deliveryId) return;
+    
+    // Simpleng validation para sa anyo ng form
+    if (!distDate || !distTime.trim() || !distVenue.trim()) {
+      alert("Mangyaring sagutan ang lahat ng detalye para sa pamamahagi (Petsa, Oras, at Lugar).");
+      return;
+    }
+
+    setConfirmSaving(true);
+    try {
+      // Awtomatikong pinagsasama ang mga inputs sa isang pormal na template
+      const formattedDate = new Date(distDate + 'T00:00:00').toLocaleDateString('en-PH', { 
+        month: 'long', day: 'numeric', year: 'numeric' 
+      });
+
+      const compiledContent = 
+        `Magandang araw mga magsasaka!\n\n` +
+        `Kami ay nagagalak na ipahatid na natanggap na natin ang ating alokasyon na ${brgyAllocDetails.bag_label} para sa ${brgyAllocDetails.seed_type_name} (${brgyAllocDetails.variety_name}) mula sa MAO.\n\n` +
+        `Narito ang detalye para sa ating pamamahagi (distribution schedule):\n` +
+        `• Araw/Petsa: ${formattedDate}\n` +
+        `• Oras: ${distTime}\n` +
+        `• Lugar/Venue: ${distVenue}\n\n` +
+        `Mangyaring magdala ng inyong Valid ID o RSBSA Stub para sa pag-verify ng inyong account. Kita-kits!`;
+
+      // 1. Confirm allocation sa backend database
+      await brgyConfirmAllocation({
+        delivery_id:    Number(deliveryId),
+        allocated_bags: brgyAllocDetails.allocated_bags,
+      });
+
+      // 2. Post BP custom announcement para sa mga Farmers ng kanyang sariling Barangay
+      await createAnnouncement({
+        title: distTitle,
+        content: compiledContent,
+        target_role: 'FARMER',
+        target_barangays_list: [role === 'BRGY' ? announcement.target_barangays_list[0] : ''],
+        is_active: true,
+      });
+
+      setConfirmModalOpen(false);
+      navigate('/brgy');
+    } catch (err) {
+      alert('Failed to process confirmation: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setConfirmSaving(false);
+    }
+  };
+
+  const portalContent = (
+    <>
+      {content}
+
+      {/* ── CONFIRM ALLOCATION & CREATE DISTRIBUTION ANNOUNCEMENT MODAL ── */}
+      {confirmModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.75rem', width: '100%', maxWidth: '440px', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', animation: 'notifFadeIn 0.3s ease' }}>
+            <h3 style={{ fontWeight: 800, margin: '0 0 0.5rem', fontSize: '1.1rem', color: '#1a1a1a' }}>Confirm & Distribute Seeds</h3>
+            
+            {brgyAllocLoading ? (
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', padding: '1rem 0', textAlign: 'center' }}>Fetching allocation data...</p>
+            ) : brgyAllocDetails ? (
+              <div style={{ marginBottom: '1rem' }}>
+                <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '0.75rem', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+                  <p style={{ fontWeight: 700, fontSize: '0.82rem', color: '#166534', margin: '0 0 0.25rem' }}>Computed bags for your Barangay:</p>
+                  <p style={{ fontSize: '1.35rem', fontWeight: 800, color: '#14532d', margin: 0 }}>{brgyAllocDetails.bag_label}</p>
+                  <p style={{ fontSize: '0.75rem', color: '#166534', margin: '0.25rem 0 0' }}>{brgyAllocDetails.farmer_count} farmers · {brgyAllocDetails.total_hectares} ha · {brgyAllocDetails.season_display} {brgyAllocDetails.year}</p>
+                </div>
+
+                <div style={{ marginBottom: '0.875rem' }}>
+                  <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Announcement Title for Farmers</label>
+                  <input type="text" value={distTitle} onChange={e => setDistTitle(e.target.value)} style={{ padding: '0.625rem 0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', outline: 'none' }} />
+                </div>
+
+                {/* Structured Form Fields for Distribution Schedule */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Date of Distribution *</label>
+                    <input type="date" value={distDate} onChange={e => setDistDate(e.target.value)} style={{ padding: '0.625rem 0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Time of Distribution *</label>
+                    <input type="text" placeholder="e.g., 8:00 AM - 12:00 PM" value={distTime} onChange={e => setDistTime(e.target.value)} style={{ padding: '0.625rem 0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', outline: 'none' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '0.375rem' }}>Lugar / Venue *</label>
+                    <input type="text" placeholder="e.g., Barangay Hall / Multi-Purpose Center" value={distVenue} onChange={e => setDistVenue(e.target.value)} style={{ padding: '0.625rem 0.875rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontSize: '0.85rem', width: '100%', boxSizing: 'border-box', outline: 'none' }} />
+                  </div>
+                </div>
+                
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.85rem', color: '#dc2626', marginBottom: '1rem', textAlign: 'center' }}>No approved beneficiary list found for this variety in your barangay.</p>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button onClick={() => setConfirmModalOpen(false)} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem' }}>Cancel</button>
+              <button
+                onClick={handleConfirmAndPost}
+                disabled={confirmSaving || !brgyAllocDetails}
+                style={{ flex: 2, padding: '0.75rem', backgroundColor: (confirmSaving || !brgyAllocDetails) ? '#d1d5db' : colors.primary, color: 'white', border: 'none', borderRadius: '0.75rem', fontWeight: 800, fontSize: '0.875rem', cursor: (confirmSaving || !brgyAllocDetails) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem' }}
+              >
+                <CheckCircle size={16} /> {confirmSaving ? 'Processing...' : 'Confirm & Post'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  return createPortal(portalContent, document.body);
 };
 
 export default AnnouncementDetail;

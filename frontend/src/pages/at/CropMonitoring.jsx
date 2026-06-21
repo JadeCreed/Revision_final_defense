@@ -160,6 +160,7 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
     width: '100%', outline: 'none', boxSizing: 'border-box',
     fontFamily: 'inherit', backgroundColor: 'white',
   });
+  
 
   const validate = () => {
     const errs = {};

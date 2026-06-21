@@ -869,17 +869,21 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: '0.75rem', padding: '0.6rem 0.75rem', textAlign: 'center' }}>
                   
                   <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: 'white' }}>{(() => {
-                      // Use area_monitored_ha only — skip distribution-only entries (no date_observed)
-                      const areaPerFarmer = {};
-                      brgyPlots.forEach(p => {
-                        if (!p.date_observed) return;
-                        const ha = parseFloat(p.area_ha) || 0;
-                        if (ha <= 0) return;
-                        if (!areaPerFarmer[p.farmer] || ha > areaPerFarmer[p.farmer]) areaPerFarmer[p.farmer] = ha;
-                      });
-                      const total = Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
-                      return total > 0 ? `${total.toFixed(1)} ha` : '—';
-                    })()}</p>
+                    // Sum area per farmer+seed_source combo at ESTABLISHMENT phase only
+                    // A farmer with 0.5ha OWN_SEED + 0.5ha INBRED = 1.0ha total
+                    const seen = new Set();
+                    let total = 0;
+                    brgyPlots.forEach(p => {
+                      if (p.crop_phase_key !== 'ESTABLISHMENT') return;
+                      const ha = parseFloat(p.area_ha) || 0;
+                      if (ha <= 0) return;
+                      const key = `${p.farmer}::${p.seed_source}`;
+                      if (seen.has(key)) return;
+                      seen.add(key);
+                      total += ha;
+                    });
+                    return total > 0 ? `${total.toFixed(1)} ha` : '—';
+                  })()}</p>
                   
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.6rem', color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', fontWeight: 700 }}>Area</p>
                 </div>

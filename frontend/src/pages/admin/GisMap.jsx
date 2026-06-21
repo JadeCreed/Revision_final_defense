@@ -815,16 +815,20 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
   const totalApproved   = approvedCounts?.[barangayName] ?? brgyPlots[0]?.total_approved_in_brgy ?? 0;
   
   const totalHa = useMemo(() => {
-  // Use area_monitored_ha only (from AT monitoring records), NOT distributed_area_ha
-  // A plot has real monitoring data if it has a date_observed (came from CropMonitoringRecord)
-  const areaPerFarmer = {};
+  // Sum area per farmer+seed_source combo at ESTABLISHMENT phase only
+  // A farmer with 0.5ha OWN_SEED + 0.5ha INBRED = 1.0ha total
+  const seen = new Set();
+  let total = 0;
   brgyPlots.forEach(p => {
-    if (!p.date_observed) return; // skip distribution-only entries
+    if (p.crop_phase_key !== 'ESTABLISHMENT') return;
     const ha = parseFloat(p.area_ha) || 0;
     if (ha <= 0) return;
-    if (!areaPerFarmer[p.farmer] || ha > areaPerFarmer[p.farmer]) areaPerFarmer[p.farmer] = ha;
+    const key = `${p.farmer}::${p.seed_source}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    total += ha;
   });
-  return Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
+  return total;
 }, [brgyPlots]);
   
   const seedBreakdown = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);

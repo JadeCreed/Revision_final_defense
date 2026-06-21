@@ -899,8 +899,22 @@ const BrgyBeneficiaries = () => {
       setEventFormErrors({});
       loadAll();
       showToast('success', 'Distribution program created.');
+    
     } catch (err) {
-      setEventFormErrors({ general: err.response?.data?.error || 'Failed.' });
+      const data = err.response?.data;
+      let message = 'Failed to create program.';
+      if (data) {
+        if (typeof data.error === 'string') {
+          message = data.error;
+        } else if (typeof data === 'object') {
+          const parts = Object.entries(data).map(([field, msgs]) => {
+            const text = Array.isArray(msgs) ? msgs.join(' ') : String(msgs);
+            return `${field}: ${text}`;
+          });
+          if (parts.length > 0) message = parts.join(' | ');
+        }
+      }
+      setEventFormErrors({ general: message });
     } finally {
       setCreating(false);
     }
@@ -1800,7 +1814,7 @@ const BrgyBeneficiaries = () => {
                                 <td style={{ ...td, textAlign: 'center' }}>{fd.arbs ? 'Y' : 'N'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{fd.four_ps ? 'Y' : 'N'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.farm_area_ha || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={td}>{entry.farmer_contact || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>
                                   {entry.has_signature ? (
@@ -1846,14 +1860,14 @@ const BrgyBeneficiaries = () => {
                                 <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name || '—'}</td>
                                 <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.63rem' }}>{entry.farmer_rsbsa || '—'}</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.area_planted || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags ?? '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.crop_establishment || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.expected_sowing_date || '—'}</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>{entry.data_sharing ? '✓' : '✗'}</td>
                                 <td style={{ ...td, textAlign: 'center', color: '#9ca3af', fontStyle: 'italic' }}>To be encoded in Yield</td>
-                                <td style={td}>{entry.authorized_representative || '—'}</td>
-                                <td style={{ ...td, textAlign: 'center' }}>{entry.date_received ? new Date(entry.date_received + 'T00:00:00').toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' }) : '—'}</td>
+                                <td style={td}>—</td>
+                                <td style={{ ...td, textAlign: 'center' }}>—</td>
                                 <td style={{ ...td, textAlign: 'center' }}>
                                   {entry.has_signature ? (
                                     <button
