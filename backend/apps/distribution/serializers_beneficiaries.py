@@ -335,6 +335,7 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
     total_encoded        = serializers.SerializerMethodField()
     total_approved       = serializers.SerializerMethodField()
     total_remaining      = serializers.SerializerMethodField()
+    total_distribution_encoded = serializers.SerializerMethodField()
     batch_count          = serializers.SerializerMethodField()
     approved_batch_count = serializers.SerializerMethodField()
     intervention_display = serializers.CharField(
@@ -353,6 +354,7 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
             'status', 'status_display',
             'seed_delivered', 'seed_delivered_at',
             'total_encoded', 'total_approved', 'total_remaining',
+            'total_distribution_encoded',
             'batch_count', 'approved_batch_count', 'created_at',
             'delete_requested', 'delete_request_note', 'delete_requested_at',
         ]
@@ -365,6 +367,9 @@ class DistributionEventListSerializer(serializers.ModelSerializer):
 
     def get_total_approved(self, obj):
         return obj.get_total_approved()
+    
+    def get_total_distribution_encoded(self, obj):
+        return obj.get_total_distribution_encoded()
 
     def get_total_remaining(self, obj):
         return max(0, obj.total_members - obj.get_total_encoded())

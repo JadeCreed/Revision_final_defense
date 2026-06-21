@@ -813,14 +813,20 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
   const uniqueFarmerIds = useMemo(() => [...new Set(brgyPlots.map(p => p.farmer))], [brgyPlots]);
   const farmerCount     = uniqueFarmerIds.length;
   const totalApproved   = approvedCounts?.[barangayName] ?? brgyPlots[0]?.total_approved_in_brgy ?? 0;
-  const totalHa         = useMemo(() => {
-    const areaPerFarmer = {};
-    brgyPlots.forEach(p => {
-      const ha = parseFloat(p.area_ha) || 0;
-      if (!areaPerFarmer[p.farmer] || ha > areaPerFarmer[p.farmer]) areaPerFarmer[p.farmer] = ha;
-    });
-    return Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
-  }, [brgyPlots]);
+  
+  const totalHa = useMemo(() => {
+  // Use area_monitored_ha only (from AT monitoring records), NOT distributed_area_ha
+  // A plot has real monitoring data if it has a date_observed (came from CropMonitoringRecord)
+  const areaPerFarmer = {};
+  brgyPlots.forEach(p => {
+    if (!p.date_observed) return; // skip distribution-only entries
+    const ha = parseFloat(p.area_ha) || 0;
+    if (ha <= 0) return;
+    if (!areaPerFarmer[p.farmer] || ha > areaPerFarmer[p.farmer]) areaPerFarmer[p.farmer] = ha;
+  });
+  return Object.values(areaPerFarmer).reduce((sum, ha) => sum + ha, 0);
+}, [brgyPlots]);
+  
   const seedBreakdown = useMemo(() => buildSeedTypeBreakdown(brgyPlots), [brgyPlots]);
 
   const brgyHarvest  = useMemo(() => (harvestRecords || []).filter(r => {

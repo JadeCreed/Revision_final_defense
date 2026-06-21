@@ -84,10 +84,10 @@ const InbredPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, 
   const isEncoded = entry?.is_distribution_encoded;
   const isLocked = !entry;
   const areaPlanted   = parseFloat(entry?.area_planted || 0);
-  const maxBags       = areaPlanted > 0 ? areaPlanted * 2 : null;
+  const maxBags       = areaPlanted > 0 ? parseFloat((areaPlanted * 2).toFixed(2)) : null;
   const kgPerBag      = 20;
   const suggestedBags = maxBags;
-  const suggestedKg   = suggestedBags !== null ? suggestedBags * kgPerBag : null;
+  const suggestedKg   = suggestedBags !== null ? parseFloat((suggestedBags * kgPerBag).toFixed(2)) : null;
   const enteredBags   = parseFloat(form.number_of_bags || 0);
   const liveKg        = enteredBags > 0 ? parseFloat((enteredBags * kgPerBag).toFixed(2)) : null;
   const exceedsMax    = maxBags !== null && enteredBags > maxBags;
@@ -225,10 +225,10 @@ const HybridPanel = ({ entry, form, setForm, errors, setErrors, saving, onSave, 
   const isEncoded = entry?.is_distribution_encoded;
   const isLocked = !entry;
   const farmArea      = parseFloat(entry?.farm_area_ha || 0);
-  const maxBags       = farmArea > 0 ? farmArea * 1 : null;
+  const maxBags       = farmArea > 0 ? parseFloat((farmArea * 1).toFixed(2)) : null;
   const kgPerBag      = 15;
   const suggestedBags = maxBags;
-  const suggestedKg   = suggestedBags !== null ? suggestedBags * kgPerBag : null;
+  const suggestedKg   = suggestedBags !== null ? parseFloat((suggestedBags * kgPerBag).toFixed(2)) : null;
   const enteredBags   = parseFloat(form.qty_bags || 0);
   const liveKg        = enteredBags > 0 ? parseFloat((enteredBags * kgPerBag).toFixed(2)) : null;
   const exceedsMax    = maxBags !== null && enteredBags > maxBags;
@@ -416,7 +416,7 @@ const BrgyDistribution = () => {
           String(ev.year) === String(activeSeason.year)
         ) {
           totalApproved += Number(ev.total_approved || 0);
-          totalEncoded += Number(ev.total_encoded || 0);
+          totalEncoded += Number(ev.total_distribution_encoded || 0);
         }
       }
       setTotalToDistribute(totalApproved);
@@ -547,7 +547,7 @@ const BrgyDistribution = () => {
       setInbredSaving(true);
       try {
         await encodeDistributionEntry(entry.entry_id, {
-          qty_bags: Math.round(Number(inbredForm.number_of_bags)),
+          qty_bags: parseFloat(parseFloat(inbredForm.number_of_bags).toFixed(2)),
           crop_establishment: inbredForm.crop_establishment,
           expected_sowing_date: inbredForm.expected_sowing_date,
           date_received: inbredForm.date_received,
@@ -581,7 +581,7 @@ const BrgyDistribution = () => {
       setHybridSaving(true);
       try {
         await encodeDistributionEntry(entry.entry_id, {
-          qty_bags: Math.round(Number(hybridForm.qty_bags)),
+          qty_bags: parseFloat(parseFloat(hybridForm.qty_bags).toFixed(2)),
           date_received: hybridForm.date_received || null,
         });
         showToast('success', 'Hybrid distribution data saved.');
@@ -819,7 +819,7 @@ const BrgyDistribution = () => {
                 const tagBorder = evH ? '#bfdbfe' : GREEN.border;
                 const approvedBatchCount = event.approved_batch_count ?? event.batch_count ?? 0;
                 const total = event.total_approved || 0;
-                const encoded = event.total_encoded || 0;
+                const encoded = event.total_distribution_encoded || 0;
 
                 return (
                   <div key={event.id} className="prog-card"
@@ -1044,7 +1044,16 @@ const BrgyDistribution = () => {
                             <td style={{ ...td, textAlign: 'center' }}>{fd.four_ps ? 'Y' : 'N'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.farm_area_ha || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>
-                              {entry.qty_bags ? entry.qty_bags : <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700 }}>Pending</span>}
+                              {entry.qty_bags != null && entry.qty_bags !== '' ? (
+                                <span>
+                                  {parseFloat(entry.qty_bags).toFixed(2)}
+                                  <span style={{ fontSize: '0.6rem', color: '#6b7280', marginLeft: '0.2rem' }}>
+                                    ({parseFloat((parseFloat(entry.qty_bags) * 15)).toFixed(1)}kg)
+                                  </span>
+                                </span>
+                              ) : (
+                                <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700 }}>Pending</span>
+                              )}
                             </td>
                             <td style={td}>{entry.farmer_contact || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>
@@ -1079,7 +1088,18 @@ const BrgyDistribution = () => {
                             <td style={{ ...td, fontFamily: 'monospace', fontSize: '0.63rem' }}>{entry.farmer_rsbsa || '—'}</td>
                             <td style={{ ...td, fontWeight: 600 }}>{entry.farmer_name}</td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.area_planted || '—'}</td>
-                            <td style={{ ...td, textAlign: 'center' }}>{entry.qty_bags || <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700 }}>Pending</span>}</td>
+                            <td style={{ ...td, textAlign: 'center' }}>
+                              {entry.qty_bags != null && entry.qty_bags !== '' ? (
+                                <span>
+                                  {parseFloat(entry.qty_bags).toFixed(2)}
+                                  <span style={{ fontSize: '0.6rem', color: '#6b7280', marginLeft: '0.2rem' }}>
+                                    ({parseFloat((parseFloat(entry.qty_bags) * 20)).toFixed(1)}kg)
+                                  </span>
+                                </span>
+                              ) : (
+                                <span style={{ backgroundColor: '#fef9c3', color: '#854d0e', padding: '0.15rem 0.5rem', borderRadius: '999px', fontSize: '0.6rem', fontWeight: 700 }}>Pending</span>
+                              )}
+                            </td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.variety_name || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.crop_establishment || '—'}</td>
                             <td style={{ ...td, textAlign: 'center' }}>{entry.expected_sowing_date || '—'}</td>

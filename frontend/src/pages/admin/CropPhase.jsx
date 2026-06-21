@@ -120,7 +120,7 @@ const SeedDistributionChart = ({ distSummary }) => {
         </div>
         <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:10, padding:'8px 14px' }}>
           <div style={{ fontSize:11, color:'#64748b' }}>Total Seed Distributed</div>
-          <div style={{ fontSize:18, fontWeight:800, color:'#15803d' }}>{fmtN(total_kg)} kg</div>
+          <div style={{ fontSize:18, fontWeight:800, color:'#15803d' }}>{fmtN(total_kg, 1)} kg</div>
           <div style={{ fontSize:10, color:'#94a3b8' }}>all seed types</div>
         </div>
       </div>
@@ -220,7 +220,7 @@ const SeedDistributionChart = ({ distSummary }) => {
                   </td>
                   <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:'#0f172a', borderBottom:'1px solid #f1f5f9' }}>{seed.beneficiaries} / {distSummary.total_beneficiaries}</td>
                   <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151', borderBottom:'1px solid #f1f5f9' }}>{fmtN(seed.total_bags)} bags</td>
-                  <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:cfg.color, borderBottom:'1px solid #f1f5f9' }}>{fmtN(seed.total_kg)} kg</td>
+                  <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:700, color:cfg.color, borderBottom:'1px solid #f1f5f9' }}>{fmtN(seed.total_kg, 1)} kg</td>
                 </tr>
               );
             })}

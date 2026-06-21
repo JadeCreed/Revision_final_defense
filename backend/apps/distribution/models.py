@@ -125,6 +125,26 @@ class DistributionEvent(models.Model):
             batch__event=self,
             batch__status='APPROVED'
         ).count()
+    
+    def get_total_distribution_encoded(self):
+        """
+        Total farmers sa APPROVED batches na may COMPLETE distribution
+        encoding na (may qty_bags, at kung Inbred — may date_received din).
+        Ginagamit lang ito sa Distribution menu progress tiles —
+        HIWALAY ito sa get_total_encoded() na ginagamit ng Beneficiaries menu.
+        """
+        seed_type_name = (self.seed_type.name or '').upper() if self.seed_type else ''
+        is_inbred = 'INBRED' in seed_type_name or seed_type_name == 'RCEF'
+
+        qs = DistributionEntry.objects.filter(
+            batch__event=self,
+            batch__status='APPROVED',
+            qty_bags__isnull=False,
+        )
+        if is_inbred:
+            qs = qs.filter(date_received__isnull=False)
+
+        return qs.count()
 
     def get_batch_count(self):
         return self.batches.count()
@@ -302,10 +322,12 @@ class DistributionEntry(models.Model):
 
     # ── DISTRIBUTION INFO ──
     # Filled when seeds arrive
-    qty_bags       = models.PositiveIntegerField(
+    qty_bags       = models.DecimalField(
+        max_digits=6, decimal_places=2,
         null=True, blank=True,
-        help_text='Number of seed bags received'
+        help_text='Number of seed bags received (decimal allowed, e.g. 0.50)'
     )
+
     date_received  = models.DateField(
         null=True, blank=True,
         help_text='Date when farmer received seeds'

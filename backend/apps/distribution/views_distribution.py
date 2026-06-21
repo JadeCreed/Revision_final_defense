@@ -410,7 +410,8 @@ class DistributionEntryEncodeView(APIView):
 
         if 'qty_bags' in data and data['qty_bags'] not in ('', None):
             try:
-                data['qty_bags'] = int(round(float(str(data['qty_bags']))))
+                val = round(float(str(data['qty_bags'])), 2)
+                data['qty_bags'] = val
             except (ValueError, TypeError, OverflowError):
                 data['qty_bags'] = None
         else:

@@ -184,19 +184,180 @@ def _is_philrice(event):
 # DA RFO IV-A template — columns A–U
 # ─────────────────────────────────────────────────────────────
 
-def generate_region_masterlist(entries_qs, event):
-    """
-    Generates the DA Region IV-A Lists of Farmer-Beneficiaries
-    for Hybrid/Region seeds. Matches the physical document format.
+# def generate_region_masterlist(entries_qs, event):
+#     """
+#     Generates the DA Region IV-A Lists of Farmer-Beneficiaries
+#     for Hybrid/Region seeds. Matches the physical document format.
 
-    Fields used: signing-phase data (farm_area_ha, qty_bags optional,
-    farmer demographics, signature).
-    """
+#     Fields used: signing-phase data (farm_area_ha, qty_bags optional,
+#     farmer demographics, signature).
+#     """
+#     wb = openpyxl.Workbook()
+#     ws = wb.active
+#     ws.title = 'Region Masterlist'
+
+#     # ── Column widths matching DA template ──
+#     widths = {
+#         'A': 4,  'B': 18, 'C': 14, 'D': 12, 'E': 12,
+#         'F': 7,  'G': 10, 'H': 12, 'I': 12, 'J': 12,
+#         'K': 12, 'L': 7,  'M': 5,  'N': 7,  'O': 5,
+#         'P': 5,  'Q': 5,  'R': 8,  'S': 7,  'T': 13,
+#         'U': 18,
+#     }
+#     for col, w in widths.items():
+#         ws.column_dimensions[col].width = w
+
+#     # ── Row 1: DA government header ──
+#     ws.merge_cells('H1:K1')
+#     ws['H1'] = (
+#         'Republic of the Philippines\n'
+#         'Department of Agriculture\n'
+#         'Regional Field Office No. IV-A\n'
+#         'LISTS OF FARMER-BENEFICIARIES'
+#     )
+#     ws['H1'].font      = _bold_font(9)
+#     ws['H1'].alignment = _center()
+#     ws.row_dimensions[1].height = 54
+
+#     # ── Rows 3–6: Event metadata ──
+#     meta = [
+#         ('A3', 'PROVINCE: QUEZON'),
+#         ('A4', 'MUNICIPALITY: LUCBAN'),
+#         ('A5', 'INTERVENTION: Hybrid Inbred Rice Seed (HIRS) — Region/NRP'),
+#     ]
+#     for ref, val in meta:
+#         ws.merge_cells(f'{ref[0]}3:{ref[0]}3') if '3' in ref else None
+#         ws[ref] = val
+#         ws[ref].font      = _bold_font()
+#         ws[ref].alignment = _left(False)
+
+#     # Variety on row 6
+#     variety_names = ', '.join(
+#         set(e.variety.name for e in entries_qs if e.variety)
+#     ) or '—'
+#     ws.merge_cells('A6:C6')
+#     ws['A6'] = f'Variety: {variety_names}'
+#     ws['A6'].font      = _bold_font()
+#     ws['A6'].alignment = _left(False)
+
+#     # Right-side meta
+#     ws.merge_cells('K3:P3')
+#     ws['K3'] = f'Name of Association/Organization: {event.organization_name}'
+#     ws['K3'].font      = _bold_font()
+#     ws['K3'].alignment = _left(False)
+
+#     ws.merge_cells('K4:P4')
+#     ws['K4'] = f'Total No. of Members: {event.total_members}'
+#     ws['K4'].font      = _bold_font()
+#     ws['K4'].alignment = _left(False)
+
+#     # ── Rows 8–10: Column headers ──
+#     ws.row_dimensions[8].height  = 28
+#     ws.row_dimensions[9].height  = 14
+#     ws.row_dimensions[10].height = 14
+
+#     # Merged main headers
+#     merged_headers = [
+#         ('A8', 'A10',  'No.'),
+#         ('B8', 'B10',  'SYSTEM GENERATED\nRSBSA NO:'),
+#         ('C8', 'F8',   'NAME OF BENEFICIARY (for individual)'),
+#         ('G8', 'G10',  'Date of Birth\n(MM/DD/YY)'),
+#         ('H8', 'I8',   'BENEFICIARY ADDRESS\n(RESIDENCY)'),
+#         ('J8', 'K8',   'FARM LOCATION'),
+#         ('L8', 'L10',  'Gender\n(M/F)'),
+#         ('M8', 'M10',  'IP\n(Y/N)'),
+#         ('N8', 'N10',  'Senior\nCitizen\n(Y/N)'),
+#         ('O8', 'O10',  'PWD\n(Y/N)'),
+#         ('P8', 'P10',  'ARBs\n(Y/N)'),
+#         ('Q8', 'Q10',  '4Ps\n(Y/N)'),
+#         ('R8', 'R10',  'Farm Area\n(ha)'),
+#         ('S8', 'S10',  'QTY.\n(bags)'),
+#         ('T8', 'T10',  'Contact no.'),
+#         ('U8', 'U10',  'SIGNATURE/\nTHUMBMARK'),
+#     ]
+#     for start, end, label in merged_headers:
+#         ws.merge_cells(f'{start}:{end}')
+#         ws[start] = label
+#         ws[start].font      = _bold_font(8, 'B91C1C' if 'BENEFICIARY ADDRESS' in label or 'FARM LOCATION' in label else '000000')
+#         ws[start].alignment = _center()
+#         _set_border_range(ws, start, end, _thin_border())
+
+#     # Name sub-headers
+#     sub_headers = [
+#         ('C9', 'C10', 'Last Name'),
+#         ('D9', 'D10', 'First Name'),
+#         ('E9', 'E10', 'Middle Name'),
+#         ('F9', 'F10', 'Ext.\nName'),
+#         ('H9', 'H10', 'Municipality'),
+#         ('I9', 'I10', 'Barangay'),
+#         ('J9', 'J10', 'Municipality'),
+#         ('K9', 'K10', 'Barangay'),
+#     ]
+#     for start, end, label in sub_headers:
+#         ws.merge_cells(f'{start}:{end}')
+#         ws[start] = label
+#         ws[start].font      = _bold_font(8)
+#         ws[start].alignment = _center()
+#         ws[start].border    = _thin_border()
+
+#     # ── Data rows starting at row 11 ──
+#     entries = list(entries_qs.select_related(
+#         'farmer', 'farmer__profile', 'variety', 'batch'
+#     ))
+#     current_row = 11
+
+#     for idx, entry in enumerate(entries):
+#         farmer  = entry.farmer
+#         profile = getattr(farmer, 'profile', None)
+
+#         row_values = [
+#             entry.row_number or (idx + 1),
+#             farmer.rsbsa_number or '—',
+#             farmer.last_name or '—',
+#             farmer.first_name or '—',
+#             (profile.middle_name if profile else '') or '—',
+#             (profile.ext_name    if profile else '') or '—',
+#             _dob_str(profile),
+#             (profile.residency_municipality if profile else '') or '—',
+#             (profile.residency_barangay     if profile else '') or '—',
+#             (profile.farm_municipality      if profile else '') or '—',
+#             (profile.farm_barangay          if profile else '') or '—',
+#             (profile.gender[0].upper() if profile and profile.gender else '—'),
+#             _yn(profile, 'ip'),
+#             _yn(profile, 'senior_citizen'),
+#             _yn(profile, 'pwd'),
+#             _yn(profile, 'arbs'),
+#             _yn(profile, 'four_ps'),
+#             entry.farm_area_ha or '—',
+#             entry.qty_bags or '—',
+#             farmer.contact_number or '—',
+#             '',
+#         ]
+
+
+#         ws.row_dimensions[current_row].height = 30
+#         _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
+#         # Embed the actual signature image (column U = Signature/Thumbmark)
+#         _embed_signature(ws, entry, current_row, 'U')
+#         current_row += 1
+
+#     # ── Signatories footer ──
+#     _write_signatories(ws, current_row + 2)
+
+#     return wb
+
+
+
+
+
+
+
+
+def generate_region_masterlist(entries_qs, event):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Region Masterlist'
 
-    # ── Column widths matching DA template ──
     widths = {
         'A': 4,  'B': 18, 'C': 14, 'D': 12, 'E': 12,
         'F': 7,  'G': 10, 'H': 12, 'I': 12, 'J': 12,
@@ -207,144 +368,178 @@ def generate_region_masterlist(entries_qs, event):
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
-    # ── Row 1: DA government header ──
-    ws.merge_cells('H1:K1')
-    ws['H1'] = (
-        'Republic of the Philippines\n'
-        'Department of Agriculture\n'
-        'Regional Field Office No. IV-A\n'
-        'LISTS OF FARMER-BENEFICIARIES'
-    )
-    ws['H1'].font      = _bold_font(9)
-    ws['H1'].alignment = _center()
-    ws.row_dimensions[1].height = 54
-
-    # ── Rows 3–6: Event metadata ──
-    meta = [
-        ('A3', 'PROVINCE: QUEZON'),
-        ('A4', 'MUNICIPALITY: LUCBAN'),
-        ('A5', 'INTERVENTION: Hybrid Inbred Rice Seed (HIRS) — Region/NRP'),
-    ]
-    for ref, val in meta:
-        ws.merge_cells(f'{ref[0]}3:{ref[0]}3') if '3' in ref else None
-        ws[ref] = val
-        ws[ref].font      = _bold_font()
-        ws[ref].alignment = _left(False)
-
-    # Variety on row 6
-    variety_names = ', '.join(
-        set(e.variety.name for e in entries_qs if e.variety)
-    ) or '—'
-    ws.merge_cells('A6:C6')
-    ws['A6'] = f'Variety: {variety_names}'
-    ws['A6'].font      = _bold_font()
-    ws['A6'].alignment = _left(False)
-
-    # Right-side meta
-    ws.merge_cells('K3:P3')
-    ws['K3'] = f'Name of Association/Organization: {event.organization_name}'
-    ws['K3'].font      = _bold_font()
-    ws['K3'].alignment = _left(False)
-
-    ws.merge_cells('K4:P4')
-    ws['K4'] = f'Total No. of Members: {event.total_members}'
-    ws['K4'].font      = _bold_font()
-    ws['K4'].alignment = _left(False)
-
-    # ── Rows 8–10: Column headers ──
-    ws.row_dimensions[8].height  = 28
-    ws.row_dimensions[9].height  = 14
-    ws.row_dimensions[10].height = 14
-
-    # Merged main headers
-    merged_headers = [
-        ('A8', 'A10',  'No.'),
-        ('B8', 'B10',  'SYSTEM GENERATED\nRSBSA NO:'),
-        ('C8', 'F8',   'NAME OF BENEFICIARY (for individual)'),
-        ('G8', 'G10',  'Date of Birth\n(MM/DD/YY)'),
-        ('H8', 'I8',   'BENEFICIARY ADDRESS\n(RESIDENCY)'),
-        ('J8', 'K8',   'FARM LOCATION'),
-        ('L8', 'L10',  'Gender\n(M/F)'),
-        ('M8', 'M10',  'IP\n(Y/N)'),
-        ('N8', 'N10',  'Senior\nCitizen\n(Y/N)'),
-        ('O8', 'O10',  'PWD\n(Y/N)'),
-        ('P8', 'P10',  'ARBs\n(Y/N)'),
-        ('Q8', 'Q10',  '4Ps\n(Y/N)'),
-        ('R8', 'R10',  'Farm Area\n(ha)'),
-        ('S8', 'S10',  'QTY.\n(bags)'),
-        ('T8', 'T10',  'Contact no.'),
-        ('U8', 'U10',  'SIGNATURE/\nTHUMBMARK'),
-    ]
-    for start, end, label in merged_headers:
-        ws.merge_cells(f'{start}:{end}')
-        ws[start] = label
-        ws[start].font      = _bold_font(8, 'B91C1C' if 'BENEFICIARY ADDRESS' in label or 'FARM LOCATION' in label else '000000')
-        ws[start].alignment = _center()
-        _set_border_range(ws, start, end, _thin_border())
-
-    # Name sub-headers
-    sub_headers = [
-        ('C9', 'C10', 'Last Name'),
-        ('D9', 'D10', 'First Name'),
-        ('E9', 'E10', 'Middle Name'),
-        ('F9', 'F10', 'Ext.\nName'),
-        ('H9', 'H10', 'Municipality'),
-        ('I9', 'I10', 'Barangay'),
-        ('J9', 'J10', 'Municipality'),
-        ('K9', 'K10', 'Barangay'),
-    ]
-    for start, end, label in sub_headers:
-        ws.merge_cells(f'{start}:{end}')
-        ws[start] = label
-        ws[start].font      = _bold_font(8)
-        ws[start].alignment = _center()
-        ws[start].border    = _thin_border()
-
-    # ── Data rows starting at row 11 ──
-    entries = list(entries_qs.select_related(
+    # Group entries by batch
+    from collections import defaultdict
+    batch_groups = defaultdict(list)
+    for entry in entries_qs.select_related(
         'farmer', 'farmer__profile', 'variety', 'batch'
-    ))
-    current_row = 11
+    ).order_by('batch__batch_number', 'row_number'):
+        batch_groups[entry.batch.id].append(entry)
 
-    for idx, entry in enumerate(entries):
-        farmer  = entry.farmer
-        profile = getattr(farmer, 'profile', None)
+    current_row = 1
 
-        row_values = [
-            entry.row_number or (idx + 1),
-            farmer.rsbsa_number or '—',
-            farmer.last_name or '—',
-            farmer.first_name or '—',
-            (profile.middle_name if profile else '') or '—',
-            (profile.ext_name    if profile else '') or '—',
-            _dob_str(profile),
-            (profile.residency_municipality if profile else '') or '—',
-            (profile.residency_barangay     if profile else '') or '—',
-            (profile.farm_municipality      if profile else '') or '—',
-            (profile.farm_barangay          if profile else '') or '—',
-            (profile.gender[0].upper() if profile and profile.gender else '—'),
-            _yn(profile, 'ip'),
-            _yn(profile, 'senior_citizen'),
-            _yn(profile, 'pwd'),
-            _yn(profile, 'arbs'),
-            _yn(profile, 'four_ps'),
-            entry.farm_area_ha or '—',
-            entry.qty_bags or '—',
-            farmer.contact_number or '—',
-            '',
-        ]
+    for batch_id, batch_entries in batch_groups.items():
+        if not batch_entries:
+            continue
+        batch = batch_entries[0].batch
 
+        variety_names = ', '.join(
+            set(e.variety.name for e in batch_entries if e.variety)
+        ) or '—'
 
-        ws.row_dimensions[current_row].height = 30
-        _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
-        # Embed the actual signature image (column U = Signature/Thumbmark)
-        _embed_signature(ws, entry, current_row, 'U')
+        # ── HEADER per batch ──
+        ws.merge_cells(f'H{current_row}:K{current_row}')
+        ws[f'H{current_row}'] = (
+            'Republic of the Philippines\n'
+            'Department of Agriculture\n'
+            'Regional Field Office No. IV-A\n'
+            'LISTS OF FARMER-BENEFICIARIES'
+        )
+        ws[f'H{current_row}'].font      = _bold_font(9)
+        ws[f'H{current_row}'].alignment = _center()
+        ws.row_dimensions[current_row].height = 54
         current_row += 1
 
-    # ── Signatories footer ──
-    _write_signatories(ws, current_row + 2)
+        # Meta
+        meta_values = [
+            f'PROVINCE: QUEZON',
+            f'MUNICIPALITY: LUCBAN',
+            f'INTERVENTION: Hybrid Inbred Rice Seed (HIRS) — Region/NRP',
+            f'Variety: {variety_names}',
+        ]
+        for val in meta_values:
+            ws.merge_cells(f'A{current_row}:J{current_row}')
+            ws[f'A{current_row}'] = val
+            ws[f'A{current_row}'].font      = _bold_font()
+            ws[f'A{current_row}'].alignment = _left(False)
+            current_row += 1
+
+        # Right-side meta
+        ws.merge_cells(f'K{current_row - 3}:P{current_row - 3}')
+        ws[f'K{current_row - 3}'] = f'Name of Association/Organization: {event.organization_name}'
+        ws[f'K{current_row - 3}'].font      = _bold_font()
+        ws[f'K{current_row - 3}'].alignment = _left(False)
+
+        ws.merge_cells(f'K{current_row - 2}:P{current_row - 2}')
+        ws[f'K{current_row - 2}'] = f'Total No. of Members: {event.total_members}'
+        ws[f'K{current_row - 2}'].font      = _bold_font()
+        ws[f'K{current_row - 2}'].alignment = _left(False)
+
+        # Batch label
+        ws.merge_cells(f'A{current_row}:U{current_row}')
+        ws[f'A{current_row}'] = f'Batch {batch.batch_number}  |  {len(batch_entries)} farmer{"s" if len(batch_entries) != 1 else ""}  |  {batch.get_status_display()}'
+        ws[f'A{current_row}'].font      = _bold_font(9, '166534')
+        ws[f'A{current_row}'].fill      = PatternFill('solid', start_color='F0FDF4')
+        ws[f'A{current_row}'].alignment = _left(False)
+        ws.row_dimensions[current_row].height = 16
+        current_row += 1
+
+        # Column headers (3 rows)
+        header_row1 = current_row
+        ws.row_dimensions[header_row1].height     = 28
+        ws.row_dimensions[header_row1 + 1].height = 14
+        ws.row_dimensions[header_row1 + 2].height = 14
+
+        merged_headers = [
+            (f'A{header_row1}', f'A{header_row1+2}', 'No.'),
+            (f'B{header_row1}', f'B{header_row1+2}', 'SYSTEM GENERATED\nRSBSA NO:'),
+            (f'C{header_row1}', f'F{header_row1}',   'NAME OF BENEFICIARY (for individual)'),
+            (f'G{header_row1}', f'G{header_row1+2}', 'Date of Birth\n(MM/DD/YY)'),
+            (f'H{header_row1}', f'I{header_row1}',   'BENEFICIARY ADDRESS\n(RESIDENCY)'),
+            (f'J{header_row1}', f'K{header_row1}',   'FARM LOCATION'),
+            (f'L{header_row1}', f'L{header_row1+2}', 'Gender\n(M/F)'),
+            (f'M{header_row1}', f'M{header_row1+2}', 'IP\n(Y/N)'),
+            (f'N{header_row1}', f'N{header_row1+2}', 'Senior\nCitizen\n(Y/N)'),
+            (f'O{header_row1}', f'O{header_row1+2}', 'PWD\n(Y/N)'),
+            (f'P{header_row1}', f'P{header_row1+2}', 'ARBs\n(Y/N)'),
+            (f'Q{header_row1}', f'Q{header_row1+2}', '4Ps\n(Y/N)'),
+            (f'R{header_row1}', f'R{header_row1+2}', 'Farm Area\n(ha)'),
+            (f'S{header_row1}', f'S{header_row1+2}', 'QTY.\n(bags)'),
+            (f'T{header_row1}', f'T{header_row1+2}', 'Contact no.'),
+            (f'U{header_row1}', f'U{header_row1+2}', 'SIGNATURE/\nTHUMBMARK'),
+        ]
+        for start, end, label in merged_headers:
+            ws.merge_cells(f'{start}:{end}')
+            ws[start] = label
+            ws[start].font      = _bold_font(8)
+            ws[start].alignment = _center()
+            _set_border_range(ws, start, end, _thin_border())
+
+        sub_headers = [
+            (f'C{header_row1+1}', f'C{header_row1+2}', 'Last Name'),
+            (f'D{header_row1+1}', f'D{header_row1+2}', 'First Name'),
+            (f'E{header_row1+1}', f'E{header_row1+2}', 'Middle Name'),
+            (f'F{header_row1+1}', f'F{header_row1+2}', 'Ext.\nName'),
+            (f'H{header_row1+1}', f'H{header_row1+2}', 'Municipality'),
+            (f'I{header_row1+1}', f'I{header_row1+2}', 'Barangay'),
+            (f'J{header_row1+1}', f'J{header_row1+2}', 'Municipality'),
+            (f'K{header_row1+1}', f'K{header_row1+2}', 'Barangay'),
+        ]
+        for start, end, label in sub_headers:
+            ws.merge_cells(f'{start}:{end}')
+            ws[start] = label
+            ws[start].font      = _bold_font(8)
+            ws[start].alignment = _center()
+            ws[start].border    = _thin_border()
+
+        current_row = header_row1 + 3
+
+        # Data rows
+        for idx, entry in enumerate(batch_entries):
+            farmer  = entry.farmer
+            profile = getattr(farmer, 'profile', None)
+
+            row_values = [
+                entry.row_number or (idx + 1),
+                farmer.rsbsa_number or '—',
+                farmer.last_name or '—',
+                farmer.first_name or '—',
+                (profile.middle_name if profile else '') or '—',
+                (profile.ext_name    if profile else '') or '—',
+                _dob_str(profile),
+                (profile.residency_municipality if profile else '') or '—',
+                (profile.residency_barangay     if profile else '') or '—',
+                (profile.farm_municipality      if profile else '') or '—',
+                (profile.farm_barangay          if profile else '') or '—',
+                (profile.gender[0].upper() if profile and profile.gender else '—'),
+                _yn(profile, 'ip'),
+                _yn(profile, 'senior_citizen'),
+                _yn(profile, 'pwd'),
+                _yn(profile, 'arbs'),
+                _yn(profile, 'four_ps'),
+                entry.farm_area_ha or '—',
+                entry.qty_bags if entry.qty_bags is not None else '—',
+                farmer.contact_number or '—',
+                '',
+            ]
+
+            ws.row_dimensions[current_row].height = 30
+            _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
+            _embed_signature(ws, entry, current_row, 'U')
+            current_row += 1
+
+        # Signatories per batch
+        _write_signatories(ws, current_row + 1)
+        current_row += 6
+
+        # Blank rows between batches
+        current_row += 2
 
     return wb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -352,14 +547,118 @@ def generate_region_masterlist(entries_qs, event):
 # FAR V8.0 format
 # ─────────────────────────────────────────────────────────────
 
-def generate_philrice_masterlist(entries_qs, event):
-    """
-    Generates the PhilRice / RCEF FAR V8.0 Farmer Acknowledgement
-    format for Inbred seeds.
+# def generate_philrice_masterlist(entries_qs, event):
+#     """
+#     Generates the PhilRice / RCEF FAR V8.0 Farmer Acknowledgement
+#     format for Inbred seeds.
 
-    Fields used: area_planted, data_sharing, and demographic data
-    from the beneficiaries encoding phase.
-    """
+#     Fields used: area_planted, data_sharing, and demographic data
+#     from the beneficiaries encoding phase.
+#     """
+#     wb = openpyxl.Workbook()
+#     ws = wb.active
+#     ws.title = 'PhilRice Masterlist'
+
+#     widths = {
+#         'A': 4,  'B': 18, 'C': 16, 'D': 12, 'E': 12,
+#         'F': 10, 'G': 14, 'H': 12, 'I': 14, 'J': 10,
+#         'K': 18, 'L': 10, 'M': 12, 'N': 14, 'O': 18,
+#     }
+#     for col, w in widths.items():
+#         ws.column_dimensions[col].width = w
+
+#     # Title
+#     ws.merge_cells('A1:O1')
+#     ws['A1'] = 'FARMER ACKNOWLEDGEMENT RECEIPT — PhilRice / RCEF'
+#     ws['A1'].font      = _bold_font(12)
+#     ws['A1'].alignment = _center()
+#     ws.row_dimensions[1].height = 22
+
+#     # Meta row 2
+#     ws.merge_cells('A2:D2')
+#     ws['A2'] = f'Year/Season: {event.year} {event.get_season_display()}'
+#     ws['A2'].font      = _bold_font()
+#     ws['A2'].alignment = _left(False)
+
+#     ws.merge_cells('E2:H2')
+#     ws['E2'] = 'Drop-off Point: LUCBAN, QUEZON'
+#     ws['E2'].font      = _bold_font()
+#     ws['E2'].alignment = _left(False)
+
+#     ws.merge_cells('I2:O2')
+#     ws['I2'] = f'Organization: {event.organization_name}'
+#     ws['I2'].font      = _bold_font()
+#     ws['I2'].alignment = _left(False)
+
+#     # Column headers row 4
+#     headers = [
+#         'No.', 'RSBSA No.\n(FFRS System\nGenerated)',
+#         'Farmer Name\n(Last, First, Middle)',
+#         'Reg.\nMun.\nRice Area',
+#         'Area to be\nPlanted (ha)',
+#         'Number of\nBags\n(20kg)',
+#         'Rice Variety\nReceived',
+#         'Crop\nEstab\n(D/T)',
+#         'Expected\nSowing Date\n(Month/Week)',
+#         'Data\nSharing\n(✓/X)',
+#         '2025 DS YIELD\n(To be encoded\nin Yield menu)',
+#         'No. of\nKP Kits',
+#         'Authorized\nRep.',
+#         'Date\nReceived\n(MM/DD/YY)',
+#         'Signature of\nClaimant',
+#     ]
+#     ws.row_dimensions[4].height = 46
+#     for col_idx, header in enumerate(headers, start=1):
+#         cell = ws.cell(row=4, column=col_idx, value=header)
+#         cell.font      = _bold_font(8, 'FFFFFF')
+#         cell.fill      = PatternFill('solid', start_color='1A4D1A')
+#         cell.alignment = _center()
+#         cell.border    = _thin_border()
+
+#     # Data rows starting at row 5
+#     entries = list(entries_qs.select_related('farmer', 'farmer__profile', 'variety'))
+#     current_row = 5
+
+#     for idx, entry in enumerate(entries):
+#         farmer  = entry.farmer
+#         profile = getattr(farmer, 'profile', None)
+
+#         row_values = [
+#             idx + 1,
+#             farmer.rsbsa_number or '—',
+#             farmer.get_full_name(),
+#             '—',   # Registered Mun Rice Area — from FFRS (not in our system)
+#             entry.area_planted or '—',
+#             entry.qty_bags or '—',
+#             entry.variety.name if entry.variety else '—',
+#             entry.crop_establishment or '—',
+#             getattr(entry, 'expected_sowing_date', '—') or '—',
+#             '✓' if entry.data_sharing else 'X',
+#             'To be encoded in Yield',
+#             '—',   # KP Kits — not in our system
+#             entry.authorized_representative or '—',
+#             entry.date_received.strftime('%m/%d/%y') if entry.date_received else '—',
+#             ''
+#         ]
+
+#         ws.row_dimensions[current_row].height = 30
+#         _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
+
+#         # Mark the placeholder yield column gray
+#         placeholder_cell = ws.cell(row=current_row, column=11)
+#         placeholder_cell.fill = PatternFill('solid', start_color='F3F4F6')
+#         placeholder_cell.font = _normal_font(8, '9CA3AF', italic=True)
+        
+#         _embed_signature(ws, entry, current_row, 'O')
+
+#         current_row += 1
+
+#     # Footer signatories
+#     _write_signatories(ws, current_row + 2)
+
+#     return wb
+
+def generate_philrice_masterlist(entries_qs, event):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'PhilRice Masterlist'
@@ -372,94 +671,120 @@ def generate_philrice_masterlist(entries_qs, event):
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 
-    # Title
-    ws.merge_cells('A1:O1')
-    ws['A1'] = 'FARMER ACKNOWLEDGEMENT RECEIPT — PhilRice / RCEF'
-    ws['A1'].font      = _bold_font(12)
-    ws['A1'].alignment = _center()
-    ws.row_dimensions[1].height = 22
+    # Group entries by batch
+    from collections import defaultdict
+    batch_groups = defaultdict(list)
+    for entry in entries_qs.select_related(
+        'farmer', 'farmer__profile', 'variety', 'batch'
+    ).order_by('batch__batch_number', 'row_number'):
+        batch_groups[entry.batch.id].append(entry)
 
-    # Meta row 2
-    ws.merge_cells('A2:D2')
-    ws['A2'] = f'Year/Season: {event.year} {event.get_season_display()}'
-    ws['A2'].font      = _bold_font()
-    ws['A2'].alignment = _left(False)
+    current_row = 1
 
-    ws.merge_cells('E2:H2')
-    ws['E2'] = 'Drop-off Point: LUCBAN, QUEZON'
-    ws['E2'].font      = _bold_font()
-    ws['E2'].alignment = _left(False)
+    for batch_id, batch_entries in batch_groups.items():
+        if not batch_entries:
+            continue
+        batch = batch_entries[0].batch
 
-    ws.merge_cells('I2:O2')
-    ws['I2'] = f'Organization: {event.organization_name}'
-    ws['I2'].font      = _bold_font()
-    ws['I2'].alignment = _left(False)
-
-    # Column headers row 4
-    headers = [
-        'No.', 'RSBSA No.\n(FFRS System\nGenerated)',
-        'Farmer Name\n(Last, First, Middle)',
-        'Reg.\nMun.\nRice Area',
-        'Area to be\nPlanted (ha)',
-        'Number of\nBags\n(20kg)',
-        'Rice Variety\nReceived',
-        'Crop\nEstab\n(D/T)',
-        'Expected\nSowing Date\n(Month/Week)',
-        'Data\nSharing\n(✓/X)',
-        '2025 DS YIELD\n(To be encoded\nin Yield menu)',
-        'No. of\nKP Kits',
-        'Authorized\nRep.',
-        'Date\nReceived\n(MM/DD/YY)',
-        'Signature of\nClaimant',
-    ]
-    ws.row_dimensions[4].height = 46
-    for col_idx, header in enumerate(headers, start=1):
-        cell = ws.cell(row=4, column=col_idx, value=header)
-        cell.font      = _bold_font(8, 'FFFFFF')
-        cell.fill      = PatternFill('solid', start_color='1A4D1A')
-        cell.alignment = _center()
-        cell.border    = _thin_border()
-
-    # Data rows starting at row 5
-    entries = list(entries_qs.select_related('farmer', 'farmer__profile', 'variety'))
-    current_row = 5
-
-    for idx, entry in enumerate(entries):
-        farmer  = entry.farmer
-        profile = getattr(farmer, 'profile', None)
-
-        row_values = [
-            idx + 1,
-            farmer.rsbsa_number or '—',
-            farmer.get_full_name(),
-            '—',   # Registered Mun Rice Area — from FFRS (not in our system)
-            entry.area_planted or '—',
-            entry.qty_bags or '—',
-            entry.variety.name if entry.variety else '—',
-            entry.crop_establishment or '—',
-            getattr(entry, 'expected_sowing_date', '—') or '—',
-            '✓' if entry.data_sharing else 'X',
-            'To be encoded in Yield',
-            '—',   # KP Kits — not in our system
-            entry.authorized_representative or '—',
-            entry.date_received.strftime('%m/%d/%y') if entry.date_received else '—',
-            ''
-        ]
-
-        ws.row_dimensions[current_row].height = 30
-        _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
-
-        # Mark the placeholder yield column gray
-        placeholder_cell = ws.cell(row=current_row, column=11)
-        placeholder_cell.fill = PatternFill('solid', start_color='F3F4F6')
-        placeholder_cell.font = _normal_font(8, '9CA3AF', italic=True)
-        
-        _embed_signature(ws, entry, current_row, 'O')
-
+        # ── HEADER per batch ──
+        ws.merge_cells(f'A{current_row}:O{current_row}')
+        ws[f'A{current_row}'] = 'FARMER ACKNOWLEDGEMENT RECEIPT — PhilRice / RCEF'
+        ws[f'A{current_row}'].font      = _bold_font(12)
+        ws[f'A{current_row}'].alignment = _center()
+        ws.row_dimensions[current_row].height = 22
         current_row += 1
 
-    # Footer signatories
-    _write_signatories(ws, current_row + 2)
+        # Meta row
+        ws.merge_cells(f'A{current_row}:D{current_row}')
+        ws[f'A{current_row}'] = f'Year/Season: {event.year} {event.get_season_display()}'
+        ws[f'A{current_row}'].font      = _bold_font()
+        ws[f'A{current_row}'].alignment = _left(False)
+
+        ws.merge_cells(f'E{current_row}:H{current_row}')
+        ws[f'E{current_row}'] = 'Drop-off Point: LUCBAN, QUEZON'
+        ws[f'E{current_row}'].font      = _bold_font()
+        ws[f'E{current_row}'].alignment = _left(False)
+
+        ws.merge_cells(f'I{current_row}:O{current_row}')
+        ws[f'I{current_row}'] = f'Organization: {event.organization_name}'
+        ws[f'I{current_row}'].font      = _bold_font()
+        ws[f'I{current_row}'].alignment = _left(False)
+        current_row += 1
+
+        # Batch label row
+        ws.merge_cells(f'A{current_row}:O{current_row}')
+        ws[f'A{current_row}'] = f'Batch {batch.batch_number}  |  {len(batch_entries)} farmer{"s" if len(batch_entries) != 1 else ""}  |  {batch.get_status_display()}'
+        ws[f'A{current_row}'].font      = _bold_font(9, '166534')
+        ws[f'A{current_row}'].fill      = PatternFill('solid', start_color='F0FDF4')
+        ws[f'A{current_row}'].alignment = _left(False)
+        ws.row_dimensions[current_row].height = 16
+        current_row += 1
+
+        # Column headers
+        headers = [
+            'No.', 'RSBSA No.\n(FFRS System\nGenerated)',
+            'Farmer Name\n(Last, First, Middle)',
+            'Reg.\nMun.\nRice Area',
+            'Area to be\nPlanted (ha)',
+            'Number of\nBags\n(20kg)',
+            'Rice Variety\nReceived',
+            'Crop\nEstab\n(D/T)',
+            'Expected\nSowing Date\n(Month/Week)',
+            'Data\nSharing\n(✓/X)',
+            '2025 DS YIELD\n(To be encoded\nin Yield menu)',
+            'No. of\nKP Kits',
+            'Authorized\nRep.',
+            'Date\nReceived\n(MM/DD/YY)',
+            'Signature of\nClaimant',
+        ]
+        ws.row_dimensions[current_row].height = 46
+        for col_idx, header in enumerate(headers, start=1):
+            cell = ws.cell(row=current_row, column=col_idx, value=header)
+            cell.font      = _bold_font(8, 'FFFFFF')
+            cell.fill      = PatternFill('solid', start_color='1A4D1A')
+            cell.alignment = _center()
+            cell.border    = _thin_border()
+        current_row += 1
+
+        # Data rows
+        for idx, entry in enumerate(batch_entries):
+            farmer  = entry.farmer
+            profile = getattr(farmer, 'profile', None)
+
+            row_values = [
+                idx + 1,
+                farmer.rsbsa_number or '—',
+                farmer.get_full_name(),
+                '—',
+                entry.area_planted or '—',
+                entry.qty_bags if entry.qty_bags is not None else '—',
+                entry.variety.name if entry.variety else '—',
+                entry.crop_establishment or '—',
+                getattr(entry, 'expected_sowing_date', '—') or '—',
+                '✓' if entry.data_sharing else 'X',
+                'To be encoded in Yield',
+                '—',
+                entry.authorized_representative or '—',
+                entry.date_received.strftime('%m/%d/%y') if entry.date_received else '—',
+                ''
+            ]
+
+            ws.row_dimensions[current_row].height = 30
+            _write_row(ws, current_row, row_values, alt_row=(idx % 2 == 1))
+
+            placeholder_cell = ws.cell(row=current_row, column=11)
+            placeholder_cell.fill = PatternFill('solid', start_color='F3F4F6')
+            placeholder_cell.font = _normal_font(8, '9CA3AF', italic=True)
+
+            _embed_signature(ws, entry, current_row, 'O')
+            current_row += 1
+
+        # Signatories per batch
+        _write_signatories(ws, current_row + 1)
+        current_row += 6  # space after signatories
+
+        # Blank row between batches
+        current_row += 2
 
     return wb
 
@@ -839,10 +1164,9 @@ def _build_entry_qs(report_type, season, year, barangay, seed_type_filter=None):
         )
 
     # Keep beneficiaries and distribution data separate
-    if report_type in ('REGION_MASTERLIST', 'PHILRICE_MASTERLIST'):
-        qs = qs.filter(qty_bags__isnull=True)
-    elif report_type in ('DISTRIBUTION_REGION', 'DISTRIBUTION_PHILRICE'):
-        qs = qs.filter(qty_bags__isnull=False)
+    # Distribution reports: only entries with confirmed qty_bags
+    if report_type in ('DISTRIBUTION_REGION', 'DISTRIBUTION_PHILRICE'):
+        qs = qs.exclude(qty_bags__isnull=True)
 
     return qs.order_by('batch__id', 'row_number')
 

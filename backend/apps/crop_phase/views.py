@@ -272,14 +272,17 @@ class CropPhaseAnalyticsView(APIView):
             farmer_count   = len(unique_farmers)
 
             # Total qty_bags for this seed type (all distributed)
+            # Total qty_bags for this seed type (all distributed)
+            # Exclude entries where qty_bags is None, 0, or effectively 0
             total_bags = sum(
-                entry.qty_bags or 0
+                float(entry.qty_bags)
                 for entry in dist_qs.select_related()
-                if entry.qty_bags
+                if entry.qty_bags is not None and float(entry.qty_bags) > 0
             )
+            
             # kg per bag: Hybrid = 15 kg, Inbred = 20 kg
             kg_per_bag = 15 if seed_key == 'HYBRID' else 20
-            total_kg   = total_bags * kg_per_bag
+            total_kg   = round(total_bags * kg_per_bag, 2)
 
             dist_summary['by_seed'].append({
                 'seed_key':     seed_key,

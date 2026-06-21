@@ -445,13 +445,13 @@ def _build_brgy_report_data(user, poll_id=None):
     hybrid_kg_total = inbred_kg_total = 0
     for e in dist_entries:
         seed_name = (getattr(e.batch.event.seed_type, 'name', '') or '').upper()
-        bags = int(e.qty_bags or 0)
+        bags = float(e.qty_bags or 0)
         if 'HYBRID' in seed_name:
             hybrid_bags      += bags
-            hybrid_kg_total  += bags * 15
+            hybrid_kg_total  += round(bags * 15, 2)
         elif 'INBRED' in seed_name:
             inbred_bags      += bags
-            inbred_kg_total  += bags * 20
+            inbred_kg_total  += round(bags * 20, 2)
 
     total_dist_bags = hybrid_bags + inbred_bags
     total_dist_kg   = hybrid_kg_total + inbred_kg_total
