@@ -59,18 +59,17 @@ def get_visible_announcements(user):
 
     if user.role == 'AT':
         try:
-            user_barangays = list(
-                user.at_profile.barangays.values_list('name', flat=True)
-            )
+            user_barangays = [b.lower().strip() for b in user.at_profile.barangays.values_list('name', flat=True)]
         except Exception:
             user_barangays = []
     else:
         single = getattr(user, 'barangay', '') or ''
-        user_barangays = [single] if single else []
+        user_barangays = [single.lower().strip()] if single else []
 
     visible_ids = []
     for ann in qs:
-        target_list = ann.get_target_barangays()
+        # Case-insensitive comparison para sa barangay names
+        target_list = [b.lower().strip() for b in ann.get_target_barangays()]
         is_visible = False
 
         if not target_list:
@@ -81,32 +80,60 @@ def get_visible_announcements(user):
 
         # ── FARMER LEVEL BENEFICIARY SCOPING CONSTRAINT ──
         # Kung Farmer ang tinitingnan, at ang announcement ay local (mula sa BRGY President):
-        # Sisiguraduhin natin na may APPROVED beneficiary batch siya sa active season/year ng poll.
+        # Sisiguraduhin natin na ipapakita lamang ito kung ang Farmer ay nakatala sa approved list ng variety na ito.
         if is_visible and user.role == 'FARMER' and ann.posted_by and ann.posted_by.role == 'BRGY' and ann.target_role == 'FARMER':
-            from apps.seed_poll.utils import get_current_poll
-            from apps.distribution.models import DistributionBatch
+            is_visible = False # Default sa hindi muna makikita hangga't hindi natutukoy ang valid variety entry
+            url = ann.action_url or ''
             
-            poll = get_current_poll()
-            if poll:
-                # Query kung may approved distribution batch ang farmer na ito para sa active poll
-                has_approved_record = DistributionBatch.objects.filter(
-                    status='APPROVED',
-                    event__season=poll.season,
-                    event__year=poll.year,
-                    entries__farmer=user,
-                    event__barangay=user.barangay
-                ).exists()
-                
-                # Kung walang approved beneficiary data sa active season, sasalain (filter out) ang announcement
-                if not has_approved_record:
-                    is_visible = False
+            if url.startswith('distribution-delivery-id:'):
+                try:
+                    delivery_id = int(url.split(':')[1])
+                    from apps.seed_inventory.models import SeedDelivery
+                    from apps.distribution.models import DistributionBatch
+                    
+                    delivery = SeedDelivery.objects.filter(pk=delivery_id).first()
+                    if delivery:
+                        # I-filter ang distribution batches batay sa exact seed variety at delivery ng barangay
+                        batches_qs = DistributionBatch.objects.filter(
+                            status='APPROVED',
+                            event__season=delivery.season,
+                            event__year=delivery.year,
+                            event__seed_type=delivery.seed_type,
+                            entries__farmer=user,
+                            event__barangay=user.barangay
+                        )
+                        
+                        if delivery.variety:
+                            batches_qs = batches_qs.filter(
+                                Q(event__variety=delivery.variety) |
+                                Q(entries__variety=delivery.variety)
+                            ).distinct()
+                            
+                        if batches_qs.exists():
+                            is_visible = True
+                except Exception:
+                    pass
             else:
-                is_visible = False
+                # Fallback kapag walang delivery target na nakalagay sa action_url ng announcement
+                from apps.seed_poll.utils import get_current_poll
+                from apps.distribution.models import DistributionBatch
+                poll = get_current_poll()
+                if poll:
+                    has_approved_record = DistributionBatch.objects.filter(
+                        status='APPROVED',
+                        event__season=poll.season,
+                        event__year=poll.year,
+                        entries__farmer=user,
+                        event__barangay=user.barangay
+                    ).exists()
+                    if has_approved_record:
+                        is_visible = True
 
         if is_visible:
             visible_ids.append(ann.id)
 
     return Announcement.objects.filter(id__in=visible_ids).order_by('-created_at')
+
 
 
 #  def get_visible_announcements(user):
@@ -324,15 +351,11 @@ class UserAnnouncementDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
-        # Get announcement and verify it's visible to this user
-        ann = get_object_or_404(Announcement, pk=pk, is_active=True)
+        # I-filter batay sa visible announcements ng user para sa parehong panuntunan ng listahan
+        visible_qs = get_visible_announcements(request.user)
+        ann = get_object_or_404(visible_qs, pk=pk)
+        
 
-        # Verify this user should see this announcement
-        if not ann.is_visible_to(request.user):
-            return Response(
-                {"error": "Announcement not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
 
         # ── AUTO MARK AS READ ──
         # get_or_create: if already read → does nothing (no duplicate)

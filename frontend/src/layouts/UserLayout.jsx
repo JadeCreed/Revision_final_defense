@@ -404,11 +404,24 @@ const BellDropdown = ({ isDesktop, colors, role, navigate }) => {
                     <span style={{ fontSize: '0.7rem', color: '#9ca3af', whiteSpace: 'nowrap' }}>{notif.date}</span>
                   </div>
                 </div>
-                <p style={{ margin: 0, fontSize: '0.75rem', color: notif.read ? '#6b7280' : '#166534', lineHeight: 1.45 }}>
+                <p style={{
+                  margin: 0,
+                  fontSize: '0.75rem',
+                  color: notif.read ? '#6b7280' : '#166534',
+                  lineHeight: 1.45,
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {(notif.info || '').replace(/\s+/g, ' ').trim()}
+                </p>
+                {/* <p style={{ margin: 0, fontSize: '0.75rem', color: notif.read ? '#6b7280' : '#166534', lineHeight: 1.45 }}>
                   {notif.info && notif.info.length > 80 
                     ? notif.info.slice(0, 80) + '...' 
                     : notif.info}
-                </p>
+                </p> */}
               </button>
             ))}
           </div>

@@ -125,11 +125,13 @@ const AnnouncementDetail = () => {
       });
 
       // 2. Post BP custom announcement para sa mga Farmers ng kanyang sariling Barangay
+      // 2. Post BP custom announcement para sa mga Farmers ng kanyang sariling Barangay
       await createAnnouncement({
         title: distTitle,
         content: compiledContent,
         target_role: 'FARMER',
         target_barangays_list: [role === 'BRGY' ? announcement.target_barangays_list[0] : ''],
+        action_url: `distribution-delivery-id:${deliveryId}`, // Ginagamit para sa dynamic variety validation sa backend
         is_active: true,
       });
 

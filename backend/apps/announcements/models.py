@@ -88,46 +88,28 @@ class Announcement(models.Model):
           BRGY   — single barangay stored in user.barangay
           AT     — multiple barangays stored in at_profile.barangays
         """
-        # ── STEP 1: Must be active ──
         if not self.is_active:
             return False
 
-        # ── STEP 2: Role must match ──
-        # ALL = visible to every role
-        # Otherwise must match exactly
         if self.target_role != 'ALL' and self.target_role != user.role:
             return False
 
-        # ── STEP 3: Check barangay filter ──
-        target_brgys = self.get_target_barangays()
+        # Case-insensitive normalization
+        target_brgys = [b.lower().strip() for b in self.get_target_barangays()]
 
-        # No specific barangays targeted = visible to everyone in this role
         if not target_brgys:
             return True
 
-        # ── GET USER'S BARANGAYS based on role ──
         if user.role == 'AT':
-            # AT users have MULTIPLE assigned barangays
-            # stored in AgriculturalTechnicianProfile → Barangay model
             try:
-                user_barangays = list(
-                    user.at_profile.barangays.values_list('name', flat=True)
-                )
+                user_barangays = [b.lower().strip() for b in user.at_profile.barangays.values_list('name', flat=True)]
             except Exception:
-                # at_profile doesn't exist or query fails
                 user_barangays = []
-
         else:
-            # FARMER and BRGY have a SINGLE barangay
-            # stored directly on the User model as user.barangay
             single_barangay = getattr(user, 'barangay', None) or ''
-            user_barangays  = [single_barangay] if single_barangay else []
+            user_barangays  = [single_barangay.lower().strip()] if single_barangay else []
 
-        # ── CHECK if any of user's barangays match the target list ──
-        # For FARMER/BRGY: user_barangays has 1 item → checks that one
-        # For AT: user_barangays has multiple → any match = visible
         return any(brgy in target_brgys for brgy in user_barangays)
-
 
 class AnnouncementRead(models.Model):
     """

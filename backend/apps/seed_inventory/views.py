@@ -176,7 +176,12 @@ class SeedDeliveryDetailView(generics.RetrieveUpdateDestroyAPIView):
         return SeedDeliverySerializer
 
     def perform_update(self, serializer):
-        old_status = self.get_object().status
+        # Laktawan ang view cached instance upang basahin ang lumang status direkta mula sa DB bago i-save
+        try:
+            old_status = SeedDelivery.objects.get(pk=serializer.instance.pk).status
+        except SeedDelivery.DoesNotExist:
+            old_status = None
+            
         delivery   = serializer.save()
         SeedDeliveryAudit.objects.create(
             delivery=delivery,
@@ -507,23 +512,54 @@ def brgy_my_seed_allocation_view(request):
             continue
 
         # ── Seed bag computation with exact kg tracking ──
-        # Hybrid:  1 bag = 15kg, 1 bag per ha
-        #          0.5 ha = 0.5 bag = 7.5kg
-        # Inbred:  1 bag = 20kg, 2 bags per ha
-        #          0.5 ha = 1 bag = 20kg (minimum 1 bag, ceiling)
         if is_hybrid:
-            # Exact decimal bags — no ceiling, preserve decimal accuracy
             allocated_bags_exact = round(total_ha * 1.0, 2)
             allocated_bags_kg    = round(allocated_bags_exact * 15, 2)
-            allocated_bags       = allocated_bags_exact  # keep decimal, e.g. 0.5
+            allocated_bags       = allocated_bags_exact  
         else:
-            # Inbred: 2 bags per ha — keep decimal, no ceiling
             allocated_bags_exact = round(total_ha * 2.0, 2)
             allocated_bags_kg    = round(allocated_bags_exact * 20, 2)
-            allocated_bags       = allocated_bags_exact  # e.g. 3.9 ha → 7.8 bags
+            allocated_bags       = allocated_bags_exact  
         
-        # Format display string: "1 bag (7.5kg)" or "2 bags (15kg)"
         bag_label = f"{allocated_bags} bag{'s' if allocated_bags != 1 else ''} ({allocated_bags_kg:g}kg)"
+
+        # Hinahanap ang ID ng kaakibat na Announcement record sa database
+        from apps.announcements.models import Announcement
+        ann = Announcement.objects.filter(
+            target_role='BRGY',
+            target_barangays=barangay,
+            action_url=f"confirm-allocation-id:{delivery.id}",
+            is_active=True
+        ).first()
+
+        # ── SELF-HEALING TRIGGER: Kung walang announcement sa database, gumawa tayo on-the-fly! ──
+        # ── SELF-HEALING TRIGGER: Kung walang announcement sa database, gumawa tayo on-the-fly! ──
+        if not ann:
+            try:
+                from apps.accounts.models import User
+                variety_label = f" ({delivery.variety.name})" if delivery.variety else ''
+                # Ligtas na pag-assign ng posted_by gamit ang fallback user upang hindi mag-silently fail ang model save
+                posted_user = delivery.encoded_by or User.objects.filter(role='ADMIN').first()
+                ann = Announcement.objects.create(
+                    title=f"Seed Allocation — {delivery.seed_type.name}{variety_label}",
+                    content=(
+                        f"{allocated_bags} bags ({allocated_bags_kg:g}kg) · "
+                        f"{farmer_count} farmer{'s' if farmer_count != 1 else ''} · "
+                        f"{total_ha} ha · {delivery.season_display} {delivery.year}"
+                    ),
+                    action_title="Confirm Received",
+                    action_url=f"confirm-allocation-id:{delivery.id}",
+                    target_role='BRGY',
+                    target_barangays=barangay,
+                    posted_by=posted_user,
+                    is_active=True,
+                )
+            except Exception:
+                pass
+
+
+
+        ann_id = ann.id if ann else None
 
         existing_alloc = BrgyAllocation.objects.filter(
             barangay=barangay,
@@ -552,6 +588,7 @@ def brgy_my_seed_allocation_view(request):
             'alloc_status':      existing_alloc.status if existing_alloc else 'PENDING',
             'alloc_id':          existing_alloc.id if existing_alloc else None,
             'already_confirmed': existing_alloc.status == 'CONFIRMED' if existing_alloc else False,
+            'announcement_id':   ann_id, # Ibinabalik ang dynamic announcement ID
         })
 
     return Response(result)
@@ -568,17 +605,16 @@ def brgy_confirm_allocation_view(request):
     if not all([barangay, delivery_id, allocated_bags is not None]):
         return Response({'error': 'Missing required fields.'}, status=400)
 
-
-    # Validate allocated_bags is a positive integer
+    # I-convert gamit ang Decimal precision para hindi mag-truncate sa 0 ang fractional bags (tulad ng 0.5)
+    from decimal import Decimal, InvalidOperation
     try:
-        allocated_bags_val = float(allocated_bags)
-    except (TypeError, ValueError):
+        allocated_bags_val = Decimal(str(allocated_bags))
+    except (TypeError, ValueError, InvalidOperation):
         return Response({'error': 'Invalid allocated bags value.'}, status=400)
 
-    if allocated_bags_val <= 0:
+    if allocated_bags_val <= Decimal('0'):
         return Response({'error': 'Allocated bags must be greater than zero.'}, status=400)
     
-    # Store as integer only for the allocation record (physical bags received)
     allocated_bags_int = allocated_bags_val
 
     delivery = get_object_or_404(SeedDelivery, pk=delivery_id)
@@ -597,7 +633,7 @@ def brgy_confirm_allocation_view(request):
         alloc = BrgyAllocation.objects.create(
             delivery=delivery,
             barangay=barangay,
-            allocated_bags=round(allocated_bags_val),
+            allocated_bags=allocated_bags_val,
             status='CONFIRMED',
             confirmed_by=request.user,
             date_confirmed=timezone.now().date(),

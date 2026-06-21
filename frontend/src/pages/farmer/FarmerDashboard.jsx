@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import { CheckCircle, Clock, XCircle, AlertCircle, ChevronRight, Users, Activity, MapPin, BarChart2, Sprout, Ruler, Wheat, Bell } from 'lucide-react';
+import { CheckCircle, Clock, XCircle, AlertCircle, ChevronRight, Users, Activity, MapPin, BarChart2, Sprout, Ruler, Wheat, Bell, CalendarDays, Clock3 } from 'lucide-react';
 import API, { getAnnouncements, getFinalSeeds, getFarmerDashboardStats } from '../../api/axios';
 import AnnouncementCard from '../../components/announcements/AnnouncementCard';
 
@@ -175,7 +175,7 @@ const FarmerDashboard = () => {
 
   // ── Fetch announcements ──
   useEffect(() => {
-    getAnnouncements({ limit: 3 })
+    getAnnouncements({ limit: 10 }) // Tinaasan ang limit upang ma-detect ang unread distribution schedules
       .then(res => setAnnouncements(res.data || []))
       .catch(() => {})
       .finally(() => setAnnLoading(false));
@@ -237,6 +237,64 @@ const FarmerDashboard = () => {
     }, 300);
   };
 
+  // ── Helper upang i-parse ang Seed Distribution details mula sa anunsyo ──
+  const getDistributionDetails = (ann) => {
+    const title = ann.title || '';
+    const content = ann.content || '';
+    
+    let seedType = 'Inbred';
+    let variety = '—';
+    const parts = title.split(' — ');
+    if (parts.length > 1) {
+      const seedInfo = parts[1]; // Kukunin ang "Inbred (RC-10)"
+      const match = seedInfo.match(/([^(]+)\s*\(([^)]+)\)/);
+      if (match) {
+        seedType = match[1].trim();
+        variety = match[2].trim();
+      } else {
+        seedType = seedInfo;
+      }
+    }
+
+    const lines = content.split('\n');
+    let date = '—';
+    let time = '—';
+    let venue = '—';
+    
+    lines.forEach(line => {
+      if (line.includes('• Araw/Petsa:')) date = line.split('• Araw/Petsa:')[1].trim();
+      if (line.includes('• Oras:'))      time = line.split('• Oras:')[1].trim();
+      if (line.includes('• Lugar/Venue:')) venue = line.split('• Lugar/Venue:')[1].trim();
+    });
+
+    return { seedType, variety, date, time, venue };
+  };
+
+  // ── Dismiss handler para sa Farmer Distribution Schedule ──
+  const handleDistDismiss = async (ann) => {
+    const NOTIF_KEY = `brgy_bell_notifs_FARMER`;
+    const notifId = `ann_${ann.id}`;
+    
+    // 1. I-save sa localStorage para mawala sa Home Screen
+    localStorage.setItem(`farmer_dist_dismissed_${ann.id}`, 'true');
+    
+    // 2. Mark as read sa local bell notifications storage
+    try {
+      const existing = JSON.parse(localStorage.getItem(NOTIF_KEY) || '[]');
+      const updated = existing.map(n => n.id === notifId ? { ...n, read: true } : n);
+      localStorage.setItem(NOTIF_KEY, JSON.stringify(updated));
+      emitStorageSync(NOTIF_KEY, JSON.stringify(updated));
+    } catch {}
+
+    // 3. Tumawag sa backend detail endpoint upang markahan bilang read sa DB (mababawasan ang bell count)
+    try {
+      await API.get(`/announcements/${ann.id}/`);
+    } catch {}
+
+    // 4. I-update ang local state upang maitago ang card sa Home screen
+    setAnnouncements(prev => prev.map(a => a.id === ann.id ? { ...a, is_read: true } : a));
+  };
+
   // ── Dashboard stats (Farmer) ──
   const [dashStats, setDashStats] = useState({
     seed_display: 'Pending',
@@ -256,11 +314,19 @@ const FarmerDashboard = () => {
   }, []);
 
   // ── Notification queue logic ──
-  // Status notif first (PENDING/COMPLETE/APPROVED), then seed notif
   const showStatusNotif = !profileLoading && !statusDismissed && status && status !== 'REJECTED';
   const showSeedNotif = !showStatusNotif && finalSeeds.length > 0 && !seedDismissed;
-  // REJECTED always shows below tiles, not in queue
   const showRejectedNotif = !profileLoading && status === 'REJECTED';
+
+  // Kukunin ang pinakahuling hindi pa nadidismis na Distribution Announcement ng kanyang Barangay
+  const unreadDistAnn = announcements.find(ann => {
+    const isDist = ann.title?.startsWith('Seed Distribution');
+    const isDismissed = localStorage.getItem(`farmer_dist_dismissed_${ann.id}`) === 'true';
+    return isDist && !isDismissed; // Tinanggal ang !ann.is_read para lumabas pa rin sa Home kahit binuksan na sa Bell icon
+  });
+  
+  // Ipapakita lamang ang distribution card kung walang aktibong status o seed varieties notifications
+  const showDistNotif = !showStatusNotif && !showSeedNotif && !!unreadDistAnn;
 
   // ── Status notif config ──
   const getStatusNotifConfig = () => {
@@ -327,84 +393,147 @@ const FarmerDashboard = () => {
         </p>
       </div>
 
-      {/* ── NOTIFICATION AREA ── */}
+      {/* ── NOTIFICATION AREA (Priority Scoped) ── */}
+      <div style={{ marginBottom: '1rem' }}>
 
-      {/* Status notification (PENDING / COMPLETE / APPROVED) */}
-      {showStatusNotif && statusNotifCfg && (
-        <div
-          className={statusVisible ? 'farmer-notif-enter' : 'farmer-notif-exit'}
-          style={{
-            backgroundColor: statusNotifCfg.bg,
-            border: `1.5px solid ${statusNotifCfg.border}`,
-            borderRadius: '1rem',
-            marginBottom: '1rem',
-          }}
-        >
-          <div style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontWeight: 700, fontSize: '0.875rem', color: statusNotifCfg.titleColor, margin: '0 0 0.25rem' }}>
-                {statusNotifCfg.title}
-              </p>
-              <p style={{ fontSize: '0.78rem', color: statusNotifCfg.titleColor, opacity: 0.85, margin: 0, lineHeight: 1.4 }}>
-                {statusNotifCfg.info}
-              </p>
+        {/* Type A: Profile Status Banner */}
+        {showStatusNotif && statusNotifCfg && (
+          <div
+            className={statusVisible ? 'farmer-notif-enter' : 'farmer-notif-exit'}
+            style={{
+              backgroundColor: statusNotifCfg.bg,
+              border: `1.5px solid ${statusNotifCfg.border}`,
+              borderRadius: '1rem',
+            }}
+          >
+            <div style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: statusNotifCfg.titleColor, margin: '0 0 0.25rem' }}>
+                  {statusNotifCfg.title}
+                </p>
+                <p style={{ fontSize: '0.78rem', color: statusNotifCfg.titleColor, opacity: 0.85, margin: 0, lineHeight: 1.4 }}>
+                  {statusNotifCfg.info}
+                </p>
+              </div>
+              {statusNotifCfg.showButton && (
+                <button
+                  onClick={statusNotifCfg.onButton}
+                  style={{
+                    flexShrink: 0, padding: '0.5rem 0.875rem',
+                    backgroundColor: statusNotifCfg.buttonBg, color: 'white',
+                    border: 'none', borderRadius: '0.75rem', cursor: 'pointer',
+                    fontWeight: 700, fontSize: '0.78rem',
+                    display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {statusNotifCfg.buttonLabel} <ChevronRight size={13} />
+                </button>
+              )}
             </div>
-            {statusNotifCfg.showButton && (
+          </div>
+        )}
+
+        {/* Type B: Confirmed Seed Varieties Banner */}
+        {showSeedNotif && (
+          <div
+            className={seedVisible ? 'farmer-notif-enter' : 'farmer-notif-exit'}
+            style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '1rem' }}
+          >
+            <div style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#166534', margin: '0 0 0.35rem' }}>
+                  Confirmed Seed Varieties — {finalSeeds[0]?.season_display} {finalSeeds[0]?.year}
+                </p>
+                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                  {finalSeeds.map(fs => (
+                    <span key={fs.id} style={{
+                      fontSize: '0.72rem', color: '#166534',
+                      backgroundColor: '#dcfce7', borderRadius: '999px',
+                      padding: '0.1rem 0.6rem', fontWeight: 600, border: '1px solid #bbf7d0',
+                    }}>
+                      {fs.seed_type.name}: {fs.varieties.map(v => v.name).join(', ')}
+                    </span>
+                  ))}
+                </div>
+              </div>
               <button
-                onClick={statusNotifCfg.onButton}
+                onClick={handleSeedDismiss}
                 style={{
                   flexShrink: 0, padding: '0.5rem 0.875rem',
-                  backgroundColor: statusNotifCfg.buttonBg, color: 'white',
+                  backgroundColor: '#166534', color: 'white',
                   border: 'none', borderRadius: '0.75rem', cursor: 'pointer',
                   fontWeight: 700, fontSize: '0.78rem',
                   display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap',
                 }}
               >
-                {statusNotifCfg.buttonLabel} <ChevronRight size={13} />
+                <CheckCircle size={14} /> Got it!
               </button>
-            )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Seed varieties notification */}
-      {showSeedNotif && (
-        <div
-          className={seedVisible ? 'farmer-notif-enter' : 'farmer-notif-exit'}
-          style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: '1rem', marginBottom: '1rem' }}
-        >
-          <div style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontWeight: 700, fontSize: '0.875rem', color: '#166534', margin: '0 0 0.35rem' }}>
-                Confirmed Seed Varieties — {finalSeeds[0]?.season_display} {finalSeeds[0]?.year}
-              </p>
-              <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                {finalSeeds.map(fs => (
-                  <span key={fs.id} style={{
-                    fontSize: '0.72rem', color: '#166534',
-                    backgroundColor: '#dcfce7', borderRadius: '999px',
-                    padding: '0.1rem 0.6rem', fontWeight: 600, border: '1px solid #bbf7d0',
-                  }}>
-                    {fs.seed_type.name}: {fs.varieties.map(v => v.name).join(', ')}
-                  </span>
-                ))}
+        {/* Type C: Seed Distribution Schedule Custom Card */}
+        {showDistNotif && unreadDistAnn && (() => {
+          const { seedType, variety, date, time, venue } = getDistributionDetails(unreadDistAnn);
+          return (
+            <div style={{
+              background: 'linear-gradient(135deg, #f0fdf4 0%, #e8f5e9 100%)',
+              border: '1.5px solid #a5d6a7',
+              borderRadius: '1rem',
+              padding: '1rem',
+              boxShadow: '0 4px 14px rgba(26,77,26,0.06)',
+              animation: 'notifSlideIn 0.3s ease forwards',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                    <span style={{
+                      backgroundColor: '#1a4d1a', color: 'white',
+                      padding: '0.15rem 0.5rem', borderRadius: '999px',
+                      fontSize: '0.68rem', fontWeight: 800, textTransform: 'uppercase'
+                    }}>
+                      {seedType}
+                    </span>
+                    <p style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1a4d1a', margin: 0 }}>
+                      {variety}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.25rem' }}>
+                    <CalendarDays size={14} color="#2e7d32" />
+                    <p style={{ fontSize: '0.78rem', color: '#2e7d32', margin: 0, fontWeight: 600 }}>
+                      {date}
+                    </p>
+                    <span style={{ color: '#2e7d32', fontSize: '0.78rem', fontWeight: 600 }}>·</span>
+                    <Clock3 size={14} color="#2e7d32" />
+                    <p style={{ fontSize: '0.78rem', color: '#2e7d32', margin: 0, fontWeight: 600 }}>
+                      {time}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <MapPin size={14} color="#3c763d" />
+                    <p style={{ fontSize: '0.75rem', color: '#3c763d', margin: 0, fontWeight: 500 }}>
+                      {venue}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDistDismiss(unreadDistAnn)}
+                  style={{
+                    flexShrink: 0, padding: '0.5rem 1rem',
+                    backgroundColor: '#1a4d1a', color: 'white',
+                    border: 'none', borderRadius: '0.75rem', cursor: 'pointer',
+                    fontWeight: 700, fontSize: '0.78rem',
+                    boxShadow: '0 2px 6px rgba(26,77,26,0.15)',
+                  }}
+                >
+                  Got it!
+                </button>
               </div>
             </div>
-            <button
-              onClick={handleSeedDismiss}
-              style={{
-                flexShrink: 0, padding: '0.5rem 0.875rem',
-                backgroundColor: '#166534', color: 'white',
-                border: 'none', borderRadius: '0.75rem', cursor: 'pointer',
-                fontWeight: 700, fontSize: '0.78rem',
-                display: 'flex', alignItems: 'center', gap: '0.3rem', whiteSpace: 'nowrap',
-              }}
-            >
-              <CheckCircle size={14} /> Got it!
-            </button>
-          </div>
-        </div>
-      )}
+          );
+        })()}
+
+      </div>
 
       {/* ── 4 ANALYTICS TILES + CROP MONITORING STATUS CARD ── */}
       <div style={{ marginBottom: '1.375rem' }}>
@@ -547,13 +676,15 @@ const FarmerDashboard = () => {
 
         {!annLoading && announcements.length === 0 && (
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem 1.5rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📢</div>
+            <div style={{ width: 48, height: 48, borderRadius: '999px', backgroundColor: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.5rem' }}>
+              <Bell size={22} color="#9ca3af" />
+            </div>
             <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 0.25rem' }}>No announcements yet</p>
             <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: 0 }}>Check back here for updates from your admin.</p>
           </div>
         )}
 
-        {!annLoading && announcements.map(ann => (
+        {!annLoading && announcements.slice(0, 3).map(ann => (
           <AnnouncementCard
             key={ann.id}
             announcement={ann}

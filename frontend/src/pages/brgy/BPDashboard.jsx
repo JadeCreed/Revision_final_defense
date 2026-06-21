@@ -73,16 +73,16 @@ const BPDashboard = () => {
       .catch(() => {});
   }, []);
 
-  useEffect(() => {
-    getATFarmers({ barangay, limit: 1, role: 'brgy' })
-      .then(res => {
-        const data = res.data;
-        if (data?.count !== undefined) setTotalFarmers(data.count);
-        else if (Array.isArray(data))  setTotalFarmers(data.length);
-        else                           setTotalFarmers(null);
-      })
-      .catch(() => setTotalFarmers(null));
-  }, [barangay]);
+  // useEffect(() => {
+  //   getATFarmers({ barangay, limit: 1, role: 'brgy' })
+  //     .then(res => {
+  //       const data = res.data;
+  //       if (data?.count !== undefined) setTotalFarmers(data.count);
+  //       else if (Array.isArray(data))  setTotalFarmers(data.length);
+  //       else                           setTotalFarmers(null);
+  //     })
+  //     .catch(() => setTotalFarmers(null));
+  // }, [barangay]);
 
   useEffect(() => {
     getAnnouncements({ limit: 3 })

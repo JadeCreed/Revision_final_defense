@@ -285,17 +285,25 @@ const ProgramCard = ({
                   const isDelivered = entry.status === 'DELIVERED';
                   // Try to find matching backend delivery for detail view
                   const matchedDelivery = deliveries.find(d => {
+                    const seasonMatch = d.season === entry.season;
+                    const yearMatch = Number(d.year) === Number(entry.year);
+                    if (!seasonMatch || !yearMatch) return false;
+
+                    const dbIdMatch = entry.seedTypeDbId
+                      ? String(d.seed_type) === String(entry.seedTypeDbId)
+                      : false;
+
+                    // Siguraduhing titingnan ang varietyId para hindi magkamali kapag parehong Hybrid ang magkaibang variety
+                    if (entry.varietyId) {
+                      const varietyIdMatch = String(d.variety) === String(entry.varietyId);
+                      return dbIdMatch && varietyIdMatch;
+                    }
+
                     const normalize = text => text?.toString().toLowerCase().trim();
                     const nameA = normalize(d.seed_type_name);
                     const nameB = normalize(entry.seedTypeName);
                     const varA = normalize(d.variety_name);
                     const varB = normalize(entry.varietyName);
-                    const seasonMatch = d.season === entry.season;
-                    const yearMatch = Number(d.year) === Number(entry.year);
-
-                    const dbIdMatch = entry.seedTypeDbId
-                      ? String(d.seed_type) === String(entry.seedTypeDbId)
-                      : false;
 
                     const nameMatch = nameA && nameB && (
                       nameA === nameB ||
@@ -309,11 +317,13 @@ const ProgramCard = ({
                     const varietyMatch = varA && entryVarieties.length > 0 &&
                       entryVarieties.some(ev => ev === varA || varA.includes(ev) || ev.includes(varA));
 
-                    if (dbIdMatch && seasonMatch && yearMatch) return true;
-                    if (nameMatch && seasonMatch && yearMatch) return true;
-                    if (varietyMatch && seasonMatch && yearMatch) return true;
+                    if (dbIdMatch) return true;
+                    if (nameMatch) return true;
+                    if (varietyMatch) return true;
                     return false;
                   });
+
+
                   return (
                     <div
                       key={eIdx}

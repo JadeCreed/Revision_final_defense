@@ -83,7 +83,7 @@ class BrgyAllocation(models.Model):
 
     delivery       = models.ForeignKey(SeedDelivery, on_delete=models.CASCADE, related_name='allocations')
     barangay       = models.CharField(max_length=100)
-    allocated_bags = models.PositiveIntegerField()
+    allocated_bags = models.DecimalField(max_digits=10, decimal_places=2)
     status         = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     date_allocated = models.DateField(auto_now_add=True)
     confirmed_by   = models.ForeignKey(
