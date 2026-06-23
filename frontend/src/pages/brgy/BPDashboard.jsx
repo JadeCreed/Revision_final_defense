@@ -465,7 +465,9 @@ const BPDashboard = () => {
 
         {!annLoading && announcements.length === 0 && (
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem 1.5rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📢</div>
+            <div style={{ width: 48, height: 48, margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '999px', backgroundColor: '#eef2ff' }}>
+              <Bell size={24} color="#4f46e5" />
+            </div>
             <p style={{ fontWeight: 600, color: '#374151', margin: '0 0 0.25rem' }}>No announcements yet</p>
             <p style={{ color: '#9ca3af', fontSize: '0.8rem', margin: 0 }}>Check back here for updates from the MAO.</p>
           </div>

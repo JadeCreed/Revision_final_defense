@@ -246,21 +246,38 @@ class SeedDeliveryAuditListView(generics.ListAPIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUserRole])
 def inventory_summary_view(request):
-    """Dashboard stats for admin."""
-    deliveries   = SeedDelivery.objects.select_related('seed_type').prefetch_related('allocations')
-    total_bags   = sum(d.total_bags    for d in deliveries)
+    from apps.seed_poll.utils import get_current_poll
+    
+    # I-filter base sa current poll scope
+    poll = get_current_poll()
+    
+    if poll:
+        deliveries = SeedDelivery.objects.filter(
+            season=poll.season,
+            year=poll.year
+        ).select_related('seed_type').prefetch_related('allocations')
+    else:
+        deliveries = SeedDelivery.objects.none()
+
+    total_bags   = sum(d.total_bags for d in deliveries)
     allocated    = sum(d.allocated_bags for d in deliveries)
     remaining    = sum(d.remaining_bags for d in deliveries)
-    pending_conf = BrgyAllocation.objects.filter(status='PENDING').count()
-    confirmed    = BrgyAllocation.objects.filter(status='CONFIRMED').count()
+    pending_conf = BrgyAllocation.objects.filter(
+        status='PENDING',
+        delivery__in=deliveries
+    ).count()
+    confirmed = BrgyAllocation.objects.filter(
+        status='CONFIRMED',
+        delivery__in=deliveries
+    ).count()
 
     return Response({
-        'total_deliveries':        deliveries.count(),
-        'total_bags_received':     total_bags,
-        'total_bags_allocated':    allocated,
-        'total_bags_remaining':    remaining,
-        'pending_confirmations':   pending_conf,
-        'confirmed_pickups':       confirmed,
+        'total_deliveries':      deliveries.count(),
+        'total_bags_received':   total_bags,
+        'total_bags_allocated':  allocated,
+        'total_bags_remaining':  remaining,
+        'pending_confirmations': pending_conf,
+        'confirmed_pickups':     confirmed,
     })
 
 
@@ -509,7 +526,7 @@ def brgy_my_seed_allocation_view(request):
 
         total_ha = 0.0
         farmer_count = 0
-        
+
 
         for batch in batches:
             for entry in batch.entries.all():

@@ -93,13 +93,42 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
+
+DATABASE_TYPE = config("DATABASE_TYPE", default="sqlite").strip().lower()
+
+if DATABASE_TYPE == "postgres":
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config("POSTGRES_DB"),
+            'USER': config("POSTGRES_USER"),
+            'PASSWORD': config("POSTGRES_PASSWORD"),
+            'HOST': config("POSTGRES_HOST"),
+            'PORT': config("POSTGRES_PORT", default="5432"),
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+            # Supabase pooler na nag-handle ng connection pooling,
+            # kaya 0 lang dito para hindi mag-conflict si Django
+            'CONN_MAX_AGE': 0,
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+
+    
 
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators

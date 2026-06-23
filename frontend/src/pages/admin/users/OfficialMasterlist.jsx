@@ -213,6 +213,7 @@ const RoleTable = ({ roleKey, search }) => {
       {viewBrgyModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
               <div>
                 <h3 style={{ fontWeight: 700, fontSize: '1.1rem', margin: 0 }}>Assigned Barangays</h3>
@@ -222,6 +223,8 @@ const RoleTable = ({ roleKey, search }) => {
               </div>
               <button onClick={() => setViewBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
             </div>
+
+
             {viewBrgyModal.assigned_barangays?.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                 {viewBrgyModal.assigned_barangays.map(b => (
@@ -246,7 +249,7 @@ const RoleTable = ({ roleKey, search }) => {
       {deactivateModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
-            <h3 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>⚠️ Deactivate Account</h3>
+            <h3 style={{ fontWeight: 700, marginBottom: '0.5rem' }}> Deactivate Account</h3>
             <p style={{ color: '#6b7280', marginBottom: '1.25rem', fontSize: '0.875rem' }}>
               Deactivate <strong>{deactivateModal.first_name} {deactivateModal.last_name}</strong>{' '}
               ({ROLE_BADGE[deactivateModal.role]?.label})? They will be moved to Archive and can be reactivated later.

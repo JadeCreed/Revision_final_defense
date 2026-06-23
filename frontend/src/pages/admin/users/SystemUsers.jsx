@@ -628,13 +628,10 @@ const SystemUsers = () => {
                 <h3 style={{ fontWeight: '700' }}>Assigned Barangays</h3>
                 <p style={{ color: '#6b7280', fontSize: '0.85rem' }}>{viewBrgyModal.first_name} {viewBrgyModal.last_name}</p>
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => openEditBarangaysModal(viewBrgyModal)}
-                  style={{ padding: '0.5rem 0.9rem', backgroundColor: '#1d4ed8', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: '600' }}>
-                  Edit
-                </button>
-                <button onClick={() => setViewBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
-              </div>
+             
+             
+              <button onClick={() => setViewBrgyModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#6b7280' }}>×</button>
+
             </div>
             {(viewBrgyModal.assigned_barangays || []).length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -726,7 +723,7 @@ const SystemUsers = () => {
       {deactivateModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '400px', width: '100%' }}>
-            <h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}>⚠️ Deactivate Account</h3>
+            <h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}> Deactivate Account</h3>
             <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
               Deactivate <strong>{deactivateModal.first_name} {deactivateModal.last_name}</strong> ({ROLE_BADGE[deactivateModal.role]?.label})?
             </p>
