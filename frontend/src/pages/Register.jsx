@@ -385,7 +385,7 @@ const Register = () => {
 
             {/* Email */}
             <div style={fieldWrap}>
-              <label style={labelStyle}>Email <span style={{ color: '#9ca3af', fontWeight: 400 }}>(optional)</span></label>
+              <label style={labelStyle}>Email <span style={{ color: '#9ca3af', fontWeight: 400 }}></span></label>
               <div style={{ position: 'relative' }}>
                 <div style={{ ...iconStyle, top: '50%' }}><Mail size={14} /></div>
                 <input

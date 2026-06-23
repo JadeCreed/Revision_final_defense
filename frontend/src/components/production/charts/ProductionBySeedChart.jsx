@@ -29,7 +29,7 @@ const ProductionBySeedChart = ({ records }) => {
         <BarChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }} barSize={52}>
           <CartesianGrid strokeDasharray='3 3' vertical={false} stroke='#f1f5f9' />
           <XAxis dataKey='name' axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} />
-          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => `${v} MT`} width={52} />
+          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={v => `${v} MT`} width={52} domain={[0, dataMax => Math.ceil(dataMax + 1)]} allowDecimals={false} />
           <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
           <Bar dataKey='mt' radius={[8, 8, 0, 0]}>
             {data.map((d, i) => <Cell key={i} fill={d.color} />)}

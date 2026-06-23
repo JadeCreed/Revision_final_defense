@@ -11,6 +11,14 @@ const BottomNav = () => {
   const location          = useLocation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  // Awtomatikong alamin kung nasa GIS Map page para i-adjust ang z-index
+  const isGisPage = location.pathname.includes('/gis');
+  const bottomNavZIndex = isGisPage ? 1010 : 50;
+  const backdropZIndex = isGisPage ? 1020 : 60;
+  const panelZIndex = isGisPage ? 1030 : 70;
+
+
+
   // Kukunin ang buong menu list ng kasalukuyang role
   const fullMenu = role === 'ADMIN' 
     ? (MENU_CONFIG.ADMIN || []) 
@@ -101,8 +109,8 @@ const BottomNav = () => {
         justifyContent:  'space-around',
         alignItems:      'center',
         height:          '60px',
-        zIndex:          1010,
-        borderTop:       '1px solid #e5e7eb',                                    // ◀── LIGHT GRAY BORDER
+        zIndex:          bottomNavZIndex,
+        borderTop:       '1px solid #e5e7eb',                                    // ◀── LIGHT GRAY BORDER                          // ◀── LIGHT GRAY BORDER
         boxShadow:       '0 -2px 10px rgba(0,0,0,0.05)',                         // ◀── CLEAN BOTTOM SHADOW
         paddingBottom:   'env(safe-area-inset-bottom)',
       }}>
@@ -140,14 +148,15 @@ const BottomNav = () => {
         <>
           <div
             onClick={() => setDrawerOpen(false)}
-            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1020 }}
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: backdropZIndex }}
           />
           <div style={{
             position:        'fixed',
             bottom:          '60px', left: 0, right: 0,
             backgroundColor: '#1a4d1a',                                      
             borderRadius:    '1rem 1rem 0 0',
-            zIndex:          1030,
+            zIndex:          panelZIndex,
+            
             maxHeight:       '70vh',
             overflowY:       'auto',
             boxShadow:       '0 -4px 20px rgba(0,0,0,0.3)',

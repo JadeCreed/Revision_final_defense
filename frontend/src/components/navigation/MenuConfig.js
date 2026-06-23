@@ -39,8 +39,8 @@ export const MENU_CONFIG = {
       ],
     },
 
-    
-    { label: 'Settings', path: '/admin/settings', icon: Settings      },
+
+    // { label: 'Settings', path: '/admin/settings', icon: Settings      },
   ],
 
   FARMER: [

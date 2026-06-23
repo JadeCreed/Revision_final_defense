@@ -202,6 +202,10 @@ const Production = () => {
   const [toasts,         setToasts]         = useState([]);
   const toastId = useRef(0);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
+
   const pushToast = useCallback((msg, type='success') => {
     const id = ++toastId.current;
     setToasts(p => [...p,{id,msg,type}]);
@@ -238,6 +242,11 @@ const Production = () => {
   const selectedPoll = polls.find(p => p.poll_id===selectedPollId);
   const belowTarget  = records.filter(r => { const u=computeUtil(r); return u!==null && u<80; }).length;
 
+  // Ligtas na pagination calculations para sa Harvest Table
+  const totalPages = Math.ceil(records.length / ITEMS_PER_PAGE);
+  const pageStart  = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedRecords = records.slice(pageStart, pageStart + ITEMS_PER_PAGE);
+  
   if (loading) return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'60vh', gap:'1rem', color:'#64748b' }}>
       <style>{`@keyframes prod-spin { to { transform: rotate(360deg); } }`}</style>
@@ -298,8 +307,36 @@ const Production = () => {
               <StatusSummaryCards records={records}/>
             </Section>
           </div>
+          
+          
           <Section title="Harvest Performance Table" sub="Detailed records per farmer — click column headers to sort">
-            <HarvestPerformanceTable records={records} computeUtil={computeUtil} computeMetrics={computeMetrics}/>
+            <HarvestPerformanceTable records={paginatedRecords} computeUtil={computeUtil} computeMetrics={computeMetrics}/>
+            
+            {/* Ligtas na pagination controls */}
+            {totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem', borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem' }}>
+                <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                  Showing {pageStart + 1}–{Math.min(pageStart + ITEMS_PER_PAGE, records.length)} of {records.length} farmers
+                </span>
+                <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+                    disabled={currentPage === 1}
+                    style={{ padding: '0.35rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', backgroundColor: currentPage === 1 ? '#f9fafb' : 'white', color: currentPage === 1 ? '#9ca3af' : '#374151', fontSize: '0.75rem', fontWeight: 600, cursor: currentPage === 1 ? 'not-allowed' : 'pointer' }}>
+                    Prev
+                  </button>
+                  <span style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button 
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+                    disabled={currentPage === totalPages}
+                    style={{ padding: '0.35rem 0.75rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', backgroundColor: currentPage === totalPages ? '#f9fafb' : 'white', color: currentPage === totalPages ? '#9ca3af' : '#374151', fontSize: '0.75rem', fontWeight: 600, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer' }}>
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </Section>
         </div>
       )}

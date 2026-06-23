@@ -1,9 +1,9 @@
 // ─── SHARED CONSTANTS & UTILITIES FOR PRODUCTION MODULE ───────
 
 export const SEED_CFG = {
-  HYBRID:   { label: 'Hybrid seeds',       color: '#1a4d1a', bg: '#f0fdf4', border: '#bbf7d0', target_kg_ha: 5000 },
-  INBRED:   { label: 'Certified seeds',    color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', target_kg_ha: 4000 },
-  OWN_SEED: { label: 'Farmer saved seeds', color: '#b45309', bg: '#fefce8', border: '#fde68a', target_kg_ha: 3000 },
+  HYBRID:   { label: 'Hybrid',       color: '#1a4d1a', bg: '#f0fdf4', border: '#bbf7d0', target_kg_ha: 5000 },
+  INBRED:   { label: 'Inbred',       color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe', target_kg_ha: 4000 },
+  OWN_SEED: { label: 'Own Seed',     color: '#b45309', bg: '#fefce8', border: '#fde68a', target_kg_ha: 3000 },
 };
 
 export const SEED_KEYS = ['HYBRID', 'INBRED', 'OWN_SEED'];

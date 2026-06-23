@@ -661,33 +661,18 @@ const BrgyBeneficiaries = () => {
         let activeBatch = currentBatch;
         const targetVarietyId = encodeForm.selected_variety_id || eventFinalVarieties[0]?.id || null;
 
-        if (eventIsHybrid) {
-          // Awtomatikong pinagbubukod ang bawat variety sa sarili nitong batch
-          activeBatch = findOpenBatchForVariety(targetVarietyId);
-          if (!activeBatch) {
-            const nb = await createBatch(currentEvent.id, targetVarietyId);
-            activeBatch = nb.data;
-            setCurrentBatch(activeBatch);
-            setBatches(prev => [...prev, activeBatch]);
-            setBatchDetails(prev => ({
-              ...prev,
-              [activeBatch.id]: { ...activeBatch, entries: [] }
-            }));
-            refreshBatchId = activeBatch.id;
-          }
-        } else {
-          const batchFull = (activeBatch?.entry_count || 0) >= 10 || (batchData?.entry_count || 0) >= 10;
-          if (!activeBatch || activeBatch.status !== 'DRAFT' || batchFull) {
-            const nb = await createBatch(currentEvent.id);
-            activeBatch = nb.data;
-            setCurrentBatch(activeBatch);
-            setBatches(prev => [...prev, activeBatch]);
-            setBatchDetails(prev => ({
-              ...prev,
-              [activeBatch.id]: { ...activeBatch, entries: [] }
-            }));
-            refreshBatchId = activeBatch.id;
-          }
+        // Awtomatikong pinagbubukod ang bawat variety sa sarili nitong batch para sa Hybrid at Inbred
+        activeBatch = findOpenBatchForVariety(targetVarietyId);
+        if (!activeBatch) {
+          const nb = await createBatch(currentEvent.id, targetVarietyId);
+          activeBatch = nb.data;
+          setCurrentBatch(activeBatch);
+          setBatches(prev => [...prev, activeBatch]);
+          setBatchDetails(prev => ({
+            ...prev,
+            [activeBatch.id]: { ...activeBatch, entries: [] }
+          }));
+          refreshBatchId = activeBatch.id;
         }
 
         const entryRes = await addEntryToBatch(activeBatch.id, {

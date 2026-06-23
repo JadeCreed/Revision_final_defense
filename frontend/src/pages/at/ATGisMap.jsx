@@ -1059,7 +1059,7 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
               <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
                 {activeTab === 'utilization'
                   ? 'Utilization from harvest records. Targets: Hybrid 5,000 · Certified 4,000 · Farmer saved 3,000 kg/ha'
-                  : 'Crop phase data from AT monitoring visits. Updates in real-time.'}
+                  : 'Crop phase data from AT monitoring visits. '}
               </span>
             </div>
           </div>

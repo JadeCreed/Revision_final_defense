@@ -71,11 +71,14 @@ def _compute_delivered_allocations_for_announcement(delivery):
         if barangay not in brgy_map:
             brgy_map[barangay] = {'total_ha': 0.0, 'farmer_count': 0}
         for entry in batch.entries.all():
-            ha = float(entry.farm_area_ha or 0) if is_hybrid else float(entry.area_planted or 0)
-            if ha <= 0:
-                continue
-            brgy_map[barangay]['total_ha'] += ha
-            brgy_map[barangay]['farmer_count'] += 1
+                # Ligtas na salain ang entry na hindi tumutugma sa variety ng delivery
+                if delivery.variety_id and entry.variety_id and str(entry.variety_id) != str(delivery.variety_id):
+                    continue
+                ha = float(entry.farm_area_ha or 0) if is_hybrid else float(entry.area_planted or 0)
+                if ha <= 0:
+                    continue
+                brgy_map[barangay]['total_ha'] += ha
+                brgy_map[barangay]['farmer_count'] += 1
 
     results = []
     for barangay, data in brgy_map.items():
@@ -397,7 +400,12 @@ def brgy_beneficiary_allocation_view(request):
             if not farmer:
                 continue
 
+            # Ligtas na laktawan ang entry kung may variety_id filter at hindi tumutugma
+            if variety_id and entry.variety_id and str(entry.variety_id) != str(variety_id):
+                continue
+
             if is_hybrid:
+
                 hectares = float(entry.farm_area_ha or 0)
                 seed_type_label = 'Hybrid'
             else:
@@ -501,12 +509,17 @@ def brgy_my_seed_allocation_view(request):
 
         total_ha = 0.0
         farmer_count = 0
+        
 
         for batch in batches:
             for entry in batch.entries.all():
+                # Ligtas na laktawan ang entry na hindi tumutugma sa variety ng delivery
+                if delivery.variety_id and entry.variety_id and str(entry.variety_id) != str(delivery.variety_id):
+                    continue
                 ha = float(entry.farm_area_ha or 0) if is_hybrid else float(entry.area_planted or 0)
                 total_ha += ha
                 farmer_count += 1
+
 
         if total_ha <= 0:
             continue

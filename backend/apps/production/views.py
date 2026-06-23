@@ -1211,6 +1211,9 @@ class BrgyHarvestingFarmersView(APIView):
             # historical view with poll_id provided but poll not found
             return Response({'farmers': []})
 
+        
+
+        
         # Get all HARVESTING records for this barangay in active poll
         harvesting_records = CropMonitoringRecord.objects.filter(
             barangay=barangay,
@@ -1235,8 +1238,27 @@ class BrgyHarvestingFarmersView(APIView):
             seed_key = rec.seed_source  # HYBRID, INBRED, OWN_SEED
             if seed_key and seed_key not in farmer_map[fid]['harvesting_seed_types']:
                 farmer_map[fid]['harvesting_seed_types'].append(seed_key)
-            if seed_key and rec.area_monitored_ha:
-                farmer_map[fid]['area_by_seed_type'][seed_key] = float(rec.area_monitored_ha)
+            
+            if seed_key:
+                # Try matching poll first, then fall back to any establishment record for this farmer+seed
+                est_rec = CropMonitoringRecord.objects.filter(
+                    farmer_id=fid,
+                    crop_phase='ESTABLISHMENT',
+                    seed_source=seed_key,
+                    poll=active_poll
+                ).first()
+
+                if not est_rec:
+                    # Fallback: same season+year but poll field may be null or mismatched
+                    est_rec = CropMonitoringRecord.objects.filter(
+                        farmer_id=fid,
+                        crop_phase='ESTABLISHMENT',
+                        seed_source=seed_key,
+                    ).order_by('-id').first()
+
+                if est_rec and est_rec.area_monitored_ha:
+                    farmer_map[fid]['area_by_seed_type'][seed_key] = float(est_rec.area_monitored_ha)
+
 
         resp = {
             'farmers': list(farmer_map.values()),

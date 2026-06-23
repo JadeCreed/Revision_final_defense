@@ -1476,7 +1476,7 @@ const GisMap = () => {
               <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
                 {activeTab === 'utilization'
                   ? 'Utilization data from BRGY harvest records. Targets: Hybrid 5,000 kg/ha · Certified 4,000 kg/ha · Farmer saved 3,000 kg/ha'
-                  : 'Crop phase data from AT monitoring visits. Updates in real-time.'}
+                  : 'Crop phase data from AT monitoring visits.'}
               </span>
             </div>
           </div>

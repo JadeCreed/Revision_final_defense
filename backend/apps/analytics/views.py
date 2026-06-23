@@ -11,6 +11,8 @@ from apps.crop_monitoring.models import CropMonitoringRecord
 from apps.production.models import HarvestRecord
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import Poll
+from apps.accounts.models import User ,FarmerProfile  
+
 
 PHASE_ORDER = ['DISTRIBUTION', 'ESTABLISHMENT', 'TILLERING', 'FLOWERING', 'RIPENING', 'HARVESTING']
 PHASE_DISPLAY = {
@@ -131,16 +133,27 @@ class AdminDashboardAnalyticsView(APIView):
         distributed_ids = set(dist_qs.values_list('farmer_id', flat=True))
         monitored_ids   = set(r.farmer_id for r in latest_records)
         harvested_ids   = set(r.farmer_id for r in harvest_list)
-        all_farmer_ids  = monitored_ids | distributed_ids
-        total_farmers   = len(all_farmer_ids)
+        total_farmers   = User.objects.filter(role='FARMER', status='APPROVED', is_active=True).count()
 
-        # Area Covered = harvest records (consistent with Production menu)
-        total_area        = sum(float(r.harvest_area_ha or 0) for r in harvest_list)
-        barangays_covered = len(set(
-            getattr(r.farmer, 'barangay', None) or r.barangay
-            for r in harvest_list
-            if (getattr(r.farmer, 'barangay', None) or r.barangay)
-        ))
+        
+        # Kunin ang lahat ng approved at active farmers sa system
+        approved_farmers = User.objects.filter(
+            role='FARMER',
+            status='APPROVED',
+            is_active=True
+        )
+
+        # Kwentahin ang kabuuang hektarya mula sa profiles ng mga approved farmers
+        total_hectares_all = FarmerProfile.objects.filter(
+            user__in=approved_farmers
+        ).aggregate(total=Sum('hectares'))['total'] or 0
+        total_area = float(total_hectares_all)
+
+        # Bilangin ang mga natatanging barangay ng mga approved farmers
+        barangays_covered = approved_farmers.exclude(
+            Q(barangay='') | Q(barangay__isnull=True)
+        ).values_list('barangay', flat=True).distinct().count()
+
 
         # ── KPI — production ──────────────────────────────────
         total_dry_kg = sum(dry_weight_kg(r) for r in harvest_list)
@@ -171,16 +184,48 @@ class AdminDashboardAnalyticsView(APIView):
         }
 
         # ── Farm Health Summary (normal/delayed/damaged) ──────
-        normal_count  = len(set(r.farmer_id for r in latest_records if r.phase_status == 'NORMAL'))
-        delayed_count = len(delayed_farmer_ids)
-        damaged_count = len(damaged_farmer_ids)
+        # normal_count  = len(set(r.farmer_id for r in latest_records if r.phase_status == 'NORMAL'))
+        # delayed_count = len(delayed_farmer_ids)
+        # damaged_count = len(damaged_farmer_ids)
+        # farm_health   = {
+        #     'normal':             normal_count,
+        #     'delayed':            delayed_count,
+        #     'damaged':            damaged_count,
+        #     'monitoring_records': normal_count + delayed_count + damaged_count,
+        #     'registered_farmers': total_farmers,
+        # }
+
+
+        # ── Farm Health Summary (normal/delayed/damaged) ──────
+        # I-grupo ang status kada farmer gamit ang Worst-Case Priority (DAMAGED > DELAYED > NORMAL)
+        farmer_status = {}
+        for r in latest_records:
+            fid = r.farmer_id
+            st  = r.phase_status or 'NORMAL'
+            if fid not in farmer_status:
+                farmer_status[fid] = st
+            else:
+                prev = farmer_status[fid]
+                if st == 'DAMAGED' or prev == 'DAMAGED':
+                    farmer_status[fid] = 'DAMAGED'
+                elif st == 'DELAYED' or prev == 'DELAYED':
+                    farmer_status[fid] = 'DELAYED'
+
+        normal_count  = sum(1 for status in farmer_status.values() if status == 'NORMAL')
+        delayed_count = sum(1 for status in farmer_status.values() if status == 'DELAYED')
+        damaged_count = sum(1 for status in farmer_status.values() if status == 'DAMAGED')
+
+        # Ang kabuuang natatanging magsasaka na may monitoring record ngayong season (eksaktong 9)
+        unique_monitored_farmers = len(farmer_status)
+
         farm_health   = {
             'normal':             normal_count,
             'delayed':            delayed_count,
             'damaged':            damaged_count,
-            'monitoring_records': normal_count + delayed_count + damaged_count,
+            'monitoring_records': unique_monitored_farmers,
             'registered_farmers': total_farmers,
         }
+
 
         # ── Top Damage Causes ─────────────────────────────────
         damaged_records = [r for r in latest_records if r.phase_status == 'DAMAGED' and r.damage_cause]
@@ -273,6 +318,19 @@ class AdminDashboardAnalyticsView(APIView):
                 'delay_days':   r.delay_days or 0,
             })
 
+        # Isama ang critical yield farmers sa listahan bago ibigay ang response
+        for r in harvest_list:
+            if r.farmer_id in critical_farmer_ids:
+                attention_list.append({
+                    'farmer_name':  r.farmer.get_full_name(),
+                    'barangay':     getattr(r.farmer, 'barangay', '') or r.barangay or '',
+                    'seed_label':   SEED_LABELS.get(r.seed_source, r.seed_source),
+                    'phase':        'Harvesting (Yield)',
+                    'status':       'CRITICAL',
+                    'damage_cause': 'Critical Yield (<50%)',
+                    'delay_days':   0,
+                })
+
         alerts = {
             'critical_yield_count': len(critical_farmer_ids),
             'delayed_count':        delayed_count,
@@ -280,6 +338,7 @@ class AdminDashboardAnalyticsView(APIView):
             'attention_required':   len(attention_ids),
             'attention_list':       attention_list[:10],
         }
+
 
         # ── Executive Insights ────────────────────────────────
         phase_counts   = Counter(r.crop_phase for r in latest_records)

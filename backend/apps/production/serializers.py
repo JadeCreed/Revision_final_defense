@@ -75,6 +75,16 @@ class HarvestRecordSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         seed_source = attrs.get('seed_source')
         area = attrs.get('harvest_area_ha')
+        bags = attrs.get('harvest_bags')
+
+        # Ligtas na Biological Ceiling (Haharangin kapag lagpas 240 bags/ha o 12 MT/ha)
+        if area and area > 0 and bags:
+            max_bags_allowed = float(area) * 240.0
+            if float(bags) > max_bags_allowed:
+                raise serializers.ValidationError({
+                    'harvest_bags': f'Impossible harvest amount. For {float(area):g} ha, the maximum limit is {int(max_bags_allowed)} bags (12 MT/ha).'
+                })
+
         if seed_source in ['HYBRID', 'INBRED'] and area and area > 0:
             received = attrs.get('seed_bags_received')
             if received is not None and received < 0:
