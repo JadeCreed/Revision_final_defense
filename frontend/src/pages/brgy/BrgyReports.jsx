@@ -1,8 +1,10 @@
 // src/pages/brgy/BrgyReports.jsx
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import html2canvas from 'html2canvas';
+
 import {
   BarChart3, Users, Layers, TrendingUp, Target,
-  Download, ChevronDown, X, Eye, Loader2,
+  Download, ChevronDown, X, Loader2,
   AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import {
@@ -142,11 +144,19 @@ const BrgyReports = () => {
   const [polls,          setPolls]          = useState([]);
   const [selectedPollId, setSelectedPollId] = useState(null);
   const [reportData,     setReportData]     = useState(null);
+  const [exportReportData, setExportReportData] = useState(null); // ── BAGONG STATE PARA SA EXPORT ISOLATION ──
   const [loading,        setLoading]        = useState(true);
   const [activeTab,      setActiveTab]      = useState('overview');
   const [showExport,     setShowExport]     = useState(false);
   const [exporting,      setExporting]      = useState(false);
   const [toast,          setToast]          = useState(null);
+
+  // ── Chart refs para sa html2canvas offscreen capture ──
+  const prodChartRef      = useRef(null);
+  const achieveChartRef   = useRef(null);
+  const harvestDonutRef   = useRef(null);
+  const phaseDonutRef     = useRef(null);
+  const phaseBreakRef     = useRef(null);
 
   const pushToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -185,7 +195,7 @@ const BrgyReports = () => {
 
   useEffect(() => { loadReport(); }, [loadReport]);
 
-  // Season / Year picker for main view (not export)
+  // Season / Year picker for main view
   const selectedPoll   = polls.find(p => p.poll_id === selectedPollId);
   const viewSeasons    = [...new Set(polls.map(p => p.season))];
   const viewYears      = [...new Set(polls.filter(p => p.season === selectedPoll?.season).map(p => p.year))].sort((a, b) => b - a);
@@ -203,16 +213,64 @@ const BrgyReports = () => {
   const handleExport = async (pollId) => {
     setExporting(true);
     try {
+      // 1. I-fetch muna ang JSON data para sa target season na ie-export
+      const res = await API.get('/production/brgy-report/', { params: { poll_id: pollId } });
+      setExportReportData(res.data); // Itabi sa isolated export state
+
+      // 2. Bigyan ng sapat na oras ang React offscreen container na ma-update ang state at Recharts
+      await new Promise(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 800);
+          });
+        });
+      });
+
+      const captureChart = async (ref) => {
+        if (!ref?.current) return '';
+        try {
+          const canvas = await html2canvas(ref.current, {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            allowTaint: true,
+          });
+          return canvas.toDataURL('image/png').split(',')[1];
+        } catch (err) {
+          console.error('Chart capture failed:', err);
+          return '';
+        }
+      };
+
+      // 3. Kumuha ng base64 screenshots mula sa offscreen references (na may tamang isolated data na ngayon)
+      const prodImg       = await captureChart(prodChartRef);
+      const achieveImg    = await captureChart(achieveChartRef);
+      const harvestImg    = await captureChart(harvestDonutRef);
+      const phaseDonutImg = await captureChart(phaseDonutRef);
+      const phaseBreakImg = await captureChart(phaseBreakRef);
+
       const response = await API.post(
         '/production/brgy-report/pdf/',
-        { poll_id: pollId, charts: {} },
+        {
+          poll_id: pollId,
+          charts: {
+            production:    prodImg,
+            yield_achieve: achieveImg,
+            harvest_donut: harvestImg,
+            phase_donut:   phaseDonutImg,
+            phase_break:   phaseBreakImg,
+          },
+        },
         { responseType: 'blob' }
       );
 
-      // Check if response is JSON error (not PDF)
+      // 4. Clean up export data pagkatapos mag-export
+      setExportReportData(null);
+
       const contentType = response.headers?.['content-type'] || '';
       if (contentType.includes('application/json')) {
-        const text = await response.data.text();
+        const text  = await response.data.text();
         const payload = JSON.parse(text);
         console.error('PDF error detail:', payload);
         pushToast(payload.error || 'PDF export failed.', 'error');
@@ -230,20 +288,16 @@ const BrgyReports = () => {
       setShowExport(false);
       pushToast('PDF exported successfully!');
     } catch (err) {
-      // Try to read the blob as text to get the error
+      setExportReportData(null); // Clean up sa catch block
       if (err?.response?.data instanceof Blob) {
         try {
-          const text = await err.response.data.text();
+          const text  = await err.response.data.text();
           const payload = JSON.parse(text);
-          console.error('PDF backend error:', payload);
-          console.error('Traceback:', payload.traceback);
           pushToast(payload.error || 'PDF export failed.', 'error');
         } catch {
-          console.error('Raw error blob:', err);
           pushToast('PDF export failed.', 'error');
         }
       } else {
-        console.error('PDF export error:', err);
         pushToast(err?.message || 'PDF export failed.', 'error');
       }
     } finally {
@@ -257,30 +311,42 @@ const BrgyReports = () => {
   const harvestPerf = reportData?.harvest_performance || [];
   const cropPhase   = reportData?.crop_phase_summary || {};
   const insights    = reportData?.insights || [];
-  const pollInfo    = reportData?.poll_info || {};
+  const pollInfo    = reportData?.poll_info || {}; // ── INILAGAY muli ang nawawalang pollInfo declaration ──
   const barangay    = reportData?.barangay || '';
   const seasonLabel = pollInfo.season_display ? `${pollInfo.season_display} ${pollInfo.year}` : 'All Seasons';
 
-  // Chart data
-  const prodChartData = bySeed.filter(s => s.farmer_count > 0).map(s => ({
+  // ── Derived data para sa Offscreen Charts (Awtomatikong lumilipat sa exportReportData kapag nag-e-export) ──
+  const activeReportData = exportReportData || reportData || {};
+  const activeBySeed      = activeReportData.by_seed_type || [];
+  const activeCropPhase   = activeReportData.crop_phase_summary || {};
+
+  
+  
+  
+  // Chart data (Gamit ang activeBySeed at activeCropPhase para sa tamang synchronization)
+  
+  
+  const prodChartData = activeBySeed.filter(s => s.farmer_count > 0).map(s => ({
     name: SEED_CFG[s.seed_source]?.label || s.label,
     mt: s.total_mt,
     color: SEED_CFG[s.seed_source]?.color || '#64748b',
   }));
-  const achieveChartData = bySeed.filter(s => s.farmer_count > 0 && s.avg_util_pct != null).map(s => ({
+  const achieveChartData = activeBySeed.filter(s => s.farmer_count > 0 && s.avg_util_pct != null).map(s => ({
     name: SEED_CFG[s.seed_source]?.label || s.label,
     pct: s.avg_util_pct,
     color: SEED_CFG[s.seed_source]?.color || '#64748b',
   }));
-  const phaseDonutData = Object.entries(cropPhase.phase_counts || {}).map(([ph, cnt]) => ({
+  const phaseDonutData = Object.entries(activeCropPhase.phase_counts || {}).map(([ph, cnt]) => ({
     name: PHASE_DISPLAY[ph] || ph,
     value: cnt,
     color: PHASE_COLORS[ph] || '#64748b',
   }));
   const harvestDonutData = [
-    { name: 'Expected', value: bySeed.reduce((s, b) => s + (b.expected_kg || 0), 0), color: '#94a3b8' },
-    { name: 'Actual',   value: bySeed.reduce((s, b) => s + (b.actual_kg || 0), 0),   color: '#1a4d1a' },
+    { name: 'Expected', value: activeBySeed.reduce((s, b) => s + (b.expected_kg || 0), 0), color: '#94a3b8' },
+    { name: 'Actual',   value: activeBySeed.reduce((s, b) => s + (b.actual_kg || 0), 0),   color: '#1a4d1a' },
   ].filter(d => d.value > 0);
+
+
 
   const SELECT = { padding: '0.4rem 1.75rem 0.4rem 0.7rem', border: '1.5px solid #e5e7eb', borderRadius: '0.625rem', fontSize: '0.78rem', outline: 'none', backgroundColor: 'white', appearance: 'none', cursor: 'pointer' };
 
@@ -314,6 +380,79 @@ const BrgyReports = () => {
           barangay={barangay}
         />
       )}
+
+      {/* ── HIGHLY SECURE OFFSCREEN PRINT CONTAINER FOR EXPORT ── */}
+      {/* Naka-scope ito offscreen at opacity: 0.01 pero pasok sa layout flow para makakuha ng tamang dimensional width measurement ang Recharts */}
+      {/* ── HIGHLY SECURE OFFSCREEN PRINT CONTAINER FOR EXPORT ── */}
+      {/* Naka-scope ito offscreen at opacity: 0.01 pero pasok sa layout flow para makakuha ng tamang dimensional width measurement ang Recharts */}
+      <div style={{ position: 'fixed', left: 0, top: 0, width: '600px', background: '#ffffff', zIndex: -1, opacity: 0.01, pointerEvents: 'none' }}>
+        <div ref={prodChartRef} style={{ padding: '20px' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Production by Seed Type (MT)</h4>
+          <BarChart width={560} height={200} data={prodChartData} barSize={40} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
+            <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} tickFormatter={v => `${v} MT`} width={45} />
+            <Bar dataKey="mt" isAnimationActive={false}>
+              {prodChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Bar>
+          </BarChart>
+        </div>
+
+        <div ref={achieveChartRef} style={{ padding: '20px' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Yield Achievement by Seed Type (%)</h4>
+          <BarChart width={560} height={200} data={achieveChartData} barSize={40} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#64748b' }} />
+            <YAxis tick={{ fontSize: 9, fill: '#94a3b8' }} tickFormatter={v => `${v}%`} width={40} />
+            <Bar dataKey="pct" isAnimationActive={false}>
+              {achieveChartData.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Bar>
+          </BarChart>
+        </div>
+
+        <div ref={harvestDonutRef} style={{ padding: '20px' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Expected vs Actual Harvest Comparison</h4>
+          <PieChart width={560} height={200}>
+            <Pie data={harvestDonutData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={4} dataKey="value" isAnimationActive={false}>
+              {harvestDonutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Pie>
+            <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+          </PieChart>
+        </div>
+
+        <div ref={phaseDonutRef} style={{ padding: '20px' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Phase Distribution</h4>
+          <PieChart width={560} height={200}>
+            <Pie data={phaseDonutData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value" isAnimationActive={false}>
+              {phaseDonutData.map((d, i) => <Cell key={i} fill={d.color} />)}
+            </Pie>
+            <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: '9px' }} />
+          </PieChart>
+        </div>
+
+        <div ref={phaseBreakRef} style={{ padding: '20px', width: '560px' }}>
+          <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Phase Breakdown</h4>
+          {Object.entries(activeCropPhase.phase_counts || {}).map(([ph, cnt]) => {
+            const total = activeCropPhase.total_monitored || 1;
+            const pct   = Math.round(cnt / total * 100);
+            const color = PHASE_COLORS[ph] || '#64748b';
+            return (
+              <div key={ph} style={{ marginBottom: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2px', fontSize: '11px' }}>
+                  <span style={{ fontWeight: 600, color: '#374151' }}>{PHASE_DISPLAY[ph] || ph}</span>
+                  <span style={{ fontWeight: 700, color: '#0f172a' }}>{cnt} ({pct}%)</span>
+                </div>
+                <div style={{ height: '6px', backgroundColor: '#f1f5f9', borderRadius: '3px' }}>
+                  <div style={{ height: '100%', width: `${Math.max(2, pct)}%`, backgroundColor: color, borderRadius: '3px' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+
+      
 
       {/* ── Header ─────────────────────────────────────────── */}
       <div style={{ padding: '1.25rem 1.25rem 0' }}>
