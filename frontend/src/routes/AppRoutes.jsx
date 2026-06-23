@@ -75,6 +75,10 @@ import AnnouncementCard     from '../components/announcements/AnnouncementCard';
 import UserLayout from '../layouts/UserLayout';
 
 
+
+import ReportsAnalytics from '../pages/admin/ReportsAnalytics';
+
+
 const AppRoutes = () => (
   <Routes> 
 
@@ -104,7 +108,12 @@ const AppRoutes = () => (
           <Route path="/admin/crop-phase"     element={<CropPhase />} />
           <Route path="/admin/production"     element={<Production />} />
           <Route path="/admin/gis"            element={<GisMap />} />
-          <Route path="/admin/reports"        element={<Reports />} />
+          
+          <Route path="/admin/reports"        element={<Navigate to="/admin/reports/masterlist" replace />} />
+          <Route path="/admin/reports/masterlist" element={<Reports />} />
+          <Route path="/admin/reports/analytics"  element={<ReportsAnalytics />} />
+
+
           <Route path="/admin/settings"       element={<Settings />} />
           <Route path="/admin/users"          element={<Navigate to="/admin/users/farmer-requests" replace />} />
           <Route path="/admin/users/farmers"      element={<FarmerRecords />} />

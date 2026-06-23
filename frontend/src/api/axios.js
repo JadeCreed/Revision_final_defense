@@ -223,6 +223,16 @@ export const getBrgyScheduleNotifications = () => API.get('/inventory/schedule-n
 export const brgyConfirmAllocation    = (data)       => API.post('/inventory/confirm-allocation/', data);
 
 // ── REPORTS ──
+
+
+// ── MONTHLY ANALYTICS ──
+export const getMonthlyAnalytics = (params) =>
+  API.get('/analytics/monthly/', { params });
+
+export const downloadMonthlyAnalyticsPDF = (data) =>
+  API.post('/analytics/monthly/pdf/', data, { responseType: 'blob' });
+
+
 // ── REPORTS ── (replace existing report calls)
 export const getReportFilterOptions = () =>
   API.get('/reports/filter-options/');

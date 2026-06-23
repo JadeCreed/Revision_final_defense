@@ -14,7 +14,7 @@ class CookieJWTAuthentication(JWTAuthentication):
     """
 
     def authenticate(self, request):
-        # 🍪 First, try to authenticate from the httpOnly cookie
+        #  First, try to authenticate from the httpOnly cookie
         cookie_token = request.COOKIES.get('access_token')
         if cookie_token:
             validated_token = self.get_validated_token(cookie_token)

@@ -206,7 +206,15 @@ const Sidebar = () => {
                   <span style={{ minWidth: 20, display: 'flex', alignItems: 'center', flexShrink: 0 }}>
                     {renderIcon(item.icon, isActive)}
                   </span>
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                  <span style={{ 
+                      flex: 1, 
+                      whiteSpace: 'normal', 
+                      lineHeight: '1.25',
+                      paddingRight: '0.5rem',
+                      wordBreak: 'break-word'
+                    }}>
+                      {item.label}
+                    </span>
                   {totalBadge > 0 && <span style={badgePill}>{totalBadge}</span>}
                   <ChevronDown size={14} color="rgba(255,255,255,0.5)"
                     style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />

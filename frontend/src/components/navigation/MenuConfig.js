@@ -26,7 +26,20 @@ export const MENU_CONFIG = {
         { label: 'Archive',        path: '/admin/users/archive', icon: Archive },
       ],
     },
-    { label: 'Reports',  path: '/admin/reports',  icon: ClipboardList },
+
+
+
+    {
+      label: 'Reports',
+      icon:  ClipboardList,
+      hasChildren: true,
+      children: [
+        { label: 'Masterlist', path: '/admin/reports/masterlist', icon: FileText },
+        { label: 'Analytics',  path: '/admin/reports/analytics',  icon: BarChart3 },
+      ],
+    },
+
+    
     { label: 'Settings', path: '/admin/settings', icon: Settings      },
   ],
 
