@@ -1129,15 +1129,49 @@ export default function SeedInventory() {
           </div>
 
           {(() => {
+
+            // const allEntries = schedules.flatMap(s => s.entries || []);
+
+            // // Filter to current poll scope only (Poll-Scoped Data Lifecycle)
+            // const currentSeason = summary?.current_season;
+            // const currentYear   = summary?.current_year;
+            // const scopedEntries = (currentSeason && currentYear)
+            //   ? allEntries.filter(e =>
+            //       e.season === currentSeason &&
+            //       String(e.year) === String(currentYear)
+            //     )
+            //   : allEntries;
+              
+            // const totalScheduled = allEntries.length;
+            // const confirmedEntries = allEntries.filter(e => e.status === 'DELIVERED');
+            // const pendingEntries = allEntries.filter(e => e.status !== 'DELIVERED');
+            // const totalDeliveriesLabel = totalScheduled > 0 ? `${confirmedEntries.length}/${totalScheduled}` : '0';
+            // const bagsReceived = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
+            // const bagsAllocated = summary?.total_bags_allocated ?? 0;
+            // const pendingCount = pendingEntries.length;
+            // const confirmedCount = confirmedEntries.length;
+
             const allEntries = schedules.flatMap(s => s.entries || []);
-            const totalScheduled = allEntries.length;
-            const confirmedEntries = allEntries.filter(e => e.status === 'DELIVERED');
-            const pendingEntries = allEntries.filter(e => e.status !== 'DELIVERED');
+
+            // Filter to current poll scope only (Poll-Scoped Data Lifecycle)
+            const currentSeason = summary?.current_season;
+            const currentYear   = summary?.current_year;
+            const scopedEntries = (currentSeason && currentYear)
+              ? allEntries.filter(e =>
+                  e.season === currentSeason &&
+                  String(e.year) === String(currentYear)
+                )
+              : allEntries;
+
+            const totalScheduled   = scopedEntries.length;
+            const confirmedEntries = scopedEntries.filter(e => e.status === 'DELIVERED');
+            const pendingEntries   = scopedEntries.filter(e => e.status !== 'DELIVERED');
             const totalDeliveriesLabel = totalScheduled > 0 ? `${confirmedEntries.length}/${totalScheduled}` : '0';
-            const bagsReceived = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
-            const bagsAllocated = summary?.total_bags_allocated ?? 0;
-            const pendingCount = pendingEntries.length;
+            const bagsReceived   = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
+            const bagsAllocated  = summary?.total_bags_allocated ?? 0;
+            const pendingCount   = pendingEntries.length;
             const confirmedCount = confirmedEntries.length;
+
 
             const tiles = [
               { label: 'Total Deliveries',  value: totalDeliveriesLabel, Icon: Truck,       color: '#1e40af', bg: '#eff6ff' },

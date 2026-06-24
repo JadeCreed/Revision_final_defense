@@ -278,6 +278,8 @@ def inventory_summary_view(request):
         'total_bags_remaining':  remaining,
         'pending_confirmations': pending_conf,
         'confirmed_pickups':     confirmed,
+        'current_season':        poll.season if poll else None,
+        'current_year':          poll.year   if poll else None,
     })
 
 
