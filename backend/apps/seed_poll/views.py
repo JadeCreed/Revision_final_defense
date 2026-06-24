@@ -414,10 +414,20 @@ class FarmerActivePollView(APIView):
 
         # Auto-close polls whose end_date has passed
         # This handles the automatic closure without a scheduled task
+        # Poll.objects.filter(
+        #     status='OPEN',
+        #     end_date__lte=timezone.now()
+        # ).update(status='CLOSED')
+        # Auto-close polls whose end_date has passed
+# ONLY for polls from the CURRENT year — never auto-close past demo/historical polls
+        current_year = timezone.now().year
         Poll.objects.filter(
             status='OPEN',
-            end_date__lte=timezone.now()
+            end_date__lte=timezone.now(),
+            year=current_year
         ).update(status='CLOSED')
+
+
 
         # Get most recent poll (open, locked, or recently closed)
         poll = Poll.objects.order_by('-created_at').first()

@@ -13,6 +13,7 @@ from django.utils   import timezone
 from django.db.models import Count
 from .models import SeedType, SeedVariety, Poll, PollVote
 from django.utils import timezone as tz
+from datetime import datetime
 
 class SeedVarietySerializer(serializers.ModelSerializer):
     """
@@ -99,14 +100,37 @@ class PollSerializer(serializers.ModelSerializer):
         return obj.is_accepting_votes()
 
     def validate_end_date(self, value):
-        
         if self.instance is None:
-            # Make value timezone-aware if browser sent a naive datetime
+            # Make timezone-aware if naive
             if tz.is_naive(value):
                 value = tz.make_aware(value)
-            if value <= tz.now():
-                raise serializers.ValidationError("End date must be in the future.")
+
+            current_year  = tz.now().year
+            selected_year = value.year
+
+            if selected_year == current_year:
+                # Current year — must be in the future
+                if value <= tz.now():
+                    raise serializers.ValidationError(
+                        "End date must be in the future for the current year."
+                    )
+            elif selected_year > current_year:
+                # Future year — any date is fine, no validation needed
+                pass
+            else:
+                # Past year — end date just needs to be within that year
+                year_start = tz.make_aware(
+                    datetime(selected_year, 1, 1, 0, 0, 0)
+                )
+                year_end = tz.make_aware(
+                    datetime(selected_year, 12, 31, 23, 59, 59)
+                )
+                if value < year_start or value > year_end:
+                    raise serializers.ValidationError(
+                        f"End date must be within {selected_year}."
+                    )
         return value
+    
 
     def validate_year(self, value):
         current_year = timezone.now().year

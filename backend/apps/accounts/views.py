@@ -484,13 +484,30 @@ class AdminFarmerMasterRecordView(ListAPIView):
 
     def get(self, request, *args, **kwargs):
         search = (request.query_params.get('search') or '').strip()
-        records = FarmerMasterRecord.objects.all().order_by('id')
+        barangay = (request.query_params.get('barangay') or '').strip()
+        ordering = (request.query_params.get('ordering') or 'last_name').strip()
+
+        ALLOWED_REGISTRY_ORDERING = [
+            'last_name', '-last_name',
+            'barangay', '-barangay',
+            'rsbsa_number', '-rsbsa_number',
+        ]
+        if ordering not in ALLOWED_REGISTRY_ORDERING:
+            ordering = 'last_name'
+
+        records = FarmerMasterRecord.objects.all().order_by(ordering)
+
         if search:
             records = records.filter(
                 Q(rsbsa_number__icontains=search) |
                 Q(first_name__icontains=search) |
                 Q(last_name__icontains=search)
             )
+
+        if barangay:
+            records = records.filter(barangay=barangay)
+
+            
 
         page = self.paginate_queryset(records)
         if page is not None:

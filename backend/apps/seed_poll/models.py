@@ -130,12 +130,13 @@ class Poll(models.Model):
     def is_accepting_votes(self):
         """
         Returns True if poll is currently accepting votes.
-        Checks both status AND end_date.
-        Called before processing any vote submission.
+        For current-year polls: checks status AND end_date.
+        For past-year polls (demo/historical): only checks status.
         """
         if self.status != 'OPEN':
             return False
-        if timezone.now() > self.end_date:
+        current_year = timezone.now().year
+        if self.year == current_year and timezone.now() > self.end_date:
             return False
         return True
 

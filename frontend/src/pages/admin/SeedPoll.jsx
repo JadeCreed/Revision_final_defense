@@ -102,6 +102,32 @@ const Toast = ({ toast }) => {
   );
 };
 
+const ConfirmModal = ({ modal, onClose }) => {
+  if (!modal) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div style={{ width: '100%', maxWidth: '400px', backgroundColor: 'white', borderRadius: '1rem', padding: '1.5rem', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', animation: 'modalIn 0.2s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '52px', height: '52px', borderRadius: '999px', backgroundColor: '#fef2f2', margin: '0 auto 0.875rem' }}>
+          <AlertCircle size={24} color="#dc2626" />
+        </div>
+        <p style={{ textAlign: 'center', fontWeight: 600, color: '#111827', fontSize: '0.95rem', margin: '0 0 1.25rem', lineHeight: 1.5 }}>
+          {modal.message}
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={onClose} style={{ flex: 1, padding: '0.75rem', border: '1.5px solid #d1d5db', borderRadius: '0.75rem', backgroundColor: 'white', cursor: 'pointer', fontWeight: 600, fontSize: '0.875rem', color: '#374151' }}>
+            Cancel
+          </button>
+          <button
+            onClick={() => { modal.onConfirm(); onClose(); }}
+            style={{ flex: 1, padding: '0.75rem', backgroundColor: modal.confirmColor || '#dc2626', color: 'white', border: 'none', borderRadius: '0.75rem', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem' }}>
+            {modal.confirmLabel || 'Confirm'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const SeedPoll = () => {
   const [activeTab, setActiveTab] = useState('poll');
 
@@ -122,6 +148,8 @@ const SeedPoll = () => {
   const [deletingPollId, setDeletingPollId] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [closeConfirmId, setCloseConfirmId] = useState(null);
+  const [confirmModal, setConfirmModal] = useState(null);
+
 
   const [form, setForm] = useState({ title: '', season: getDetectedSeason(), year: new Date().getFullYear(), end_date: '' });
   const [formErrors, setFormErrors]     = useState({});
@@ -278,11 +306,33 @@ const SeedPoll = () => {
 
   const validatePollForm = () => {
     const errs = {};
-    if (!form.title.trim()) errs.title    = 'Title is required';
-    if (!form.end_date)     errs.end_date = 'End date is required';
-    if (!form.year)         errs.year     = 'Year is required';
+    if (!form.title.trim()) errs.title = 'Title is required';
+    if (!form.year)         errs.year  = 'Year is required';
+
+    if (!form.end_date) {
+        errs.end_date = 'End date is required';
+    } else {
+        const selectedDate = new Date(form.end_date);
+        const currentYear  = new Date().getFullYear();
+        const selectedYear = Number(form.year);
+
+        if (selectedYear < currentYear) {
+            // Past year — end date just needs to be within that year
+            const yearStart = new Date(`${selectedYear}-01-01T00:00:00`);
+            const yearEnd   = new Date(`${selectedYear}-12-31T23:59:59`);
+            if (selectedDate < yearStart || selectedDate > yearEnd) {
+                errs.end_date = `End date must be within ${selectedYear}.`;
+            }
+        } else if (selectedYear === currentYear) {
+            // Current year — must still be in the future
+            if (selectedDate <= new Date()) {
+                errs.end_date = 'End date must be in the future for the current year.';
+            }
+        }
+        // Future year — any date within that year is acceptable
+    }
     return errs;
-  };
+};
 
   const handleCreatePoll = async () => {
     const errs = validatePollForm();
@@ -387,16 +437,22 @@ const SeedPoll = () => {
     }
   };
 
-  const handleDeleteType = async (id, name) => {
-    if (!window.confirm(`Remove type "${name}"? All varieties under it will also be removed.`)) return;
-    try {
-      await deleteSeedType(id);
-      fetchSeedTypes();
-      showToast('success', `Type "${name}" removed.`);
-    } catch {
-      setTypeError('Failed to remove seed type.');
-    }
-  };
+  const handleDeleteType = (id, name) => {
+    setConfirmModal({
+      message: `Remove type "${name}"? All varieties under it will also be removed.`,
+      confirmLabel: 'Remove',
+      confirmColor: '#dc2626',
+      onConfirm: async () => {
+        try {
+          await deleteSeedType(id);
+          fetchSeedTypes();
+          showToast('success', `Type "${name}" removed.`);
+        } catch {
+          showToast('error', `Failed to remove type "${name}".`);
+        }
+      },
+    });
+};
 
   // ── VARIETY HANDLERS ──
   const handleAddVariety = async () => {
@@ -422,16 +478,22 @@ const SeedPoll = () => {
     }
   };
 
-  const handleDeleteVariety = async (id, name) => {
-    if (!window.confirm(`Remove "${name}"? If it has votes it will be deactivated instead.`)) return;
-    try {
-      await deleteVariety(id);
-      fetchSeedTypes();
-      showToast('success', `Variety "${name}" removed.`);
-    } catch {
-      setTypeError('Failed to remove variety.');
-    }
-  };
+  const handleDeleteVariety = (id, name) => {
+    setConfirmModal({
+      message: `Remove variety "${name}"? If it has votes, it will be deactivated instead.`,
+      confirmLabel: 'Remove',
+      confirmColor: '#dc2626',
+      onConfirm: async () => {
+        try {
+          await deleteVariety(id);
+          fetchSeedTypes();
+          showToast('success', `Variety "${name}" removed.`);
+        } catch {
+          showToast('error', `Failed to remove "${name}".`);
+        }
+      },
+    });
+};
 
   // ── FINALIZE SEEDS — no source toggle, auto-assigned ──
   const handleOpenFinalize = () => {
@@ -1101,13 +1163,52 @@ const SeedPoll = () => {
               </div>
               <div>
                 <label style={labelStyle}>Year *</label>
-                <input type="number" value={form.year} onChange={e => handleField('year', Number(e.target.value))} min={new Date().getFullYear()} max={new Date().getFullYear() + 5} style={inputStyle(!!formErrors.year)} />
+                
+                <input
+                    type="number"
+                    value={form.year}
+                    onChange={e => handleField('year', Number(e.target.value))}
+                    min={2020}
+                    max={new Date().getFullYear() + 5}
+                    style={inputStyle(!!formErrors.year)}
+                />
+
                 {formErrors.year && <span style={{ fontSize: '0.72rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>{formErrors.year}</span>}
               </div>
             </div>
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={labelStyle}>End Date & Time * <span style={{ fontWeight: 400, color: '#9ca3af', fontSize: '0.72rem' }}>(auto-closes after this)</span></label>
-              <input type="datetime-local" value={form.end_date} onChange={e => handleField('end_date', e.target.value)} style={inputStyle(!!formErrors.end_date)} />
+              
+              <input
+                  type="datetime-local"
+                  value={form.end_date}
+                  min={(() => {
+                      const currentYear  = new Date().getFullYear();
+                      const selectedYear = Number(form.year);
+                      if (selectedYear === currentYear) {
+                          // Current year — minimum is right now
+                          const now = new Date();
+                          now.setSeconds(0, 0);
+                          return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+                              .toISOString()
+                              .slice(0, 16);
+                      }
+                      // Past or future year — minimum is Jan 1 of that year
+                      return `${selectedYear}-01-01T00:00`;
+                  })()}
+                  max={`${Number(form.year)}-12-31T23:59`}
+                  onChange={e => handleField('end_date', e.target.value)}
+                  style={inputStyle(!!formErrors.end_date)}
+              />
+              {formErrors.end_date && (
+                  <span style={{ fontSize: '0.72rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>
+                      {formErrors.end_date}
+                  </span>
+              )}
+
+
+
+
               {formErrors.end_date && <span style={{ fontSize: '0.72rem', color: '#dc2626', display: 'block', marginTop: '0.2rem' }}>{formErrors.end_date}</span>}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
@@ -1203,6 +1304,9 @@ const SeedPoll = () => {
           </div>
         </div>
       )}
+
+      {/* ══════════════ VARIETY / TYPE CONFIRM MODAL ══════════════ */}
+      <ConfirmModal modal={confirmModal} onClose={() => setConfirmModal(null)} />
 
       {/* ══════════════ DELETE POLL CONFIRM MODAL ══════════════ */}
       {deleteConfirmId && (

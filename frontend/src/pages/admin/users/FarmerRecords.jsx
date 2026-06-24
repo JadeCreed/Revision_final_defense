@@ -278,7 +278,7 @@ const FarmerAccountsTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Details', '110px'],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
+                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
                   <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
               </tr>
@@ -302,12 +302,13 @@ const FarmerAccountsTab = () => {
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.status }}>
                       <span style={{ backgroundColor: s.bg, color: s.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{s.label}</span>
                     </td>
-                    <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
+                    {/* <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
                       <button onClick={() => openAccountsDetails(farmer.id)}
                         style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         View Details
                       </button>
-                    </td>
+                    </td> */}
+                    
                     <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(farmer.date_joined)}</td>
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>
                       {farmer.status === 'COMPLETE' ? (
@@ -896,8 +897,12 @@ const FarmerRegistryTab = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [page, setPage] = useState(1);
+
   const [search, setSearch] = useState('');
+  const [barangayFilter, setBarangayFilter] = useState('');
+  const [sort, setSort] = useState('last_name');
   const [modal, setModal] = useState(null);
+
   const [form, setForm] = useState({
     rsbsa_number: '', first_name: '', last_name: '', middle_name: '',
     barangay: '', date_of_birth: '', contact_number: '', hectares: '',
@@ -919,7 +924,8 @@ const FarmerRegistryTab = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await getFarmerRegistry({ search, page, page_size: 10 });
+      const res = await getFarmerRegistry({ search, page, page_size: 10, barangay: barangayFilter || undefined, ordering: sort });
+      
       const data = res.data;
       setRecords(data.results || data);
       setCount(data.count || (data.results ? data.results.length : data.length) || 0);
@@ -928,10 +934,10 @@ const FarmerRegistryTab = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, page]);
+  }, [search, page, barangayFilter, sort]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
-  useEffect(() => { setPage(1); }, [search]);
+  useEffect(() => { setPage(1); }, [search, barangayFilter, sort]);
 
   const validateForm = () => {
     const errs = {};
@@ -1066,7 +1072,20 @@ const FarmerRegistryTab = () => {
       </div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
         <input placeholder="Search RSBSA, name..." value={search} onChange={e => setSearch(e.target.value)} style={{ ...filterStyle, flex: 1, minWidth: '200px' }} />
+        <select value={barangayFilter} onChange={e => setBarangayFilter(e.target.value)} style={filterStyle}>
+          <option value="">All Barangays</option>
+          {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <SortDropdown value={sort} onChange={setSort} options={[
+          { value: 'last_name',    label: 'Name A–Z' },
+          { value: '-last_name',   label: 'Name Z–A' },
+          { value: 'barangay',     label: 'Barangay A–Z' },
+          { value: '-barangay',    label: 'Barangay Z–A' },
+          { value: 'rsbsa_number', label: 'RSBSA Number' },
+        ]} />
         <button onClick={handleOpenAdd} style={{ padding: '0.5rem 1.125rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.875rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>+ Add Record</button>
+        
+        
         <button onClick={() => fileInputRef.current?.click()} disabled={uploadLoading} style={{ padding: '0.5rem 1.125rem', backgroundColor: '#1e40af', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: '600', fontSize: '0.875rem', cursor: uploadLoading ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', opacity: uploadLoading ? 0.7 : 1 }}>{uploadLoading ? 'Uploading...' : '⬆ Upload CSV'}</button>
         <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
       </div>

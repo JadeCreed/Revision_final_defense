@@ -1,7 +1,7 @@
 import { Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
-export const InactivityWarningDialog = ({ isOpen, remainingSeconds, onDismiss }) => {
+export const InactivityWarningDialog = ({ isOpen, remainingSeconds, onDismiss, onReset }) => {
   const navigate = useNavigate();
 
   if (!isOpen) return null;
@@ -10,7 +10,7 @@ export const InactivityWarningDialog = ({ isOpen, remainingSeconds, onDismiss })
   const seconds = remainingSeconds % 60;
 
   const handleContinue = () => {
-    window.dispatchEvent(new MouseEvent('mousemove'));
+    onReset();   // ← direktang tinatawag ang resetTimers ng hook
     onDismiss();
   };
 

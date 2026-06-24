@@ -1,57 +1,38 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth/AuthContext';
 
 export const useInactivityTimeout = (inactivityMinutes = 30) => {
   const navigate = useNavigate();
-  const [showWarning, setShowWarning] = useState(false);
-  const [remainingSeconds, setRemainingSeconds] = useState(120);
+  const { logout } = useAuth();
+  const timerRef = useRef(null);
+  const logoutRef = useRef(null);
 
-  const handleLogout = useCallback(() => {
+  // i-store ang pinakabagong logout + navigate sa ref
+  // para hindi mag-recreate ng event listener sa bawat render
+  logoutRef.current = async () => {
+    await logout();
     navigate('/login', {
-      state: { message: 'Session ended due to 30 minutes of inactivity.' },
+      state: { message: 'Session ended due to inactivity.' },
       replace: true,
     });
-  }, [navigate]);
+  };
 
   useEffect(() => {
-    let inactivityTimer;
-    let warningTimer;
-    let countdownInterval;
-
-    const cleanup = () => {
-      clearTimeout(inactivityTimer);
-      clearTimeout(warningTimer);
-      clearInterval(countdownInterval);
-    };
-
-    const resetTimers = () => {
-      cleanup();
-      setShowWarning(false);
-      setRemainingSeconds(120);
-
-      warningTimer = setTimeout(() => {
-        setShowWarning(true);
-        setRemainingSeconds(120);
-        countdownInterval = setInterval(() => {
-          setRemainingSeconds(prev => (prev <= 1 ? 0 : prev - 1));
-        }, 1000);
-      }, (inactivityMinutes - 2) * 60 * 1000);
-
-      inactivityTimer = setTimeout(() => {
-        cleanup();
-        handleLogout();
+    const resetTimer = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        logoutRef.current();
       }, inactivityMinutes * 60 * 1000);
     };
 
     const activityEvents = ['mousemove', 'keydown', 'click', 'touchstart', 'scroll'];
-    activityEvents.forEach(event => window.addEventListener(event, resetTimers, true));
-    resetTimers();
+    activityEvents.forEach(e => window.addEventListener(e, resetTimer, true));
+    resetTimer(); // start timer on mount
 
     return () => {
-      activityEvents.forEach(event => window.removeEventListener(event, resetTimers, true));
-      cleanup();
+      activityEvents.forEach(e => window.removeEventListener(e, resetTimer, true));
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [inactivityMinutes, handleLogout]);
-
-  return { showWarning, setShowWarning, remainingSeconds };
+  }, [inactivityMinutes]); // isang beses lang mag-attach ng listeners
 };
