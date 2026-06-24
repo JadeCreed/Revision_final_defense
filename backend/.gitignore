@@ -1,4 +1,3 @@
-
 # Python
 __pycache__/
 *.pyc
@@ -6,13 +5,13 @@ __pycache__/
 *.pyd
 .env
 venv/
-*.sqlite3
+node_modules/
 
 # Django
 *.log
 *.pot
 *.pyc
-db.sqlite3
+db.sqlite3        ← specific lang ito, hindi kasama .backup
 media/
 staticfiles/
 
@@ -20,3 +19,6 @@ staticfiles/
 .vscode/
 .idea/
 *.swp
+
+dist/
+build/
