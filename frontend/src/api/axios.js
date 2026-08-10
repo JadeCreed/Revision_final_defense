@@ -222,6 +222,13 @@ export const getBrgyMyAllocation       = ()           => API.get('/inventory/my-
 export const getBrgyScheduleNotifications = () => API.get('/inventory/schedule-notifications/');
 export const brgyConfirmAllocation    = (data)       => API.post('/inventory/confirm-allocation/', data);
 
+// Delivery Schedule Programs (backend-persisted, replaces localStorage)
+export const getDeliverySchedules     = ()           => API.get('/inventory/schedules/');
+export const createDeliverySchedule   = (data)       => API.post('/inventory/schedules/', data);
+export const updateDeliverySchedule   = (id, data)   => API.put(`/inventory/schedules/${id}/`, data);
+export const deleteDeliverySchedule   = (id)         => API.delete(`/inventory/schedules/${id}/`);
+export const updateScheduleEntry      = (entryId, data) => API.patch(`/inventory/schedules/entries/${entryId}/`, data);
+
 // ── REPORTS ──
 
 

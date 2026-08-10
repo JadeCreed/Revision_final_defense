@@ -128,3 +128,54 @@ class SeedDeliveryAudit(models.Model):
 
     class Meta:
         ordering = ['-timestamp']
+
+
+class DeliverySchedule(models.Model):
+    """
+    Stores admin-created delivery schedule programs.
+    Replaces localStorage-based schedule storage so data
+    persists across devices and browser clears.
+    """
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Schedule #{self.pk} (created {self.created_at.date()})"
+
+
+class DeliveryScheduleEntry(models.Model):
+    STATUS_CHOICES = [
+        ('SCHEDULED', 'Scheduled'),
+        ('DELIVERED', 'Delivered'),
+    ]
+    SEASON_CHOICES = [
+        ('WET', 'Wet Season'),
+        ('DRY', 'Dry Season'),
+    ]
+
+    schedule        = models.ForeignKey(
+        DeliverySchedule, on_delete=models.CASCADE, related_name='entries'
+    )
+    seed_type_db_id = models.IntegerField(null=True, blank=True)
+    seed_type_name  = models.CharField(max_length=100)
+    variety_id      = models.IntegerField(null=True, blank=True)
+    variety_name    = models.CharField(max_length=100, blank=True)
+    source          = models.CharField(max_length=100, blank=True)
+    season          = models.CharField(max_length=3, choices=SEASON_CHOICES)
+    year            = models.PositiveIntegerField()
+    total_bags      = models.PositiveIntegerField(default=0)
+    delivery_date   = models.DateField()
+    lot_number      = models.CharField(max_length=100, blank=True)
+    remarks         = models.TextField(blank=True)
+    status          = models.CharField(
+        max_length=20, choices=STATUS_CHOICES, default='SCHEDULED'
+    )
+
+    class Meta:
+        ordering = ['season', 'year']
+
+    def __str__(self):
+        return f"{self.seed_type_name} {self.variety_name} — {self.season} {self.year}"

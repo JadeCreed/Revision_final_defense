@@ -527,7 +527,7 @@ class AdminDistributionStatsView(APIView):
 #             entries_qs = DistributionEntry.objects.filter(batch__event__barangay=brgy)
 #         elif request.user.role == 'ADMIN':
 #             events_qs  = DistributionEvent.objects.all()
-#             batches_qs = DistributionBatch.objects.all()
+#             batches_qs = Dist ributionBatch.objects.all()
 #             entries_qs = DistributionEntry.objects.all()
 #         else:
 #             return Response({"error": "Access denied."}, status=403)

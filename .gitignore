@@ -11,7 +11,7 @@ node_modules/
 *.log
 *.pot
 *.pyc
-db.sqlite3        ← specific lang ito, hindi kasama .backup
+db.sqlite3       
 media/
 staticfiles/
 

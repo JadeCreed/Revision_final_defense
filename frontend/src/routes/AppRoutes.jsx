@@ -112,7 +112,7 @@ const AppRoutes = () => (
           <Route path="/admin/reports"        element={<Navigate to="/admin/reports/masterlist" replace />} />
           <Route path="/admin/reports/masterlist" element={<Reports />} />
           <Route path="/admin/reports/analytics"  element={<ReportsAnalytics />} />
-
+  
 
           <Route path="/admin/settings"       element={<Settings />} />
           <Route path="/admin/users"          element={<Navigate to="/admin/users/farmer-requests" replace />} />

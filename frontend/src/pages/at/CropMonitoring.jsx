@@ -126,33 +126,25 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
     modalToastTimer.current = setTimeout(() => setModalToast(null), 3500);
   };
 
-  // // Auto-fill area_monitored_ha from crop establishment record when phase is not ESTABLISHMENT
-  // useEffect(() => {
-  //   if (
-  //     form.seed_source &&
-  //     form.crop_phase &&
-  //     form.crop_phase !== 'ESTABLISHMENT'
-  //   ) {
-  //     const establishmentArea = farmer.seed_records?.[form.seed_source]?.area_monitored_ha;
-  //     if (establishmentArea && !form.area_monitored_ha) {
-  //       setForm(p => ({ ...p, area_monitored_ha: String(establishmentArea) }));
-  //     }
-  //   }
-  //   // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [form.seed_source, form.crop_phase]);
-
-
-
+  // Auto-fill area_monitored_ha from crop establishment record when phase is not ESTABLISHMENT
+  useEffect(() => {
+    if (
+      form.seed_source &&
+      form.crop_phase &&
+      form.crop_phase !== 'ESTABLISHMENT'
+    ) {
+      const establishmentArea = farmer.seed_records?.[form.seed_source]?.area_monitored_ha;
+      if (establishmentArea && !form.area_monitored_ha) {
+        setForm(p => ({ ...p, area_monitored_ha: String(establishmentArea) }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.seed_source, form.crop_phase]);
 
   const seedRecords = farmer.seed_records || {};
   const currentPhaseForSeed = getCurrentPhase(seedRecords, form.seed_source);
   const nextAllowedPhase = getNextAllowedPhase(seedRecords, form.seed_source);
-  // Available hectares ng farmer — galing sa backend (total_hectares - monitored_hectares).
-  // Ginagamit lang ito bilang display/guide; ang totoong validation ay nasa backend.
-  const availableHectares = (typeof farmer.available_hectares === 'number')
-    ? farmer.available_hectares
-    : null;
-    
+
   const inp = (hasErr) => ({
     padding: '0.625rem 0.875rem',
     border: `1.5px solid ${hasErr ? '#dc2626' : '#d1d5db'}`,
@@ -160,7 +152,6 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
     width: '100%', outline: 'none', boxSizing: 'border-box',
     fontFamily: 'inherit', backgroundColor: 'white',
   });
-  
 
   const validate = () => {
     const errs = {};
@@ -169,13 +160,6 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
     if (!form.phase_status)  errs.phase_status = 'Status is required';
     if (form.crop_phase === 'ESTABLISHMENT' && !form.crop_establishment)
       errs.crop_establishment = 'Required for Establishment phase';
-    if (form.crop_phase === 'ESTABLISHMENT') {
-      if (!form.area_monitored_ha || parseFloat(form.area_monitored_ha) <= 0) {
-        errs.area_monitored_ha = 'Area monitored is required for Crop Establishment';
-      } else if (typeof farmer.available_hectares === 'number' && parseFloat(form.area_monitored_ha) > farmer.available_hectares) {
-        errs.area_monitored_ha = `Exceeds available hectares (${farmer.available_hectares} ha left)`;
-      }
-    }
     if (form.phase_status === 'DELAYED' && !form.delay_days)
       errs.delay_days = 'Delay duration is required';
     if (form.phase_status === 'DAMAGED' && !form.damage_cause.trim())
@@ -235,16 +219,6 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
             return `No seed distribution record found for ${form.seed_source === 'HYBRID' ? 'Hybrid' : 'Inbred'}.`;
           })()}
         </div>
-        {typeof farmer.total_hectares === 'number' && (
-          <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', backgroundColor: '#dcfce7', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.2rem 0.65rem' }}>
-              Total Farm: {farmer.total_hectares} ha
-            </span>
-            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1d4ed8', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '999px', padding: '0.2rem 0.65rem' }}>
-              Available: {farmer.available_hectares} ha
-            </span>
-          </div>
-        )}
       </div>
 
       {/* SEED SOURCE */}
@@ -425,8 +399,8 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         </div>
       )}
 
-      {/* DATE + AREA — Area Monitored ay lalabas LANG kapag Crop Establishment ang phase */}
-      <div style={{ display: 'grid', gridTemplateColumns: form.crop_phase === 'ESTABLISHMENT' ? '1fr 1fr' : '1fr', gap: '0.75rem' }}>
+      {/* DATE + AREA */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Date Observed <span style={{ color: '#dc2626' }}>*</span></label>
           <input type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} style={inp(!!errors.date_observed)} />
@@ -437,23 +411,24 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
           )}
           {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
         </div>
-
-        {form.crop_phase === 'ESTABLISHMENT' && (
-          <div>
-            <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-              Area Monitored (ha) <span style={{ color: '#dc2626' }}>*</span>
-            </label>
-            <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
-              onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
-              placeholder="e.g. 0.50" style={inp(!!errors.area_monitored_ha)} />
-            {availableHectares !== null && (
-              <p style={{ fontSize: '0.68rem', color: '#16a34a', margin: '0.25rem 0 0', fontWeight: 600 }}>
-                {availableHectares} ha available out of {farmer.total_hectares ?? 0} ha total
-              </p>
+        <div>
+          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+            Area Monitored (ha)
+            {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
+              <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 600, color: '#16a34a', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                auto-filled
+              </span>
             )}
-            {errors.area_monitored_ha && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.area_monitored_ha}</p>}
-          </div>
-        )}
+          </label>
+          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
+            onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
+            placeholder="e.g. 0.50" style={inp(false)} />
+          {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
+            <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>
+              Carried over from Crop Establishment. You can still edit if needed.
+            </p>
+          )}
+        </div>
       </div>
 
       {form.crop_phase === 'ESTABLISHMENT' && (
@@ -937,10 +912,6 @@ const CropMonitoring = () => {
       </div>
     );
   }
-  const totalBarangaysCount = barangays.length;
-  const totalFarmersCount = farmers.length;
-  const monitoredFarmersCount = farmers.filter(f => f.latest_phase).length;
-  const unmonitoredFarmersCount = farmers.filter(f => !f.latest_phase).length;
 
   // ─────────────────────────────────────────
   // MAIN MONITORING VIEW
@@ -987,13 +958,13 @@ const CropMonitoring = () => {
         </div>
 
         {/* ── STATS CARDS ── */}
-        
+        {stats && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem', marginBottom: '1.25rem' }}>
             {[
-              { label: 'Assigned Barangays', value: totalBarangaysCount,     color: GREEN.primary }, // ◀── PINALITAN
-              { label: 'Total Farmers',      value: totalFarmersCount,       color: '#374151'     }, // ◀── PINALITAN
-              { label: 'Monitored',          value: monitoredFarmersCount,   color: '#16a34a'     }, // ◀── PINALITAN
-              { label: 'Not Yet Monitored',  value: unmonitoredFarmersCount, color: '#dc2626'     }, // ◀── PINALITAN
+              { label: 'Assigned Barangays', value: stats.total_barangays,     color: GREEN.primary },
+              { label: 'Total Farmers',      value: stats.total_farmers,       color: '#374151'     },
+              { label: 'Monitored',          value: stats.monitored_farmers,   color: '#16a34a'     },
+              { label: 'Not Yet Monitored',  value: stats.unmonitored_farmers, color: '#dc2626'     },
             ].map(({ label, value, color }, i) => (
               <div key={label} style={{ backgroundColor: 'white', borderRadius: '0.875rem', padding: '0.875rem 1rem', border: '1px solid #f3f4f6', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', animation: `slideUp ${0.3 + i * 0.05}s ease` }}>
                 <p style={{ fontSize: '1.5rem', fontWeight: 800, color, margin: '0 0 0.125rem', lineHeight: 1 }}>{value}</p>
@@ -1001,7 +972,7 @@ const CropMonitoring = () => {
               </div>
             ))}
           </div>
-        
+        )}
 
         {/* ── SEARCH + FILTERS ── */}
         <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '1rem', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', marginBottom: '1rem', border: '1px solid #f3f4f6' }}>

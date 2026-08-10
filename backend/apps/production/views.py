@@ -445,16 +445,16 @@ def _build_brgy_report_data(user, poll_id=None):
     hybrid_kg_total = inbred_kg_total = 0
     for e in dist_entries:
         seed_name = (getattr(e.batch.event.seed_type, 'name', '') or '').upper()
-        bags = float(e.qty_bags or 0)
+        bags = int(e.qty_bags or 0)
         if 'HYBRID' in seed_name:
             hybrid_bags      += bags
-            hybrid_kg_total  += round(bags * 15, 2)
+            hybrid_kg_total  += bags * 15
         elif 'INBRED' in seed_name:
             inbred_bags      += bags
-            inbred_kg_total  += round(bags * 20, 2)
+            inbred_kg_total  += bags * 20
 
-    total_dist_bags = round(hybrid_bags + inbred_bags, 2)
-    total_dist_kg   = round(hybrid_kg_total + inbred_kg_total, 2)
+    total_dist_bags = hybrid_bags + inbred_bags
+    total_dist_kg   = hybrid_kg_total + inbred_kg_total
 
     # ── BY SEED TYPE ───────────────────────────────────────────────
     by_seed_type = []
@@ -594,12 +594,12 @@ def _build_brgy_report_data(user, poll_id=None):
         'summary': {
             'total_farmers':       total_farmers,
             'total_beneficiaries': total_beneficiaries,
-            'total_dist_bags':     round(total_dist_bags, 2),
-            'total_dist_kg':       round(total_dist_kg, 2),
-            'hybrid_bags':         round(hybrid_bags, 2),
-            'hybrid_kg':           round(hybrid_kg_total, 2),
-            'inbred_bags':         round(inbred_bags, 2),
-            'inbred_kg':           round(inbred_kg_total, 2),
+            'total_dist_bags':     total_dist_bags,
+            'total_dist_kg':       total_dist_kg,
+            'hybrid_bags':         hybrid_bags,
+            'hybrid_kg':           hybrid_kg_total,
+            'inbred_bags':         inbred_bags,
+            'inbred_kg':           inbred_kg_total,
             'total_area_ha':       round(total_area, 2),
             'total_production_mt': round(total_mt, 2),
             'avg_yield_t_ha':      round(avg_yield, 2),
@@ -1211,9 +1211,6 @@ class BrgyHarvestingFarmersView(APIView):
             # historical view with poll_id provided but poll not found
             return Response({'farmers': []})
 
-        
-
-        
         # Get all HARVESTING records for this barangay in active poll
         harvesting_records = CropMonitoringRecord.objects.filter(
             barangay=barangay,
@@ -1238,27 +1235,8 @@ class BrgyHarvestingFarmersView(APIView):
             seed_key = rec.seed_source  # HYBRID, INBRED, OWN_SEED
             if seed_key and seed_key not in farmer_map[fid]['harvesting_seed_types']:
                 farmer_map[fid]['harvesting_seed_types'].append(seed_key)
-            
-            if seed_key:
-                # Try matching poll first, then fall back to any establishment record for this farmer+seed
-                est_rec = CropMonitoringRecord.objects.filter(
-                    farmer_id=fid,
-                    crop_phase='ESTABLISHMENT',
-                    seed_source=seed_key,
-                    poll=active_poll
-                ).first()
-
-                if not est_rec:
-                    # Fallback: same season+year but poll field may be null or mismatched
-                    est_rec = CropMonitoringRecord.objects.filter(
-                        farmer_id=fid,
-                        crop_phase='ESTABLISHMENT',
-                        seed_source=seed_key,
-                    ).order_by('-id').first()
-
-                if est_rec and est_rec.area_monitored_ha:
-                    farmer_map[fid]['area_by_seed_type'][seed_key] = float(est_rec.area_monitored_ha)
-
+            if seed_key and rec.area_monitored_ha:
+                farmer_map[fid]['area_by_seed_type'][seed_key] = float(rec.area_monitored_ha)
 
         resp = {
             'farmers': list(farmer_map.values()),

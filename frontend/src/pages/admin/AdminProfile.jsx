@@ -7,7 +7,7 @@ import {
   CheckCircle, AlertCircle, Eye, EyeOff, Edit2, X,
 } from 'lucide-react';
 
-import { Outlet, useNavigate } from 'react-router-dom';
+
 
 const AD_COLOR  = '#1a1a2e';
 const AD_LIGHT  = '#f8fafc';

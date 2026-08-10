@@ -3,7 +3,10 @@ import {
   getInventorySummary, getSeedDeliveries, createSeedDelivery,
   updateSeedDelivery, deleteSeedDelivery, createAllocation,
   getDeliveryAudit, getFinalSeeds, getBeneficiaryAllocations,
+  getDeliverySchedules, createDeliverySchedule,
+  updateDeliverySchedule, deleteDeliverySchedule, updateScheduleEntry,
 } from '../../api/axios';
+
 import {
   Plus, Package, ChevronRight, ChevronLeft, CheckCircle,
   AlertCircle, Search, Wheat, Truck, Users, Clock,
@@ -104,13 +107,13 @@ const BARANGAYS = [
   'Mahabang Parang','Malupak','Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil','Tiawe','Tinamnan',
 ];
 
-const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
-const loadSchedules = () => {
-  try { const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
-};
-const saveSchedulesToStorage = (schedules) => {
-  try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
-};
+// const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
+// const loadSchedules = () => {
+//   try { const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+// };
+// const saveSchedulesToStorage = (schedules) => {
+//   try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
+// };
 
 // ── PROGRAM CARD with drill-down ──
 const ProgramCard = ({
@@ -285,25 +288,17 @@ const ProgramCard = ({
                   const isDelivered = entry.status === 'DELIVERED';
                   // Try to find matching backend delivery for detail view
                   const matchedDelivery = deliveries.find(d => {
-                    const seasonMatch = d.season === entry.season;
-                    const yearMatch = Number(d.year) === Number(entry.year);
-                    if (!seasonMatch || !yearMatch) return false;
-
-                    const dbIdMatch = entry.seedTypeDbId
-                      ? String(d.seed_type) === String(entry.seedTypeDbId)
-                      : false;
-
-                    // Siguraduhing titingnan ang varietyId para hindi magkamali kapag parehong Hybrid ang magkaibang variety
-                    if (entry.varietyId) {
-                      const varietyIdMatch = String(d.variety) === String(entry.varietyId);
-                      return dbIdMatch && varietyIdMatch;
-                    }
-
                     const normalize = text => text?.toString().toLowerCase().trim();
                     const nameA = normalize(d.seed_type_name);
                     const nameB = normalize(entry.seedTypeName);
                     const varA = normalize(d.variety_name);
                     const varB = normalize(entry.varietyName);
+                    const seasonMatch = d.season === entry.season;
+                    const yearMatch = Number(d.year) === Number(entry.year);
+
+                    const dbIdMatch = entry.seedTypeDbId
+                      ? String(d.seed_type) === String(entry.seedTypeDbId)
+                      : false;
 
                     const nameMatch = nameA && nameB && (
                       nameA === nameB ||
@@ -317,13 +312,11 @@ const ProgramCard = ({
                     const varietyMatch = varA && entryVarieties.length > 0 &&
                       entryVarieties.some(ev => ev === varA || varA.includes(ev) || ev.includes(varA));
 
-                    if (dbIdMatch) return true;
-                    if (nameMatch) return true;
-                    if (varietyMatch) return true;
+                    if (dbIdMatch && seasonMatch && yearMatch) return true;
+                    if (nameMatch && seasonMatch && yearMatch) return true;
+                    if (varietyMatch && seasonMatch && yearMatch) return true;
                     return false;
                   });
-
-
                   return (
                     <div
                       key={eIdx}
@@ -449,7 +442,9 @@ export default function SeedInventory() {
   const [scheduleForms, setScheduleForms]         = useState({});
   const [scheduleErrors, setScheduleErrors]       = useState({});
   const [scheduleSaving, setScheduleSaving]       = useState(false);
-  const [schedules, setSchedules]                 = useState(loadSchedules);
+  // const [schedules, setSchedules]                 = useState(loadSchedules);
+  const [schedules, setSchedules]                 = useState([]);
+  const [schedulesLoading, setSchedulesLoading]   = useState(true);
   const [deliveredModal, setDeliveredModal]       = useState(null);
   const [deliveredForm, setDeliveredForm]         = useState({ confirmed: null, actual_bags: '' });
   const [deliveredSaving, setDeliveredSaving]     = useState(false);
@@ -924,7 +919,7 @@ export default function SeedInventory() {
     setScheduleErrors(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [field]: '' } }));
   };
 
-  const handleSaveSchedule = async () => {
+  const handleSaveSchedule = () => {
     const openedKeys = Object.keys(scheduleForms);
     if (openedKeys.length === 0) { showToast('error', 'Please select at least one seed variety to schedule.'); return; }
     let hasError = false; const newErrors = {};
@@ -959,65 +954,6 @@ export default function SeedInventory() {
         status:        'SCHEDULED',
       };
     });
-
-    // ── VALIDATION: Block pag-save ng variety na already DELIVERED
-    // sa same season + year — hindi pwedeng mag-duplicate
-    const deliveredConflicts = [];
-    for (const entry of entries) {
-      const allExistingEntries = schedules.flatMap(s => s.entries);
-      const conflict = allExistingEntries.find(existing =>
-        String(existing.seedTypeDbId) === String(entry.seedTypeDbId) &&
-        String(existing.varietyId) === String(entry.varietyId) &&
-        existing.season === entry.season &&
-        String(existing.year) === String(entry.year) &&
-        existing.status === 'DELIVERED'
-      );
-      if (conflict) {
-        deliveredConflicts.push(
-          `${entry.seedTypeName} — ${entry.varietyName} (${entry.season === 'WET' ? 'Wet' : 'Dry'} Season ${entry.year}) is already DELIVERED.`
-        );
-      }
-    }
-
-    if (deliveredConflicts.length > 0) {
-      showToast('error', `Cannot schedule: ${deliveredConflicts[0]} Create a new season instead.`);
-      setScheduleSaving(false);
-      return;
-    }
-
-    const allExistingEntriesBeforeSave = schedules.flatMap(s => s.entries);
-    const brandNewEntries = entries.filter(entry =>
-      !allExistingEntriesBeforeSave.find(existing => existing.seedTypeId === entry.seedTypeId)
-    );
-
-    if (brandNewEntries.length > 0) {
-      try {
-        await Promise.all(brandNewEntries.map(entry =>
-          createSeedDelivery({
-            seed_type:     entry.seedTypeDbId,
-            variety:       entry.varietyId || null,
-            season:        entry.season,
-            year:          Number(entry.year),
-            source:        isHybrid(entry.seedTypeName) ? 'REGION' : 'PHILRICE',
-            total_bags:    Number(entry.total_bags),
-            delivery_date: entry.delivery_date,
-            lot_number:    entry.lot_number,
-            remarks:       entry.remarks,
-            status:        'SCHEDULED',
-          })
-        ));
-        await loadInventory();
-        try {
-          const triggerKey = 'agrice_seed_schedule_trigger';
-          const payload = JSON.stringify({ timestamp: Date.now() });
-          localStorage.setItem(triggerKey, payload);
-          window.dispatchEvent(new StorageEvent('storage', { key: triggerKey, newValue: payload, storageArea: localStorage }));
-        } catch {}
-      } catch (err) {
-        showToast('error', err.response?.data?.error || err.response?.data?.detail || 'Saved locally but failed to sync to server.');
-      }
-    }
-
 
     let updated;
     const firstEntry = entries[0];
@@ -1129,49 +1065,15 @@ export default function SeedInventory() {
           </div>
 
           {(() => {
-
-            // const allEntries = schedules.flatMap(s => s.entries || []);
-
-            // // Filter to current poll scope only (Poll-Scoped Data Lifecycle)
-            // const currentSeason = summary?.current_season;
-            // const currentYear   = summary?.current_year;
-            // const scopedEntries = (currentSeason && currentYear)
-            //   ? allEntries.filter(e =>
-            //       e.season === currentSeason &&
-            //       String(e.year) === String(currentYear)
-            //     )
-            //   : allEntries;
-              
-            // const totalScheduled = allEntries.length;
-            // const confirmedEntries = allEntries.filter(e => e.status === 'DELIVERED');
-            // const pendingEntries = allEntries.filter(e => e.status !== 'DELIVERED');
-            // const totalDeliveriesLabel = totalScheduled > 0 ? `${confirmedEntries.length}/${totalScheduled}` : '0';
-            // const bagsReceived = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
-            // const bagsAllocated = summary?.total_bags_allocated ?? 0;
-            // const pendingCount = pendingEntries.length;
-            // const confirmedCount = confirmedEntries.length;
-
             const allEntries = schedules.flatMap(s => s.entries || []);
-
-            // Filter to current poll scope only (Poll-Scoped Data Lifecycle)
-            const currentSeason = summary?.current_season;
-            const currentYear   = summary?.current_year;
-            const scopedEntries = (currentSeason && currentYear)
-              ? allEntries.filter(e =>
-                  e.season === currentSeason &&
-                  String(e.year) === String(currentYear)
-                )
-              : allEntries;
-
-            const totalScheduled   = scopedEntries.length;
-            const confirmedEntries = scopedEntries.filter(e => e.status === 'DELIVERED');
-            const pendingEntries   = scopedEntries.filter(e => e.status !== 'DELIVERED');
+            const totalScheduled = allEntries.length;
+            const confirmedEntries = allEntries.filter(e => e.status === 'DELIVERED');
+            const pendingEntries = allEntries.filter(e => e.status !== 'DELIVERED');
             const totalDeliveriesLabel = totalScheduled > 0 ? `${confirmedEntries.length}/${totalScheduled}` : '0';
-            const bagsReceived   = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
-            const bagsAllocated  = summary?.total_bags_allocated ?? 0;
-            const pendingCount   = pendingEntries.length;
+            const bagsReceived = confirmedEntries.reduce((sum, e) => sum + (Number(e.total_bags) || 0), 0);
+            const bagsAllocated = summary?.total_bags_allocated ?? 0;
+            const pendingCount = pendingEntries.length;
             const confirmedCount = confirmedEntries.length;
-
 
             const tiles = [
               { label: 'Total Deliveries',  value: totalDeliveriesLabel, Icon: Truck,       color: '#1e40af', bg: '#eff6ff' },
@@ -1902,26 +1804,17 @@ export default function SeedInventory() {
                             const vKey = `${seedTypeKey}::${v.id}::${v.name}`;
                             const season = fs.season || '';
                             const year = fs.year || new Date().getFullYear();
-                            const existingEntry = schedules.flatMap(s => s.entries).find(entry =>
-                              String(entry.seedTypeDbId) === String(fs.seed_type?.id) &&
-                              String(entry.varietyId) === String(v.id) &&
-                              entry.season === season &&
-                              Number(entry.year) === Number(year)
+                            const isScheduled = !!scheduleForms[vKey] || schedules.some(schedule =>
+                              schedule.entries.some(entry =>
+                                String(entry.seedTypeDbId) === String(fs.seed_type?.id) &&
+                                String(entry.varietyId) === String(v.id) &&
+                                entry.season === season &&
+                                Number(entry.year) === Number(year)
+                              )
                             );
-                            const isDelivered = existingEntry?.status === 'DELIVERED';
-                            // isScheduled = true lang kung:
-                            // 1. Naka-save na sa scheduleForms (ibig sabihin, pumili na ng details)
-                            //    AT hindi ito yung kasalukuyang active tab na binabago
-                            // 2. O naka-save na sa existing schedule entries
-                            const isCurrentlyActive = activeScheduleTab === vKey;
-                            const isScheduled = (!isCurrentlyActive && !!scheduleForms[vKey]) || !!existingEntry;
                             return (
                               <button key={v.id} type="button"
                                 onClick={() => {
-                                  if (isDelivered) {
-                                    showToast('error', `${v.name} is already DELIVERED for ${season === 'WET' ? 'Wet' : 'Dry'} Season ${year}. Cannot create duplicate — create a new season instead.`);
-                                    return;
-                                  }
                                   if (isScheduled) {
                                     showToast('error', `${v.name} is already encoded. Use the Edit button on the variety card to update it.`);
                                     return;
@@ -1942,12 +1835,10 @@ export default function SeedInventory() {
                                   }
                                   setScheduleErrors(prev => ({ ...prev, [vKey]: {} }));
                                 }}
-                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isDelivered ? '#fca5a5' : isScheduled ? '#d1d5db' : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isDelivered ? '#fee2e2' : isScheduled ? '#f3f4f6' : tagBg, color: isDelivered ? '#dc2626' : isScheduled ? '#9ca3af' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: (isDelivered || isScheduled) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s', opacity: (isDelivered || isScheduled) ? 0.75 : 1 }}>
-                                {isDelivered && <CheckCircle size={13} color="#dc2626" />}
-                                {!isDelivered && isScheduled && <CheckCircle size={13} color="#9ca3af" />}
+                                style={{ padding: '0.5rem 1rem', border: `2px solid ${isScheduled ? '#d1d5db' : tagBorder}`, borderRadius: '0.75rem', backgroundColor: isScheduled ? '#f3f4f6' : tagBg, color: isScheduled ? '#9ca3af' : tagColor, fontWeight: 700, fontSize: '0.8rem', cursor: isScheduled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.15s', opacity: isScheduled ? 0.75 : 1 }}>
+                                {isScheduled && <CheckCircle size={13} color="#9ca3af" />}
                                 {v.name}
-                                {isDelivered && <span style={{ fontSize: '0.65rem' }}>· already delivered</span>}
-                                {!isDelivered && isScheduled && <span style={{ fontSize: '0.65rem' }}>· already encoded</span>}
+                                {isScheduled && <span style={{ fontSize: '0.65rem' }}>· already encoded</span>}
                               </button>
                             );
                           })}
@@ -1985,17 +1876,7 @@ export default function SeedInventory() {
                           </div>
                           {fs?.varieties?.length > 1 && (
                             <button type="button"
-                              onClick={() => {
-                                // I-clear ang scheduleForms entry para sa current variety
-                                // para hindi na ma-detect bilang "already encoded" kapag
-                                // bumalik sa variety selection at pumili ng ibang variety
-                                setScheduleForms(prev => {
-                                  const updated = { ...prev };
-                                  delete updated[key];
-                                  return updated;
-                                });
-                                setActiveScheduleTab(fsId);
-                              }}
+                              onClick={() => setActiveScheduleTab(fsId)}
                               style={{ marginLeft: 'auto', fontSize: '0.7rem', color: tagColor, background: 'none', border: `1px solid ${tagBorder}`, borderRadius: '0.5rem', padding: '0.2rem 0.5rem', cursor: 'pointer', fontWeight: 600 }}>
                               ← Change variety
                             </button>

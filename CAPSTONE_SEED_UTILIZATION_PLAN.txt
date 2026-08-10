@@ -13,31 +13,22 @@ SECTION 1: SEEDING DENSITY CONSTANTS (CRITICAL - DO NOT CHANGE)
 These are Department of Agriculture (DA) official standards:
 
 HYBRID Rice Seeds:
-  Density: 15 kg per hectare
-  Examples: Mestiso, Sl-8H, Bigante
-  Target Yield: 4,000 kg/ha (at dry weight)
+  Density: 1 bag 15 kg per hectare
+  Examples: what ever is in the seed variety based on type in seed poll menu
+  Target Yield: 5,000 kg/ha (at dry weight) dont minus a percent if the harvest is in dry what ever in the harvest  in kg thats the value so dont minus or deduct something like what were doing in wet
 
 INBRED Rice Seeds:
-  Density: 40 kg per hectare
-  Examples: PSB Rc 22 (Lanao), Rc22, Rc26
-  Target Yield: 1,500 kg/ha (at dry weight)
-  IMPORTANT: PSB Rc 22 is INBRED, NOT HYBRID - use 40 kg/ha constant
+  Density: 1 bag=20kg,2 bags 40 kg per hectare so in 1 hectar the bags they get is 2 bags that is 40kg
+  Examples:  what ever is in the seed variety based on type in seed poll menu
+  Target Yield: 4,000 kg/ha  (at dry weight) dont minus a percent if the harvest is in dry what ever in the harvest  in kg thats the value so dont minus or deduct something like what were doing in wet
+
 
 OWN_SEED (Farmer's Own Stock):
-  Density: 15 kg per hectare (conservative estimate)
-  Target Yield: ❓ TODO - CONFIRM WITH CLIENT
-    Currently Assumed: 2,000 kg/ha (at dry weight)
-    Alternative Options:
-      - 1,500 kg/ha (conservative, same as INBRED)
-      - 2,500 kg/ha (if client expects better than INBRED)
-      - NO STANDARD (self-reported only, no utilization %, just recorded)
-    
-    Questions for Client:
-    1. What is your expected yield for OWN_SEED?
-    2. Should OWN_SEED have a standard yield target?
-    3. If yes, is it 2,000 kg/ha or different?
-    
-    CLIENT CONFIRMED ANSWER: ___________________________
+  Target Yield: 3,000kg 
+    own seed doesnt have a kg or bag in seeds kg cuz own seed is not from the Government it is the seed of the farmer so they dont distribute the own seed only the 2 hybrid and inbred has a seed utilization in computation cuz in computation we need to 
+    know how many kg of seed did the farmer use when they plant that type of seed so after we know the other utilization computation of basis or standard yield and minus the actual yield after telling to the brgy President what is the actual harvest in kg after we compute the utilization of the harvest standard to actual harvest we need to 
+    know how many kg of seed was actually use based on the farmer planted based on seed type hybrid,inbred and own seed we need to know how many kg of seed was actually use after encoding the farmer actual yield so we have 2 type of utilization first is what is the farmer status in terms of harvest is it normal if they meet the standard basis of yield 
+    and who many seed did they use and actually harvested that is the 2 utilization we need to do and also we need to show the farmer raw data like how many did they actual harvest and also each brgy average yield 
 
 Code Storage Location:
   → backend/config/settings.py (as SEEDING_DENSITY & STANDARD_YIELDS dict)

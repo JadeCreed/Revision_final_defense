@@ -1,6 +1,9 @@
 from django.urls import path
 from .views import (
     SeedDeliveryListCreateView,
+    delivery_schedule_list_create,
+    delivery_schedule_detail,
+    delivery_schedule_entry_update,
     SeedDeliveryDetailView,
     BrgyAllocationListCreateView,
     SeedDeliveryAuditListView,
@@ -12,6 +15,8 @@ from .views import (
     brgy_my_seed_allocation_view,
     brgy_schedule_notification_view,
     brgy_confirm_allocation_view,
+    
+    
 )
 
 urlpatterns = [
@@ -32,4 +37,10 @@ urlpatterns = [
     path('my-seed-allocation/',                         brgy_my_seed_allocation_view),
     path('schedule-notifications/',                     brgy_schedule_notification_view),
     path('confirm-allocation/',                         brgy_confirm_allocation_view),
+
+
+    # Delivery Schedule Programs (replaces localStorage)
+    path('schedules/',                                  delivery_schedule_list_create),
+    path('schedules/entries/<int:entry_id>/',           delivery_schedule_entry_update),
+    path('schedules/<int:schedule_id>/',                delivery_schedule_detail),
 ]

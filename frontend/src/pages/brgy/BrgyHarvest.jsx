@@ -219,54 +219,45 @@ const HarvestForm = ({
     }
   }, [selectedFarmer]);
 
-  // Pinag-isang Auto-fill: Nire-reset ang form at nilalagay ang area monitored mula sa AT User kapag nagpalit ng magsasaka
+  // Auto-fill area from AT's area_monitored_ha when farmer or tab changes
   useEffect(() => {
     if (!farmerId || !selectedFarmer) return;
 
-    // DEBUG — tanggalin pagkatapos maayos
-    console.log('[HarvestForm] selectedFarmer:', selectedFarmer);
-    console.log('[HarvestForm] area_by_seed_type:', selectedFarmer.area_by_seed_type);
-    console.log('[HarvestForm] beneficiaryData for farmer:', beneficiaryData?.[farmerId]);
-
-    // Kunin ang area_by_seed_type direkta mula sa selectedFarmer object sa loob ng effect
-    const currentAreaBySeedType = selectedFarmer.area_by_seed_type || {};
-
-
-    const base = {
-      HYBRID:   EMPTY_TAB_FORM(),
-      INBRED:   EMPTY_TAB_FORM(),
-      OWN_SEED: EMPTY_TAB_FORM(),
-    };
-
-    // Isulat ang area monitored na in-encode ng AT sa Crop Establishment
     SEED_SOURCES.forEach(s => {
-      const atArea = currentAreaBySeedType[s.key];
-      if (atArea) {
-        base[s.key].harvest_area_ha = String(atArea);
-      }
+      const atArea = areaBySeeedType[s.key];
+      if (!atArea) return;
+      setTabForms(prev => {
+        const current = prev[s.key];
+        if (current.harvest_area_ha) return prev; // don't overwrite if already typed
+        return {
+          ...prev,
+          [s.key]: { ...current, harvest_area_ha: String(atArea) },
+        };
+      });
     });
-
-    // Isulat ang seed bags received mula sa distribution data (Inbred at Hybrid lamang)
-    if (beneficiaryData) {
-      const farmerBenefData = beneficiaryData[farmerId];
-      if (farmerBenefData) {
-        SEED_SOURCES.forEach(s => {
-          if (s.key === 'OWN_SEED') return;
-          const entry = farmerBenefData[s.key];
-          if (entry && entry.seed_bags != null) {
-            base[s.key].seed_bags_received = String(entry.seed_bags);
-          }
-        });
-      }
-    }
-
-    setTabForms(base);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [farmerId, selectedFarmer, beneficiaryData]);
+  }, [farmerId]);
 
-
-
-
+  // Also auto-fill seed_bags_received from beneficiary data
+  useEffect(() => {
+    if (!farmerId || !beneficiaryData) return;
+    const farmerBenefData = beneficiaryData[farmerId];
+    if (!farmerBenefData) return;
+    SEED_SOURCES.forEach(s => {
+      if (s.key === 'OWN_SEED') return;
+      const entry = farmerBenefData[s.key];
+      if (!entry) return;
+      setTabForms(prev => {
+        const current = prev[s.key];
+        if (current.seed_bags_received) return prev;
+        return {
+          ...prev,
+          [s.key]: { ...current, seed_bags_received: entry.seed_bags != null ? String(entry.seed_bags) : '' },
+        };
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [farmerId, beneficiaryData]);
 
   const getVarietiesForTab = (tabKey) => {
     if (tabKey === 'OWN_SEED') return [];
@@ -356,17 +347,6 @@ const HarvestForm = ({
       e.harvest_area_ha = 'Area seems too large (max 50 ha)';
     if (!f.harvest_bags || parseFloat(f.harvest_bags) <= 0)
       e.harvest_bags = 'Number of bags must be greater than 0';
-
-    // Ligtas na Biological Ceiling (Awtomatikong harangin kapag lagpas 240 bags/ha o 12 MT/ha)
-    if (f.harvest_area_ha && f.harvest_bags) {
-      const areaVal = parseFloat(f.harvest_area_ha);
-      const bagsVal = parseInt(f.harvest_bags, 10);
-      const maxBagsAllowed = areaVal * 240; // 12 MT/ha limit
-      if (bagsVal > maxBagsAllowed) {
-        e.harvest_bags = `Impossible harvest amount. Max allowed is ${Math.floor(maxBagsAllowed)} bags for ${areaVal} ha (12 MT/ha limit).`;
-      }
-    }
-
     if (parseFloat(f.harvest_bags) > 5000)
       e.harvest_bags = 'Bag count seems too large';
     if (!f.harvest_date) e.harvest_date = 'Harvest date is required';
@@ -797,7 +777,7 @@ const HarvestForm = ({
             <div>
               <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
                 Seed bags received{' '}
-                <span style={{ fontSize: '0.65rem', fontWeight: 400, color: '#94a3b8' }}>(distribution)</span>
+                <span style={{ fontSize: '0.65rem', fontWeight: 400, color: '#94a3b8' }}>(from distribution)</span>
               </label>
               <input type='number' step='1' min='0'
                 placeholder='bags received'
@@ -1141,7 +1121,7 @@ const HarvestHistory = ({ onBack, pushToast }) => {
           {/* Active season notice */}
           {selectedPoll && activePoll && String(selectedPoll) === String(activePoll.id) && (
             <div style={{ marginTop: '0.875rem', padding: '0.5rem 0.75rem', backgroundColor: GREEN.light, border: `1px solid ${GREEN.border}`, borderRadius: '0.5rem', fontSize: '0.72rem', color: GREEN.accent, fontWeight: 600 }}>
-               You are viewing the <strong>current active season</strong>. These are your live harvest records.
+              ⚡ You are viewing the <strong>current active season</strong>. These are your live harvest records.
             </div>
           )}
         </div>
@@ -1637,7 +1617,7 @@ const BrgyHarvest = () => {
           <div onClick={() => { setShowForm(false); setEditData(null); }}
             style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 700, animation: 'fadeIn 0.2s ease' }} />
           <div style={{
-            position: 'fixed', bottom: 0, left: 0, right: 0,  
+            position: 'fixed', bottom: 0, left: 0, right: 0,
             backgroundColor: 'white', borderRadius: '1.5rem 1.5rem 0 0',
             padding: '1.5rem', zIndex: 800,
             maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto',

@@ -320,19 +320,14 @@ export default function AdminDashboard() {
         {/* Row 3: Production by Barangay (full width) */}
         <div style={{ marginBottom:16 }}>
           <Section title="Production by Barangay (MT)" delay={420}>
-
             {loading ? Array(5).fill(0).map((_,i) => <Skeleton key={i} h={10}/>) : (() => {
               const rows  = data?.production_by_barangay || [];
               const maxProd = Math.max(...rows.map(r => r.production_mt||0), 1);
               if (rows.length===0) return <div style={{ fontSize:12, color:'#94a3b8', padding:'12px 0' }}>No harvest records have been submitted for the selected season.</div>;
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="grid-brgy">
                   {rows.map((b,i) => (
                     <div key={b.barangay} className="dash-fade" style={{ animationDelay:`${420+i*40}ms` }}>
-                      
-                      
-                      
-                      
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:3, marginTop:8 }}>
                         <span style={{ fontSize:12, color:'#374151', fontWeight:500 }}>{b.barangay}</span>
                         <div style={{ display:'flex', alignItems:'center', gap:6 }}>

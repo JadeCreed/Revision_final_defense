@@ -243,44 +243,74 @@ class SeedDeliveryAuditListView(generics.ListAPIView):
         ).select_related('performed_by')
 
 
+
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsAdminUserRole])
 def inventory_summary_view(request):
     from apps.seed_poll.utils import get_current_poll
+    from .models import SeedDelivery, BrgyAllocation, DeliveryScheduleEntry
+    from apps.distribution.models import DistributionBatch
     
-    # I-filter base sa current poll scope
     poll = get_current_poll()
     
     if poll:
-        deliveries = SeedDelivery.objects.filter(
+        # --- LOGIC PARA SA LANDING PAGE TILES (Poll-Scoped) ---
+        
+        # 1. Total Deliveries Tile (e.g., 0/1)
+        current_entries = DeliveryScheduleEntry.objects.filter(
             season=poll.season,
             year=poll.year
-        ).select_related('seed_type').prefetch_related('allocations')
-    else:
-        deliveries = SeedDelivery.objects.none()
+        )
+        total_scheduled = current_entries.count()
+        delivered_count = current_entries.filter(status='DELIVERED').count()
+        total_del_label = f"{delivered_count}/{total_scheduled}" if total_scheduled > 0 else "0"
+        
+        # 2. Bags Received Tile
+        bags_received = sum(e.total_bags for e in current_entries.filter(status='DELIVERED'))
 
-    total_bags   = sum(d.total_bags for d in deliveries)
-    allocated    = sum(d.allocated_bags for d in deliveries)
-    remaining    = sum(d.remaining_bags for d in deliveries)
-    pending_conf = BrgyAllocation.objects.filter(
-        status='PENDING',
-        delivery__in=deliveries
-    ).count()
-    confirmed = BrgyAllocation.objects.filter(
-        status='CONFIRMED',
-        delivery__in=deliveries
-    ).count()
+        # 3. Bags Allocated Tile (History/Approved Beneficiaries)
+        # Ito yung magpapakita ng 1.5 kung may approved beneficiary data na para sa 2025
+        batches = DistributionBatch.objects.filter(
+            status='APPROVED',
+            event__season=poll.season,
+            event__year=poll.year
+        )
+        allocated = 0
+        for b in batches:
+            for entry in b.entries.all():
+                # Logic base sa hectares multiplier mo
+                multiplier = 1.0 if 'HYBRID' in b.event.seed_type.name.upper() else 2.0
+                ha = float(entry.farm_area_ha or 0) if multiplier == 1.0 else float(entry.area_planted or 0)
+                allocated += (ha * multiplier)
 
-    return Response({
-        'total_deliveries':      deliveries.count(),
-        'total_bags_received':   total_bags,
-        'total_bags_allocated':  allocated,
-        'total_bags_remaining':  remaining,
-        'pending_confirmations': pending_conf,
-        'confirmed_pickups':     confirmed,
-        'current_season':        poll.season if poll else None,
-        'current_year':          poll.year   if poll else None,
-    })
+        # 4 & 5. Pending at Confirmed Pickups Tiles
+        # Naka-filter lang sa deliveries ng CURRENT season
+        deliveries = SeedDelivery.objects.filter(season=poll.season, year=poll.year)
+        pending_conf = BrgyAllocation.objects.filter(status='PENDING', delivery__in=deliveries).count()
+        confirmed_pick = BrgyAllocation.objects.filter(status='CONFIRMED', delivery__in=deliveries).count()
+
+        return Response({
+            'total_deliveries':      total_del_label,
+            'total_bags_received':   bags_received,
+            'total_bags_allocated':  allocated, 
+            'pending_confirmations': pending_conf,
+            'confirmed_pickups':     confirmed_pick,
+            'current_season':        poll.season,
+            'current_year':          poll.year,
+        })
+    
+    return Response({'error': 'No active poll found'}, status=404)
+
+
+
+
+
+
+
+
+
 
 
 # ─────────────────────────────────────────
@@ -624,7 +654,178 @@ def brgy_my_seed_allocation_view(request):
         })
 
     return Response(result)
+
+# ─────────────────────────────────────────
+# DELIVERY SCHEDULE VIEWS (replaces localStorage)
+# ─────────────────────────────────────────
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsAdminUserRole])
+def delivery_schedule_list_create(request):
+    from .models import DeliverySchedule, DeliveryScheduleEntry
+    from apps.announcements.models import Announcement # <--- I-import ang model dito
+
+    if request.method == 'GET':
+        schedules = DeliverySchedule.objects.prefetch_related('entries').order_by('-id')
+        result = []
+        total_count = schedules.count()
+        for idx, s in enumerate(schedules):
+            display_number = total_count - idx 
+            result.append({
+                'id': s.id,
+                'display_number': display_number, 
+                'createdAt': s.created_at.isoformat(),
+                'updatedAt': s.updated_at.isoformat(),
+                'entries': [
+                    {
+                        'id':            e.id,
+                        'seedTypeId':    str(e.seed_type_db_id) if e.seed_type_db_id else str(e.id),
+                        'seedTypeDbId':  e.seed_type_db_id,
+                        'seedTypeName':  e.seed_type_name,
+                        'varietyId':     e.variety_id,
+                        'varietyName':   e.variety_name,
+                        'source':        e.source,
+                        'season':        e.season,
+                        'year':          e.year,
+                        'total_bags':    e.total_bags,
+                        'delivery_date': str(e.delivery_date),
+                        'status':        e.status,
+                        'lot_number':    e.lot_number,
+                        'remarks':       e.remarks,
+                    }
+                    for e in s.entries.all()
+                ],
+            })
+        return Response(result)
+
+    # POST — create new schedule
+    entries_data = request.data.get('entries', [])
+    if not entries_data:
+        return Response({'error': 'No entries provided.'}, status=400)
+
+    from apps.announcements.models import Announcement # Import model
+
+    schedule = DeliverySchedule.objects.create()
+    for e in entries_data:
+        import datetime
+        entry = DeliveryScheduleEntry.objects.create(
+            schedule=schedule,
+            seed_type_db_id=e.get('seedTypeDbId'),
+            seed_type_name=e.get('seedTypeName', ''),
+            variety_id=e.get('varietyId'),
+            variety_name=e.get('varietyName', ''),
+            source=e.get('source', ''),
+            season=e.get('season', 'WET'),
+            year=int(e.get('year', datetime.date.today().year)),
+            total_bags=int(e.get('total_bags', 0)),
+            delivery_date=e.get('delivery_date'),
+            lot_number=e.get('lot_number', ''),
+            remarks=e.get('remarks', ''),
+            status=e.get('status', 'SCHEDULED'),
+        )
+
+        # ── AUTOMATED NOTIFICATION TRIGGER ──
+        try:
+            variety_label = f" ({entry.variety_name})" if entry.variety_name else ''
+            Announcement.objects.create(
+                title=f"Seed Schedule — {entry.seed_type_name}{variety_label}",
+                content=(
+                    f"Delivery on {entry.delivery_date} · "
+                    f"{entry.total_bags} bags · {entry.get_season_display()} {entry.year}"
+                ),
+                target_role='BRGY',
+                posted_by=request.user,
+                is_active=True,
+            )
+        except Exception: pass
+
+    return Response({'id': schedule.id, 'message': 'Schedule created and notification sent.'}, status=201)
+
+
+@api_view(['PUT', 'DELETE'])
+@permission_classes([IsAuthenticated, IsAdminUserRole])
+def delivery_schedule_detail(request, schedule_id):
+    from .models import DeliverySchedule, DeliveryScheduleEntry
+    try:
+        schedule = DeliverySchedule.objects.get(pk=schedule_id)
+    except DeliverySchedule.DoesNotExist:
+        return Response({'error': 'Not found.'}, status=404)
+
+    if request.method == 'DELETE':
+        schedule.delete()
+        return Response({'message': 'Deleted.'})
+
+    entries_data = request.data.get('entries', [])
+    schedule.entries.all().delete()
+    for e in entries_data:
+        import datetime
+        DeliveryScheduleEntry.objects.create(
+            schedule=schedule,
+            seed_type_db_id=e.get('seedTypeDbId'),
+            seed_type_name=e.get('seedTypeName', ''),
+            variety_id=e.get('varietyId'),
+            variety_name=e.get('varietyName', ''),
+            source=e.get('source', ''),
+            season=e.get('season', 'WET'),
+            year=int(e.get('year', datetime.date.today().year)),
+            total_bags=int(e.get('total_bags', 0)),
+            delivery_date=e.get('delivery_date'),
+            lot_number=e.get('lot_number', ''),
+            remarks=e.get('remarks', ''),
+            status=e.get('status', 'SCHEDULED'),
+        )
+    schedule.save()
+    return Response({'message': 'Updated.'})
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated, IsAdminUserRole])
+def delivery_schedule_entry_update(request, entry_id):
+    from .models import DeliveryScheduleEntry
+    from apps.announcements.models import Announcement
+    try:
+        entry = DeliveryScheduleEntry.objects.get(pk=entry_id)
+    except DeliveryScheduleEntry.DoesNotExist:
+        return Response({'error': 'Entry not found.'}, status=404)
+
+    old_status = entry.status
+    for field in ['total_bags', 'delivery_date', 'lot_number', 'remarks', 'season', 'year', 'status']:
+        if field in request.data:
+            setattr(entry, field, request.data[field])
+    entry.save()
+    entry.schedule.save()
+
+    # ── KAPAG PININDOT ANG DELIVERED BUTTON ──
+    if old_status != 'DELIVERED' and entry.status == 'DELIVERED':
+        try:
+            variety_label = f" ({entry.variety_name})" if entry.variety_name else ''
+            
+            # A. Notif para sa BRGY (Lalabas sa Home Widget nila para sa Allocation)
+            Announcement.objects.create(
+                title=f"Seed Allocation — {entry.seed_type_name}{variety_label}",
+                content=f"{entry.total_bags} bags are ready for allocation. Check your inventory.",
+                action_title="Confirm Received",
+                action_url=f"confirm-allocation-id:{entry.id}",
+                target_role='BRGY',
+                posted_by=request.user,
+                is_active=True
+            )
+
+            # B. Notif para sa FARMER (Lalabas sa Dashboard at Bell nila)
+            Announcement.objects.create(
+                title=f"Seed Distribution — {entry.variety_name}",
+                content=f"Seeds for {entry.variety_name} are arriving soon ({entry.get_season_display()} {entry.year}). Wait for schedule.",
+                target_role='FARMER',
+                posted_by=request.user,
+                is_active=True
+            )
+        except Exception:
+            pass
+
+    return Response({'message': 'Entry updated and notifications triggered.'})
+
+
 from apps.accounts.permissions import IsAdminUserRole, IsBPUser
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsBPUser])
