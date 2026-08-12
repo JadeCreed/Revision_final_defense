@@ -2,12 +2,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/logo.png';
+import { usePwaInstall } from '../hooks/usePwaInstall';
 
 const Navbar = () => {
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const isLandingPage = location.pathname === '/';
+  const { install, installed } = usePwaInstall();
 
   const scrollTo = (id) => {
     setMenuOpen(false);
@@ -53,11 +55,11 @@ const Navbar = () => {
           {/* Mobile-only auth links inside drawer — ALWAYS Static */}
           <li className="mobile-only">
             <div style={{ display: 'flex', gap: '0.625rem', padding: '0 1rem' }}>
-              <button className="nav-drawer-btn nav-drawer-btn--outline" style={{ flex: 1, justifyContent: 'center' }}>
+              <button className="nav-drawer-btn nav-drawer-btn--outline" onClick={install} type="button" style={{ flex: 1, justifyContent: 'center' }}>
                 <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 21h20"/>
                 </svg>
-                Download
+                {installed ? 'Installed' : 'Download'}
               </button>
               <a href="#login" onClick={(e) => handleNavClick(e, 'login')} style={{ flex: 1 }}>
                 <button className="nav-drawer-btn nav-drawer-btn--solid" style={{ width: '100%', justifyContent: 'center' }}>
@@ -73,11 +75,11 @@ const Navbar = () => {
 
         {/* RIGHT: ACTION BUTTONS — ALWAYS Static */}
         <div className="navbar-actions">
-          <button className="navbar-install-btn">
+          <button className="navbar-install-btn" onClick={install} type="button">
             <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
               <path d="M12 15V3m0 12l-4-4m4 4l4-4M2 21h20"/>
             </svg>
-            Download App
+            {installed ? 'App Installed' : 'Download App'}
           </button>
           <a href="#login" onClick={(e) => handleNavClick(e, 'login')}>
             <button className="navbar-sign-in-btn">

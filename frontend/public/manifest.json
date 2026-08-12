@@ -1,0 +1,17 @@
+{
+	"name": "AgrICE",
+	"short_name": "AgrICE",
+	"description": "Agricultural Information and Crop Efficiency system",
+	"start_url": "/",
+	"display": "standalone",
+	"background_color": "#ffffff",
+	"theme_color": "#1a4d1a",
+	"orientation": "portrait-primary",
+	"icons": [
+		{
+			"src": "/logo.png",
+			"sizes": "any",
+			"type": "image/png"
+		}
+	]
+}

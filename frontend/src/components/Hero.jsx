@@ -8,11 +8,13 @@ import AnnouncementsSection from './AnnouncementsSection';
 import DocumentationSection from './DocumentationSection';
 import FooterSection from './FooterSection';
 import API from '../api/axios';
+import { usePwaInstall } from '../hooks/usePwaInstall';
 
 const Hero = () => {
   const [registeredFarmers, setRegisteredFarmers] = useState(0);
   const [totalHectares, setTotalHectares] = useState(0);
   const [currentSeason, setCurrentSeason] = useState('');
+  const { install, installed } = usePwaInstall();
 
   useEffect(() => {
     API.get('/accounts/public-stats/')
@@ -122,11 +124,11 @@ const Hero = () => {
                 </svg>
                 Learn About Programs
               </button>
-              <button className="lp-btn-secondary">
+              <button className="lp-btn-secondary" onClick={install} type="button">
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>
                 </svg>
-                Install AGRICE App
+                {installed ? 'AGRICE App Installed' : 'Install AGRICE App'}
               </button>
             </div>
           </div>
