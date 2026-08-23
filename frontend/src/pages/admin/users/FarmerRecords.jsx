@@ -278,7 +278,7 @@ const FarmerAccountsTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
+                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Status', COL_WIDTHS.status],['Details', '110px'],['Date Joined', COL_WIDTHS.date],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
                   <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
               </tr>
@@ -302,12 +302,13 @@ const FarmerAccountsTab = () => {
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.status }}>
                       <span style={{ backgroundColor: s.bg, color: s.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{s.label}</span>
                     </td>
-                    {/* <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
+                    
+                    <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
                       <button onClick={() => openAccountsDetails(farmer.id)}
                         style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         View Details
                       </button>
-                    </td> */}
+                    </td> 
                     
                     <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(farmer.date_joined)}</td>
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>

@@ -6,7 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import parsers
 
 from .models import PasswordResetOTP
-from .utils import generate_otp, send_otp_email
+from .utils import generate_otp, send_otp_email, send_otp_sms
 from .rate_limit import LoginRateLimiter
 from django.db.models import Q, Case, When, IntegerField
 from django.utils import timezone
@@ -237,77 +237,59 @@ class LogoutView(APIView):
         
         return response
 
-
-# 🔄 Forgot Password View — Request password reset
 class ForgotPasswordView(APIView):
-    """
-    Request a password reset OTP via email or contact number.
-    Never confirms whether account exists (security best practice).
-    """
-
     def post(self, request):
-        try:
-            identifier = (request.data.get("email_or_phone") or "").strip()
+        email = request.data.get("email", "").strip()
+        contact_number = normalize_contact_number(request.data.get("contact_number", ""))
 
-            if not identifier:
-                return Response(
-                    {"error": "Email or contact number is required"},
-                    status=400
-                )
+        if not email and not contact_number:
+            return Response({"error": "Please provide your registered email or contact number."}, status=400)
 
-            user = None
+        user = None
+        delivery_method = None
 
-            # 📧 Email path
-            if "@" in identifier:
-                email = identifier.lower()
-                if not re.match(r'^[a-zA-Z0-9._%+-]+@gmail\.com$', email):
-                    # Generic response to avoid account enumeration
-                    return Response(
-                        {"message": "If this account exists, a reset code will be sent"},
-                        status=200
-                    )
-                user = User.objects.filter(email__iexact=email).first()
-            else:
-                # 📞 Phone path
-                normalized = normalize_contact_number(identifier)
-                if normalized and len(normalized) == 11 and normalized.isdigit():
-                    user = User.objects.filter(contact_number=normalized).first()
-
-            # 🔒 Always return the same generic message for security
-            # Never confirm if account exists or not
+        if email:
+            user = User.objects.filter(email__iexact=email).first()
             if user:
-                # Generate OTP
-                otp_code = generate_otp()
-                
-                # Clear any existing OTPs
-                PasswordResetOTP.objects.filter(user=user).delete()
-                
-                # Create new OTP record (expires in 5 minutes)
-                PasswordResetOTP.objects.create(
-                    user=user,
-                    otp=otp_code,
-                    is_used=False
-                )
-                
-                # Send OTP via email if user has email
-                if user.email:
-                    try:
-                        send_otp_email(user.email, otp_code, user.first_name)
-                    except Exception as e:
-                        # Log error but don't fail the response
-                        print(f"Error sending OTP email: {e}")
+                delivery_method = "email"
 
-            # Always return the same generic message
-            return Response(
-                {"message": "If this account exists, a reset code will be sent"},
-                status=200
-            )
+        if not user and contact_number:
+            user = User.objects.filter(contact_number=contact_number).first()
+            if user:
+                delivery_method = "sms"
 
-        except Exception as e:
-            return Response(
-                {"error": str(e)},
-                status=500
-            )
+        if user is None:
+            return Response({"error": "Email or contact number not found."}, status=404)
+
+        if delivery_method == "email" and not user.email:
+            return Response({
+                "error": "This account has no email on file. Please use the contact number reset option."
+            }, status=400)
+
+        if delivery_method == "sms" and not user.contact_number:
+            return Response({"error": "This account has no contact number on file."}, status=400)
+
+        thirty_minutes_ago = timezone.now() - timedelta(minutes=30)
+        recent_otps = PasswordResetOTP.objects.filter(user=user, created_at__gte=thirty_minutes_ago)
+        if recent_otps.count() >= 3:
+            return Response({"error": "Too many OTP requests. Try again after 30 minutes."}, status=429)
+
+        PasswordResetOTP.objects.filter(user=user).delete()
+        otp = generate_otp()
+        PasswordResetOTP.objects.create(user=user, otp=otp, is_used=False)
+
+        if delivery_method == "email":
+            try:
+                send_otp_email(user, otp)
+            except Exception as e:
+                print(f"Error sending OTP email: {e}")
+        elif delivery_method == "sms":
+            try:
+                send_otp_sms(user, otp)
+            except Exception as e:
+                print(f"Error sending OTP SMS: {e}")
+
+        return Response({"message": "OTP sent"})
 
 
 # ✅ Verify Token View — Check if user is authenticated
@@ -657,8 +639,17 @@ class FarmerProfileView(APIView):
     def get(self, request):
         profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
         serializer = FarmerProfileSerializer(profile, context={'request': request})
+        profile_data = serializer.data
+
+        if not profile_data.get('hectares') and request.user.rsbsa_number:
+            master_record = FarmerMasterRecord.objects.filter(
+                rsbsa_number=request.user.rsbsa_number
+            ).first()
+            if master_record and master_record.hectares:
+                profile_data['hectares'] = master_record.hectares
+
         return Response({
-            "user": {
+            "user": {      
                 "first_name":     request.user.first_name,
                 "last_name":      request.user.last_name,
                 "email":          request.user.email,
@@ -667,7 +658,7 @@ class FarmerProfileView(APIView):
                 "rsbsa_number":   request.user.rsbsa_number,
                 "status":         request.user.status,
             },
-            "profile": serializer.data
+            "profile": profile_data
         })
 
     def put(self, request):
@@ -1013,48 +1004,49 @@ class ForgotPasswordView(APIView):
             return Response({"error": "Please provide your registered email or contact number."}, status=400)
 
         user = None
+        delivery_method = None
+
         if email:
             user = User.objects.filter(email__iexact=email).first()
+            if user:
+                delivery_method = "email"
+
         if not user and contact_number:
             user = User.objects.filter(contact_number=contact_number).first()
+            if user:
+                delivery_method = "sms"
 
         if user is None:
             return Response({"error": "Email or contact number not found."}, status=404)
 
-        if not user.email:
+        if delivery_method == "email" and not user.email:
             return Response({
                 "error": "This account has no email on file. Please use the contact number reset option."
             }, status=400)
 
-        # ⛔ RATE LIMIT (3 requests per 30 mins)
+        if delivery_method == "sms" and not user.contact_number:
+            return Response({"error": "This account has no contact number on file."}, status=400)
+
+        # ⛔ RATE LIMIT (3 requests per 30 mins) — unchanged
         thirty_minutes_ago = timezone.now() - timedelta(minutes=30)
-
-        recent_otps = PasswordResetOTP.objects.filter(
-            user=user,
-            created_at__gte=thirty_minutes_ago
-        )
-
+        recent_otps = PasswordResetOTP.objects.filter(user=user, created_at__gte=thirty_minutes_ago)
         if recent_otps.count() >= 3:
-            return Response(
-                {"error": "Too many OTP requests. Try again after 30 minutes."},
-                status=429
-            )
+            return Response({"error": "Too many OTP requests. Try again after 30 minutes."}, status=429)
 
-        #  DELETE OLD OTPs (optional cleanup)
         PasswordResetOTP.objects.filter(user=user).delete()
-
-        # 🔢 Generate OTP
         otp = generate_otp()
+        PasswordResetOTP.objects.create(user=user, otp=otp, is_used=False)
 
-        # 💾 Save OTP
-        PasswordResetOTP.objects.create(
-            user=user,
-            otp=otp,
-            is_used=False
-        )
-
-        # 📧 Send Email
-        send_otp_email(user, otp)
+        if delivery_method == "email":
+            try:
+                send_otp_email(user, otp)
+            except Exception as e:
+                print(f"Error sending OTP email: {e}")
+        elif delivery_method == "sms":
+            try:
+                send_otp_sms(user, otp)
+            except Exception as e:
+                print(f"Error sending OTP SMS: {e}")
 
         return Response({"message": "OTP sent"})
 

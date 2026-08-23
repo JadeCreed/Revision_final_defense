@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getFarmerRequests, approveFarmer } from '../../../api/axios';
+import { getFarmerRequests, approveFarmer,getFarmerFullProfile  } from '../../../api/axios';
 import {
   Pagination,
   SortDropdown,
@@ -68,6 +68,7 @@ const FarmerRequests = () => {
   // ── Action buttons state ──
   const [actionLoading, setActionLoading] = useState({});
   const [confirmModal, setConfirmModal]   = useState(null);
+  const [detailsModal, setDetailsModal] = useState(null);
 
 
   // ─────────────────────────────────────────────────────────
@@ -169,6 +170,15 @@ const FarmerRequests = () => {
     }
   };
 
+  const openDetails = async (farmerId) => {
+    try {
+      const res = await getFarmerFullProfile(farmerId);
+      setDetailsModal(res.data);
+    } catch {
+      setError('Failed to load farmer details.');
+    }
+  };
+
   const formatDate = (d) =>
     new Date(d).toLocaleDateString('en-PH', {
       year: 'numeric', month: 'short', day: 'numeric',
@@ -242,6 +252,7 @@ const FarmerRequests = () => {
                   ['Barangay',    COL_WIDTHS.barangay],
                   ['Status',      COL_WIDTHS.status],
                   ['Date Joined', COL_WIDTHS.date],
+                  ['Details',     COL_WIDTHS.details],
                   ['Action',      COL_WIDTHS.actions],
                 ].map(([col, w]) => (
                   <th
@@ -257,13 +268,13 @@ const FarmerRequests = () => {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
                     Loading...
                   </td>
                 </tr>
               ) : farmers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>
                     No records found.
                   </td>
                 </tr>
@@ -318,6 +329,16 @@ const FarmerRequests = () => {
                       <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>
                         {formatDate(farmer.date_joined)}
                       </td>
+
+                      {/* Details */}
+                    <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.details }}>
+                      <button
+                        onClick={() => openDetails(farmer.id)}
+                        style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                      >
+                        View Details
+                      </button>
+                    </td>
 
                       {/* Action column — only shows buttons for COMPLETE status */}
                       <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>

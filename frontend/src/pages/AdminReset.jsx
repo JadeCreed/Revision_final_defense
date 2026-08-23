@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import logo from '../assets/logo.png';
-import API from '../api/axios';
+import { forgotPassword, verifyOTP } from '../api/axios';
 
 const AdminReset = () => {
+  const navigate = useNavigate();
   const [contactNumber, setContactNumber] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -11,6 +12,8 @@ const AdminReset = () => {
   const [showOTPModal, setShowOTPModal] = useState(false);
   const [otpValues, setOtpValues] = useState(['', '', '', '', '', '']);
   const [otpError, setOtpError] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [canResend, setCanResend] = useState(false);
   const timerRef = useRef(null);
@@ -43,7 +46,7 @@ const AdminReset = () => {
     setLoading(true);
     setError('');
     try {
-      await API.post('/accounts/admin-reset-request/', { contact_number: contactNumber });
+      await forgotPassword({ contact_number: contactNumber });
       setShowOTPModal(true);
       setOtpValues(['', '', '', '', '', '']);
       setOtpError('');
@@ -81,6 +84,39 @@ const AdminReset = () => {
     if (pasted.length === 6) {
       setOtpValues(pasted.split(''));
       inputRefs.current[5]?.focus();
+    }
+  };
+
+  const handleVerify = async () => {
+    const otp = otpValues.join('');
+    if (otp.length !== 6) { setOtpError('Please enter the complete 6-digit code.'); return; }
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      await verifyOTP({ email: contactNumber, otp });
+      navigate('/forgot-password/reset-password', { state: { email: contactNumber, otp } });
+    } catch (err) {
+      setOtpError(err.response?.data?.error || 'Invalid or expired code. Try again.');
+      setOtpValues(['', '', '', '', '', '']);
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResend = async () => {
+    if (!canResend) return;
+    setResending(true);
+    setOtpError('');
+    try {
+      await forgotPassword({ contact_number: contactNumber });
+      setOtpValues(['', '', '', '', '', '']);
+      startCountdown();
+      setTimeout(() => inputRefs.current[0]?.focus(), 100);
+    } catch {
+      setOtpError('Failed to resend. Please try again.');
+    } finally {
+      setResending(false);
     }
   };
 
@@ -206,18 +242,9 @@ const AdminReset = () => {
             <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1a1a1a', margin: '0 0 0.375rem' }}>
               Check Your Phone
             </h3>
-            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.5rem', lineHeight: 1.6 }}>
-              We sent a 6-digit code to the number you provided.
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+              We sent a 6-digit code to <strong style={{ color: '#2d6a2d' }}>{contactNumber}</strong>
             </p>
-            <div style={{
-              display: 'inline-block',
-              backgroundColor: '#fef9c3', color: '#854d0e',
-              fontSize: '0.72rem', fontWeight: 600,
-              padding: '0.2rem 0.6rem', borderRadius: '999px',
-              marginBottom: '1.5rem',
-            }}>
-              SMS feature coming soon
-            </div>
 
             {otpError && (
               <div style={{ background: '#fee2e2', color: '#dc2626', borderRadius: '8px', padding: '0.5rem 0.75rem', fontSize: '0.78rem', marginBottom: '1rem' }}>
@@ -247,24 +274,25 @@ const AdminReset = () => {
               ))}
             </div>
 
-            <button disabled style={{
+            <button onClick={handleVerify} disabled={otpLoading} style={{
               width: '100%', padding: '0.8rem',
-              background: '#d1d5db', color: '#9ca3af',
+              background: otpLoading ? '#86efac' : '#2d6a2d', color: 'white',
               border: 'none', borderRadius: '10px',
               fontSize: '0.95rem', fontWeight: 700,
-              cursor: 'not-allowed', marginBottom: '1.25rem',
+              cursor: otpLoading ? 'not-allowed' : 'pointer', marginBottom: '1.25rem',
             }}>
-              Verify Code
+              {otpLoading ? 'Verifying...' : 'Verify Code'}
             </button>
 
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
-              <span style={{ color: '#9ca3af' }}>
+              <span style={{ color: '#6b7280' }}>
                 {canResend ? (
-                  <button disabled style={{ background: 'none', border: 'none', color: '#9ca3af', fontSize: '0.78rem', padding: 0, cursor: 'not-allowed' }}>
-                    Resend OTP
+                  <button onClick={handleResend} disabled={resending} style={{ background: 'none', border: 'none', color: '#2d6a2d', fontWeight: 700, cursor: 'pointer', fontSize: '0.78rem', padding: 0 }}>
+                    {resending ? 'Resending...' : 'Resend OTP'}
                   </button>
                 ) : (
-                  <span>Resend in <strong style={{ color: '#6b7280' }}>{countdown}s</strong></span>
+                  <span>Resend in <strong style={{ color: '#2d6a2d' }}>{countdown}s</strong></span>
                 )}
               </span>
               <Link

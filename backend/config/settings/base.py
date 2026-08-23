@@ -203,7 +203,7 @@ JWT_AUTH_COOKIE_SAMESITE = 'Lax'  # Allow in dev over HTTP; use 'None' with Secu
 
 
 # =========================
-# 📧 EMAIL CONFIG (BREVO)
+#  EMAIL CONFIG (BREVO)
 # =========================
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
@@ -215,6 +215,20 @@ EMAIL_HOST_USER = config("BREVO_SENDER_EMAIL")
 EMAIL_HOST_PASSWORD = config("BREVO_API_KEY")
 
 DEFAULT_FROM_EMAIL = "dumpchlb121@gmail.com"
+
+# =========================
+#  SMS CONFIG (SMSGATE)
+# =========================
+
+# SMSGate configuration
+SMSGATE_API_URL = config("SMSGATE_API_URL")
+SMSGATE_USERNAME = config("SMSGATE_USERNAME")
+SMSGATE_PASSWORD = config("SMSGATE_PASSWORD")
+SMSGATE_DEVICE_ID = config("SMSGATE_DEVICE_ID", default="")
+
+
+
+
 
 # =========================
 # 🌾 AGRICULTURE CONSTANTS

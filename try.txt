@@ -1,0 +1,21 @@
+ ito na yung needed revisions, meron rin pala yung ibang panel. Need ito makita sa revision lahat kasi hahanapin nila ito  Sir Mesiera revision: 1. Data retention (yung part na kapag namatay yung farmer), dapat makikita if yung farmer is deads na, status ganun 2. Dapat magkaroon ng way to document na yung farmer ay deceased na and yung papalit dapat ay another profile with new records, hindi same records dun sa pinalitan pero may documentation kung ka-ano-ano yung pumalit? (hindi ko masyadong marinig) 3. How do we reach out sa primary stakeholders which is si farmer / How do we benefit them? / Paano maiinform yung farmers na “Sir, may dumating sayong seeds, kunin mo here sa office” (Wala pa kasi yung allocation ay for presidents lang na notification). Dapat magkaroon rin ng notifications yung farmers, hindi lang yung presidents = thru SMS Text Blast para maging connected yung farmers sa system like “Sir, may binhi kayong parating” kasi hindi naman talaga gagamitin ng farmers yung system, we can only inform them 4. How much land is used for rice farming? Masasagot kaya ng portal? Kahit estimation. Percentage ng rice farming sa kabuuang Lucban, ilang percent? Kung masasagot ba daw ng system. How much of our land is used for agricultural purposes? Kasi meron tayong thinking na industrial lahat but how much ang naka-allot sa agriculture especially sa rice farming. Tingnan na lang kasi may data naman ng total land area then how much land, a simple multiplication and division lang. Ilagay lang as label sa Geospatial. 5. Can we save yung visualizations na ito? (yes po) pero how about yung GIS natin? Reports with Map ay need rin. Isama ito kasi saying yung map if walang reports 6. Yung sa farmers records, kunyari ilang beses silang nabigyan ng seedling. Historical records per farmer. Pag sinabing active how many times ka ng nakapagreceive ng seeds/nabgiyan. Kahit wala ng filter per season or by year. Basta historical records lang nila in general like kailan sila nakareceive. For record transparency  Maam Borja revision: 1. Need na auto-fill na rin yung hectare kasi may record naman kina Sir Randy kasi baka iba yung ilagay ng farmer 2. Objectives. Wag paghiwa-hiwalay yung users. Nagiging redundant. Isang summary. Understood naman na magkakaiba sila ✅ 3. GIS mapping – per barangay? Ang dating sa akin ay more on visualization lang, hindi ko feel na nagmomonitor ng crops gamit yung GIS mapping kasi nakikita ko lang per barangay. Bakit as a barangay yung pagmomonitor? (Wala po kaming data ng exact location ng per farmer’s land) Yun ang problema kasi kapag GIS iisipin mo agad mga precise location geographic coordinates. 4. Bakit hindi kayo maglalagay ng advanced statistical analysis and predictive modeling? Paano niyo gagawin yung yield analysis? (Descriptive analytics po ang gagamitin naming sa yield) pakilinawin na lang ✅  Sir NJ revision: 1. Paano kung mababa sa hectare? Like square meter lang? (ask natin ito kay Sir Randy)  2. Walang bearing if siya PWD? Like walang pictures for proof na PWD siya? (Wala po) ✅ 3. Ibalik yung view details sa pag-approved ng farmer registration to verify if tama yung details na nilagay 
+
+
+
+081726 | Sir. Mesiera
+
+*/ ipinaliwanag yung sa revised sdlc 
+- need naka fast tense
+- text blast for important announcements, ilalagay sa scope and limitation kasi scope pa rin yun, yung sa limitation is mainly for pang announcement lang sha indicate it
+ > be honest na lang if there is a prob financially due to limitations ng mga researchers valid naman and understandable kasi undergrad us, even sa engineering students nakalagay yung ganoon sa limitations nila. 
+- yung text blast is for all the users tapos yung limitation would be the demographics, i-testing na muna yung nahanap na text blast but if there would be a limitation it's fine kasi understandable kuno ngani
+- yung history abt dun sa na r-recieve nila na bag of seeds should be visible both admin and farmer's interface, dapat na nag r-reflect sa system and include lang yung data na yun
+- pwede i-multiple page yung mga diagrams para mas visible
+- limit the word "overall"
+
+  this is the revision i have 
+
+
+
+
+
