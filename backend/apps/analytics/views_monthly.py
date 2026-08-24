@@ -19,6 +19,17 @@ from apps.seed_poll.models import Poll
 
 STANDARD_YIELDS = getattr(settings, 'STANDARD_YIELDS', {'HYBRID': 5000, 'INBRED': 3500, 'OWN_SEED': 2000})
 
+
+PHASE_LABEL_MAP = {
+    'DISTRIBUTION':  'Seed Distribution',
+    'ESTABLISHMENT': 'Crop Establishment',
+    'TILLERING':     'Tillering',
+    'FLOWERING':     'Flowering',
+    'RIPENING':      'Ripening',
+    'HARVESTING':    'Harvesting',
+}
+
+
 def dry_weight_kg(record):
     return float(record.harvest_bags or 0) * 50
 
@@ -127,6 +138,72 @@ def _build_monthly_data(season, year, month_num=None, barangay=None):
 
     records.sort(key=lambda x: x['date'], reverse=True)
 
+    # ── PER-BARANGAY DATA para sa PDF choropleth maps ──
+    from collections import Counter as _Counter
+
+    monitoring_by_barangay = {}
+    for rec in mon_qs:
+        brgy = rec.barangay or 'Unknown'
+        monitoring_by_barangay.setdefault(brgy, _Counter())
+        monitoring_by_barangay[brgy][rec.crop_phase] += 1
+
+        # ── AREA MONITORED + SEED TYPE BREAKDOWN (parehong scope ng live GIS Map) ──
+    area_by_farmer = {}
+    seed_type_by_farmer = {}
+    for rec in latest_per_farmer.values():
+        area_by_farmer[rec.farmer_id] = float(rec.area_ha or 0)
+        seed_type_by_farmer[rec.farmer_id] = getattr(rec, 'seed_type', None) or 'HYBRID'
+
+    monitoring_barangay_list = []
+    for brgy, counter in monitoring_by_barangay.items():
+        dominant_phase = counter.most_common(1)[0][0]
+        monitoring_barangay_list.append({
+            'barangay': brgy,
+            'phase': dominant_phase,
+            'phase_label': PHASE_LABEL_MAP.get(dominant_phase, dominant_phase),
+            'farmer_count': sum(counter.values()),
+        })
+
+    # ── OVERALL SUMMARY (hindi per-barangay, para sa dynamic stats sa itaas ng mapa) ──
+    total_monitoring_records = len(latest_per_farmer) + (
+        len(monitored_farmer_ids) - len(latest_per_farmer)
+    )
+    total_area_monitored = round(sum(area_by_farmer.values()), 2)
+    overall_phase_tally = _Counter()
+    for counter in monitoring_by_barangay.values():
+        overall_phase_tally.update(counter)
+    overall_dominant = overall_phase_tally.most_common(1)[0] if overall_phase_tally else (None, 0)
+
+    seed_type_tally = _Counter(seed_type_by_farmer.values())
+    seed_type_breakdown = [
+        {'seed_type': k, 'label': SEED_LABELS.get(k, k), 'farmer_count': v}
+        for k, v in seed_type_tally.items()
+    ]
+
+    monitoring_summary = {
+        'total_records':      total_monitoring_records,
+        'active_barangays':   len(monitoring_by_barangay),
+        'total_area_ha':      total_area_monitored,
+        'dominant_phase':     PHASE_LABEL_MAP.get(overall_dominant[0], overall_dominant[0]) if overall_dominant[0] else 'No data',
+        'dominant_count':     overall_dominant[1],
+        'seed_type_breakdown': seed_type_breakdown,
+    }
+
+    harvest_by_barangay = {}
+    for h in har_qs:
+        brgy = getattr(h.farmer, 'barangay', None) or h.barangay or 'Unknown'
+        tier = get_tier_label(utilization_pct(h))
+        harvest_by_barangay.setdefault(brgy, []).append(tier)
+
+    harvest_barangay_list = []
+    for brgy, tiers in harvest_by_barangay.items():
+        dominant_tier = _Counter(tiers).most_common(1)[0][0]
+        harvest_barangay_list.append({
+            'barangay': brgy,
+            'tier': dominant_tier,
+            'record_count': len(tiers),
+        })
+    
     by_seed_type = []
     for src in ['HYBRID', 'INBRED', 'OWN_SEED']:
         group = [h for h in har_qs if h.seed_source == src]
@@ -172,6 +249,9 @@ def _build_monthly_data(season, year, month_num=None, barangay=None):
         },
         'records': records,
         'insights': insights,
+        'monitoring_by_barangay': monitoring_barangay_list,
+        'monitoring_summary': monitoring_summary,
+        'harvest_by_barangay': harvest_barangay_list,
     }
 
 class AdminMonthlyAnalyticsView(APIView):
@@ -248,6 +328,18 @@ class AdminMonthlyAnalyticsPDFView(APIView):
         else:
             phase_chart_html = '<div style="background:#f8fafc;border:1px dashed #cbd5e1;padding:25px;text-align:center;color:#94a3b8;font-size:8pt;">Chart will render from system dashboard</div>'
 
+        monitoring_map_html = ''
+        if charts.get('monitoring_map'):
+            monitoring_map_html = f'<img src="data:image/png;base64,{charts["monitoring_map"]}" style="width:100%;height:auto;border-radius:6px;" />'
+        else:
+            monitoring_map_html = '<div style="background:#f8fafc;border:1px dashed #cbd5e1;padding:25px;text-align:center;color:#94a3b8;font-size:8pt;">Map will render from system dashboard</div>'
+
+        harvest_map_html = ''
+        if charts.get('harvest_map'):
+            harvest_map_html = f'<img src="data:image/png;base64,{charts["harvest_map"]}" style="width:100%;height:auto;border-radius:6px;" />'
+        else:
+            harvest_map_html = '<div style="background:#f8fafc;border:1px dashed #cbd5e1;padding:25px;text-align:center;color:#94a3b8;font-size:8pt;">Map will render from system dashboard</div>'
+
         harvest_chart_html = ''
         if charts.get('harvest_yield'):
             harvest_chart_html = f'<img src="data:image/png;base64,{charts["harvest_yield"]}" style="width:100%;height:auto;border-radius:6px;" />'
@@ -306,6 +398,68 @@ class AdminMonthlyAnalyticsPDFView(APIView):
               </div>
             </div>
             """
+
+        # ── GEOSPATIAL MAP PAGE(S) — laging may Crop Monitoring, kondisyonal ang Harvest ──
+        geo_map_page_html = f"""
+        <div class="page-break"></div>
+        <table class="gov-header">
+          <tr>
+            <td style="text-align:left;"><span class="gov-header-title">AGRICE Monthly Analytics Report</span></td>
+            <td style="text-align:right;"><span class="gov-header-desc">{month_label} &bull; {season} {year}</span></td>
+          </tr>
+        </table>
+        <div class="section-header">Geospatial Distribution Overview</div>
+        <div class="section-subheader">Barangay-level visualization of crop monitoring coverage{' and harvest utilization' if show_harvest else ''}</div>
+
+        <div class="card" style="padding:15px;">
+          <div style="font-weight:bold;font-size:11pt;color:#14532d;margin-bottom:10px;text-align:left;">Crop Monitoring by Barangay</div>
+          {monitoring_map_html}
+          <div class="interp-box" style="margin-top:10px;text-align:left;">
+            <div class="interp-title">Dominant Crop Phase</div>
+            <div class="interp-text" style="font-size:8.5pt;line-height:1.5;color:#374151">
+              Each barangay is shaded by its most common crop phase among active monitoring records for the selected period. Barangays without monitoring records are shown in gray.
+            </div>
+          </div>
+        </div>
+        """
+
+        if show_harvest:
+            geo_map_page_html += f"""
+        <div class="page-break"></div>
+        <table class="gov-header">
+          <tr>
+            <td style="text-align:left;"><span class="gov-header-title">AGRICE Monthly Analytics Report</span></td>
+            <td style="text-align:right;"><span class="gov-header-desc">{month_label} &bull; {season} {year}</span></td>
+          </tr>
+        </table>
+        <div class="section-header">Harvest Utilization by Barangay</div>
+        <div class="section-subheader">Barangay-level yield achievement against production targets</div>
+
+        <div class="card" style="padding:15px;">
+          {harvest_map_html}
+          <div class="interp-box" style="margin-top:10px;text-align:left;">
+            <div class="interp-title">Dominant Utilization Tier</div>
+            <div class="interp-text" style="font-size:8.5pt;line-height:1.5;color:#374151">
+              Each barangay is shaded by its most common harvest utilization tier based on actual yield versus target yield. Barangays without harvest records are shown in gray.
+            </div>
+          </div>
+        </div>
+        """
+        else:
+            geo_map_page_html += f"""
+        <div class="page-break"></div>
+        <table class="gov-header">
+          <tr>
+            <td style="text-align:left;"><span class="gov-header-title">AGRICE Monthly Analytics Report</span></td>
+            <td style="text-align:right;"><span class="gov-header-desc">{month_label} &bull; {season} {year}</span></td>
+          </tr>
+        </table>
+        <div class="section-header">Harvest Utilization by Barangay</div>
+        <div class="section-subheader">Barangay-level yield achievement against production targets</div>
+        <div class="card" style="padding:15px;">
+          <div style="background:#f8fafc;border:1px dashed #cbd5e1;padding:25px;text-align:center;color:#94a3b8;font-size:9pt;">No harvest records for the selected period.</div>
+        </div>
+        """
 
         # Generate HTML report
         html_content = f"""
@@ -479,6 +633,9 @@ class AdminMonthlyAnalyticsPDFView(APIView):
 
         <!-- PAGE 4 — DYNAMIC HARVEST CHART (Lilitaw lang kapag hindi early months) -->
         {harvest_page_html}
+
+        <!-- PAGE 4.5 — GEOSPATIAL DISTRIBUTION MAPS -->
+        {geo_map_page_html}
 
         <!-- PAGE 5 — MONTHLY ACTION LOGS -->
         <div class="page-break"></div>

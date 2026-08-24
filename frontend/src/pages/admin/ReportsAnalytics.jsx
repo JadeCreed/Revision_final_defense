@@ -14,6 +14,7 @@ import {
   getMonthlyAnalytics, 
   downloadMonthlyAnalyticsPDF 
 } from '../../api/axios';
+import LucbanGIS from '../../data/LucbanGIS.json';
 
 const GREEN = {
   primary: '#1a4d1a',
@@ -30,12 +31,118 @@ const SEED_CFG = {
 };
 
 const PHASE_COLORS = {
-  'Seed Distribution': '#64748b',
+  'Seed Distribution': '#475569',
   'Crop Establishment': '#3b82f6',
   'Tillering': '#22c55e',
   'Flowering': '#a855f7',
   'Ripening': '#eab308',
   'Harvesting': '#f97316',
+};
+
+// ── UTILIZATION TIER COLORS — magkaiba sa PHASE_COLORS, sarili nilang labels ──
+const UTIL_TIER_COLORS = {
+  'Exceeded Target': '#166534',
+  'Achieved Target': '#15803d',
+  'Near Target':     '#0369a1',
+  'Below Target':    '#b45309',
+  'Critical':        '#b91c1c',
+  'N/A':              '#94a3b8',
+};
+
+// ── BARANGAY BOUNDARY DATA — reuse ng parehong LucbanGIS.json ──
+const ALLOWED_BRGYS = [
+  'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit',
+  'Kalangay','Kalyaat','Kilib','Kulapi','Mahabang Parang','Malupak',
+  'Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil',
+  'Tiawe','Tinamnan',
+];
+const normalizeBrgyName = (v) =>
+  v?.toString().trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').toLowerCase();
+
+const BRGY_FEATURES_PDF = LucbanGIS.features.filter(f =>
+  ALLOWED_BRGYS.some(b => normalizeBrgyName(f.properties?.ADM4_EN) === normalizeBrgyName(b))
+);
+
+// ── Convert GeoJSON polygon coordinates papuntang SVG path string ──
+// Ginagamit ang simpleng equirectangular projection (sapat na para sa maliit na munisipyo)
+const buildSvgPaths = (features, width = 600, height = 420, padding = 20) => {
+  let minLon = Infinity, maxLon = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  features.forEach(f => {
+    const rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    rings.forEach(poly => poly.forEach(ring => ring.forEach(([lon, lat]) => {
+      if (lon < minLon) minLon = lon;
+      if (lon > maxLon) maxLon = lon;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+    })));
+  });
+
+  const w = width - padding * 2;
+  const h = height - padding * 2;
+  const scaleX = w / (maxLon - minLon);
+  const scaleY = h / (maxLat - minLat);
+  const scale = Math.min(scaleX, scaleY);
+
+  const project = ([lon, lat]) => {
+    const x = padding + (lon - minLon) * scale;
+    const y = padding + (maxLat - lat) * scale; // invert Y (lat pataas, SVG y pababa)
+    return [x, y];
+  };
+
+  return features.map(f => {
+    const rings = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+    const pathParts = rings.map(poly => poly.map(ring => {
+      const points = ring.map(project);
+      return 'M' + points.map(p => p.join(',')).join('L') + 'Z';
+    }).join(' ')).join(' ');
+
+    const centerPoints = rings[0][0].map(project);
+    const cx = centerPoints.reduce((s, p) => s + p[0], 0) / centerPoints.length;
+    const cy = centerPoints.reduce((s, p) => s + p[1], 0) / centerPoints.length;
+
+    return {
+      name: f.properties.ADM4_EN,
+      path: pathParts,
+      centerX: cx,
+      centerY: cy,
+    };
+  });
+};
+
+// ── OFFSCREEN CHOROPLETH MAP — para sa PDF export ──
+// svgPaths: resulta ng buildSvgPaths()
+// brgyData: { [barangayName]: { color, label } }
+// legendItems: [{ color, label }]
+const ChoroplethMap = ({ svgPaths, brgyData, legendItems, title }) => {
+  const NO_DATA_COLOR = '#f1f5f9';
+  return (
+    <div style={{ padding: '16px', background: '#ffffff' }}>
+      <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>{title}</h4>
+      <svg width={600} height={420} viewBox="0 0 600 420" style={{ background: '#f8fafc', borderRadius: '8px' }}>
+        {svgPaths.map(p => {
+          const info = brgyData[p.name];
+          const fill = info?.color || NO_DATA_COLOR;
+          return (
+            <g key={p.name}>
+              <path d={p.path} fill={fill} stroke="#ffffff" strokeWidth={1.5} />
+              <text x={p.centerX} y={p.centerY} fontSize={7} fill="#1e293b" textAnchor="middle" fontWeight={600}
+                style={{ paintOrder: 'stroke', stroke: '#ffffff', strokeWidth: 2 }}>
+                {p.name.replace(' (Pob.)', '')}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '10px' }}>
+        {legendItems.map(item => (
+          <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: item.color, display: 'inline-block' }} />
+            <span style={{ fontSize: '10px', color: '#374151' }}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 };
 
 export default function ReportsAnalytics() {
@@ -53,6 +160,8 @@ export default function ReportsAnalytics() {
   const distChartRef = useRef(null);
   const phaseDonutRef = useRef(null);
   const harvestChartRef = useRef(null);
+  const monitoringMapRef = useRef(null);
+  const harvestMapRef = useRef(null);
 
   // Dynamic list of months based on the selected season
   const getAvailableMonths = (selectedSeason, selectedYear) => {
@@ -194,13 +303,18 @@ export default function ReportsAnalytics() {
       const distImg = await captureChart(distChartRef);
       const phaseDonutImg = await captureChart(phaseDonutRef);
       const harvestImg = await captureChart(harvestChartRef);
+      const monitoringMapImg = await captureChart(monitoringMapRef);
+      const harvestMapImg = hasHarvestBarangayData ? await captureChart(harvestMapRef) : '';
+
 
       const res = await downloadMonthlyAnalyticsPDF({ 
         season, year, month, barangay,
         charts: {
           dist_chart: distImg,
           phase_donut: phaseDonutImg,
-          harvest_yield: harvestImg
+          harvest_yield: harvestImg,
+          monitoring_map: monitoringMapImg,
+          harvest_map: harvestMapImg,
         }
       });
 
@@ -263,6 +377,44 @@ export default function ReportsAnalytics() {
     { name: 'Certified Seeds', kg: (data?.summary?.inbred_kg ?? 0), color: '#1e40af' }
   ];
 
+    // ── CHOROPLETH DATA PREP ──
+  const svgPaths = buildSvgPaths(BRGY_FEATURES_PDF);
+
+  const monitoringBrgyData = {};
+  (data?.monitoring_by_barangay || []).forEach(item => {
+    monitoringBrgyData[item.barangay] = {
+      color: PHASE_COLORS[item.phase_label] || '#94a3b8',
+      label: item.phase_label,
+    };
+  });
+
+  const hasHarvestBarangayData = (data?.harvest_by_barangay || []).length > 0;
+  const harvestBrgyData = {};
+  (data?.harvest_by_barangay || []).forEach(item => {
+    harvestBrgyData[item.barangay] = {
+      color: UTIL_TIER_COLORS[item.tier] || '#94a3b8',
+      label: item.tier,
+    };
+  });
+
+  const monitoringLegend = Object.entries(PHASE_COLORS).map(([label, color]) => ({ label, color }));
+  const monitoringSummaryStats = (() => {
+    const list = data?.monitoring_by_barangay || [];
+    const totalRecords = list.reduce((s, i) => s + (i.farmer_count || 0), 0);
+    const activeBrgys = list.length;
+    const phaseTally = {};
+    list.forEach(i => { phaseTally[i.phase_label] = (phaseTally[i.phase_label] || 0) + i.farmer_count; });
+    const dominant = Object.entries(phaseTally).sort((a, b) => b[1] - a[1])[0];
+    return {
+      totalRecords,
+      activeBrgys,
+      dominantPhase: dominant ? dominant[0] : 'No data',
+    };
+  })();
+  const harvestLegend = Object.entries(UTIL_TIER_COLORS)
+    .filter(([label]) => label !== 'N/A')
+    .map(([label, color]) => ({ label, color }));
+
 
   // Siguraduhing kung walang harvest data sa piniling buwan, hindi maiiwan ang user sa harvest tab
   useEffect(() => {
@@ -307,7 +459,7 @@ export default function ReportsAnalytics() {
           )}
         </div>
 
-        <div ref={harvestChartRef} style={{ padding: '20px' }}>
+                <div ref={harvestChartRef} style={{ padding: '20px' }}>
           <h4 style={{ margin: '0 0 10px', fontSize: '13px', color: '#0f172a', fontWeight: 700 }}>Harvest Yield Analysis (MT)</h4>
           {prodChartData.length === 0 ? (
             <p style={{ color: '#9ca3af', fontSize: '11px' }}>No harvest yield records found for this period.</p>
@@ -322,6 +474,39 @@ export default function ReportsAnalytics() {
             </PieChart>
           )}
         </div>
+
+                <div ref={monitoringMapRef}>
+          <div style={{ padding: '0 16px' }}>
+            <div style={{ display: 'flex', gap: '20px', marginBottom: '4px' }}>
+              <span style={{ fontSize: '10px', color: '#475569' }}>
+                <strong style={{ color: '#0f172a', fontSize: '13px' }}>{monitoringSummaryStats.totalRecords}</strong> total monitoring records
+              </span>
+              <span style={{ fontSize: '10px', color: '#475569' }}>
+                <strong style={{ color: '#0f172a', fontSize: '13px' }}>{monitoringSummaryStats.activeBrgys}</strong> active barangays
+              </span>
+              <span style={{ fontSize: '10px', color: '#475569' }}>
+                Dominant: <strong style={{ color: '#0f172a' }}>{monitoringSummaryStats.dominantPhase}</strong>
+              </span>
+            </div>
+          </div>
+          <ChoroplethMap
+            svgPaths={svgPaths}
+            brgyData={monitoringBrgyData}
+            legendItems={monitoringLegend}
+            title="Crop Monitoring by Barangay"
+          />
+        </div>
+
+        {hasHarvestBarangayData && (
+          <div ref={harvestMapRef}>
+            <ChoroplethMap
+              svgPaths={svgPaths}
+              brgyData={harvestBrgyData}
+              legendItems={harvestLegend}
+              title="Harvest Utilization by Barangay"
+            />
+          </div>
+        )}
       </div>
 
       {/* Header */}
