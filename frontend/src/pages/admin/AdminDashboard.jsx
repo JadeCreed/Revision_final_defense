@@ -130,6 +130,8 @@ export default function AdminDashboard() {
     try {
       const res = await fetchAdminDashboard({ poll_id:pollId, seed_type:seedFilter });
       setData(res.data);
+      
+
     } catch {
       setError('Failed to load dashboard data.');
     } finally { setLoading(false); }
@@ -343,6 +345,47 @@ export default function AdminDashboard() {
                       <div style={{ fontSize:10, color:'#94a3b8', marginTop:2 }}>{b.farmer_count} farmers</div>
                     </div>
                   ))}
+                </div>
+              );
+            })()}
+          </Section>
+        </div>
+          
+                  {/* Row 3.5: Land Utilization for Rice Farming */}
+        <div style={{ marginBottom:16 }}>
+          <Section title="Land Utilization for Rice Farming" delay={450}>
+            {loading ? <Skeleton h={60}/> : (() => {
+              const land = data?.land_utilization || { used_ha:0, total_registered_ha:0, pct:0, total_lucban_ha:13046, pct_of_lucban:0 };
+              return (
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6 }}>
+                      <span style={{ fontSize:24, fontWeight:800, color:'#0f172a' }}>{land.pct}%</span>
+                      <span style={{ fontSize:11, color:'#64748b', fontFamily:'monospace' }}>
+                        Distributed ({land.used_ha} ha) / Registered ({land.total_registered_ha} ha)
+                      </span>
+                    </div>
+                    <div style={{ height:10, background:'#f1f5f9', borderRadius:99, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${Math.min(100, land.pct)}%`, background:'#15803d', borderRadius:99, transition:'width 0.9s cubic-bezier(0.22,1,0.36,1)' }}/>
+                    </div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:8 }}>
+                      Share of registered farmland used for the rice program.
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6 }}>
+                      <span style={{ fontSize:24, fontWeight:800, color:'#0369a1' }}>{land.pct_of_lucban}%</span>
+                      <span style={{ fontSize:11, color:'#64748b', fontFamily:'monospace' }}>
+                                                Distributed ({land.used_ha} ha) / Lucban total ({(land.total_lucban_ha ?? 13046).toLocaleString()} ha)
+                      </span>
+                    </div>
+                    <div style={{ height:10, background:'#f1f5f9', borderRadius:99, overflow:'hidden' }}>
+                      <div style={{ height:'100%', width:`${Math.min(100, land.pct_of_lucban * 20)}%`, background:'#0369a1', borderRadius:99, transition:'width 0.9s cubic-bezier(0.22,1,0.36,1)' }}/>
+                    </div>
+                    <div style={{ fontSize:11, color:'#94a3b8', marginTop:8 }}>
+                      Share of Lucban's total registered farmland (MAO Registry, {land.total_lucban_ha.toLocaleString()} ha) used for rice farming.
+                    </div>
+                  </div>
                 </div>
               );
             })()}

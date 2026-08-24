@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum
 from collections import defaultdict
 import logging
 
@@ -522,6 +522,33 @@ class GISMapSummaryView(APIView):
             logger.error(f'GIS summary: seed breakdown error: {e}')
             seed_breakdown = {}
 
+
+        # ── LAND UTILIZATION — reuse mula sa parehong logic ng Dashboard analytics ──
+        try:
+            from apps.accounts.models import FarmerMasterRecord
+            land_qs = DistributionEntry.objects.filter(batch__status='APPROVED')
+            if active_poll:
+                land_qs = land_qs.filter(
+                    batch__event__season=active_poll.season,
+                    batch__event__year=active_poll.year,
+                )
+            used_land_ha = sum(
+                float(e.farm_area_ha or e.area_planted or 0) for e in land_qs
+            )
+            total_mao_ha = FarmerMasterRecord.objects.aggregate(
+                total=Sum('hectares')
+            )['total'] or 0
+            total_mao_ha = float(total_mao_ha)
+            land_utilization_pct = (
+                round((used_land_ha / total_mao_ha) * 100, 4) if total_mao_ha > 0 else 0
+            )
+        except Exception as e:
+            logger.warning(f'GIS summary: land utilization error: {e}')
+            used_land_ha = 0
+            total_mao_ha = 0
+            land_utilization_pct = 0
+
+
         return Response({
             'current_farmers':          total_current,
             'total_approved_farmers':   total_approved,
@@ -533,6 +560,9 @@ class GISMapSummaryView(APIView):
             'all_barangays':            all_barangays,
             'seed_breakdown':           seed_breakdown,
             'last_updated':             timezone.now().isoformat(),
+            'land_used_ha':             round(used_land_ha, 2),
+            'land_total_mao_ha':        round(total_mao_ha, 2),
+            'land_utilization_pct':     land_utilization_pct,
         })
 
 

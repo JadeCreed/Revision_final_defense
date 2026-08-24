@@ -221,6 +221,7 @@ export const getBeneficiaryAllocations = (params = {}) => API.get('/inventory/be
 export const getBrgyMyAllocation       = ()           => API.get('/inventory/my-seed-allocation/');
 export const getBrgyScheduleNotifications = () => API.get('/inventory/schedule-notifications/');
 export const brgyConfirmAllocation    = (data)       => API.post('/inventory/confirm-allocation/', data);
+export const sendDistributionScheduleSms = (data) => API.post('/announcements/send-distribution-sms/', data);
 
 // Delivery Schedule Programs (backend-persisted, replaces localStorage)
 export const getDeliverySchedules     = ()           => API.get('/inventory/schedules/');

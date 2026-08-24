@@ -142,6 +142,39 @@ class AdminDashboardAnalyticsView(APIView):
             if (getattr(r.farmer, 'barangay', None) or r.barangay)
         ))
 
+                # ── LAND UTILIZATION — % ng registered farmland na ginamit para sa rice program ──
+        land_qs = DistributionEntry.objects.filter(batch__status='APPROVED')
+        if poll:
+            land_qs = land_qs.filter(batch__event__season=poll.season, batch__event__year=poll.year)
+        if seed_filter == 'HYBRID':
+            land_qs = land_qs.filter(batch__event__seed_type__name__icontains='hybrid')
+        elif seed_filter == 'INBRED':
+            land_qs = land_qs.filter(batch__event__seed_type__name__icontains='inbred')
+
+        used_land_ha = sum(float(e.farm_area_ha or e.area_planted or 0) for e in land_qs)
+
+        from apps.accounts.models import User, FarmerMasterRecord
+        total_registered_ha = User.objects.filter(
+            role='FARMER', status='APPROVED', is_active=True
+        ).aggregate(total=Sum('profile__hectares'))['total'] or 0
+        total_registered_ha = float(total_registered_ha)
+
+        # Total registered farmland base sa MAO Registry (FarmerMasterRecord) — kabuuan ng
+        # lahat ng 1,234 na rehistradong farmer sa Lucban, hindi lang yung naka-approve sa app
+        total_mao_registry_ha = FarmerMasterRecord.objects.aggregate(
+            total=Sum('hectares')
+        )['total'] or 0
+        total_mao_registry_ha = float(total_mao_registry_ha)
+
+        land_utilization = {
+            'used_ha':             round(used_land_ha, 2),
+            'total_registered_ha': round(total_registered_ha, 2),
+            'pct':                 round((used_land_ha / total_registered_ha) * 100, 1) if total_registered_ha > 0 else 0,
+            'total_lucban_ha':     round(total_mao_registry_ha, 2),
+            'pct_of_lucban':       round((used_land_ha / total_mao_registry_ha) * 100, 4) if total_mao_registry_ha > 0 else 0,
+        }
+
+
         # ── KPI — production ──────────────────────────────────
         total_dry_kg = sum(dry_weight_kg(r) for r in harvest_list)
         total_mt     = total_dry_kg / 1000
@@ -356,4 +389,5 @@ class AdminDashboardAnalyticsView(APIView):
             'delay_analytics':        delay_analytics,
             'alerts':                 alerts,
             'insights':               insights,
+            'land_utilization':       land_utilization,
         })

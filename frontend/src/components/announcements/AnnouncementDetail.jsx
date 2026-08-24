@@ -8,7 +8,7 @@ import { useState, useEffect }  from 'react';
 import { createPortal }         from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth }              from '../../auth/AuthContext';
-import { getAnnouncementDetail, getBrgyMyAllocation, brgyConfirmAllocation, createAnnouncement } from '../../api/axios';
+import { getAnnouncementDetail, getBrgyMyAllocation, brgyConfirmAllocation, createAnnouncement, sendDistributionScheduleSms } from '../../api/axios';
 import { ROLE_COLORS }          from '../navigation/UserNavConfig';
 import { CheckCircle }          from 'lucide-react';
 
@@ -135,8 +135,20 @@ const AnnouncementDetail = () => {
         is_active: true,
       });
 
+      try {
+        await sendDistributionScheduleSms({
+          delivery_id: Number(deliveryId),
+          distribution_date: distDate,
+          distribution_time: distTime,
+          distribution_venue: distVenue,
+        });
+      } catch (smsErr) {
+        console.error('SMS send failed:', smsErr);
+      }
+
       setConfirmModalOpen(false);
       navigate('/brgy');
+
     } catch (err) {
       alert('Failed to process confirmation: ' + (err.response?.data?.error || err.message));
     } finally {

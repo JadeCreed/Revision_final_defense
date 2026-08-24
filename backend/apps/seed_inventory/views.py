@@ -165,6 +165,8 @@ class SeedDeliveryListCreateView(generics.ListCreateAPIView):
             _auto_announce_schedule(delivery, self.request.user)
         elif delivery.status == 'DELIVERED':
             _auto_announce_delivered(delivery, self.request.user)
+            from apps.announcements.sms_service import auto_sms_delivered
+            auto_sms_delivered(delivery, self.request.user)
 
 
 class SeedDeliveryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -194,6 +196,8 @@ class SeedDeliveryDetailView(generics.RetrieveUpdateDestroyAPIView):
         )
         if old_status != 'DELIVERED' and delivery.status == 'DELIVERED':
             _auto_announce_delivered(delivery, self.request.user)
+            from apps.announcements.sms_service import auto_sms_delivered
+            auto_sms_delivered(delivery, self.request.user)
 
     def perform_destroy(self, instance):
         SeedDeliveryAudit.objects.create(

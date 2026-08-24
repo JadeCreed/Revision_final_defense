@@ -124,11 +124,15 @@ class FarmerSearchView(APIView):
         ).select_related('profile')
 
         if search:
-            qs = qs.filter(
-                Q(first_name__icontains=search) |
-                Q(last_name__icontains=search)  |
-                Q(rsbsa_number__icontains=search)
-            )
+            search_terms = search.strip().split()
+            combined_filter = Q()
+            for term in search_terms:
+                combined_filter &= (
+                    Q(first_name__icontains=term) |
+                    Q(last_name__icontains=term)  |
+                    Q(rsbsa_number__icontains=term)
+                )
+            qs = qs.filter(combined_filter)
 
         season = None
         year   = None

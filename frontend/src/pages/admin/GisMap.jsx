@@ -661,6 +661,7 @@ const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMo
               </span>
             )}
           </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
             <div>
               <p style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, color: 'white', lineHeight: 1 }}>{currentFarmers}/{totalApproved}</p>
@@ -671,8 +672,14 @@ const MonitoringOverviewPanel = ({ plots, summary, animate, monitoringTab, setMo
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: 'rgba(255,255,255,0.65)', fontWeight: 600 }}>Active barangays</p>
             </div>
           </div>
+          {summary?.land_utilization_pct != null && (
+            <p style={{ margin: '0.5rem 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.75)' }}>
+              Land utilization: <strong style={{ color: 'white' }}>{summary.land_utilization_pct}%</strong> of registered farmland used for rice farming
+            </p>
+          )}
         </div>
       </div>
+      
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #f1f5f9', padding: '0 1.25rem', flexShrink: 0 }}>
           {SEED_TYPES.map((st) => {

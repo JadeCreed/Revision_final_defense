@@ -107,13 +107,13 @@ const BARANGAYS = [
   'Mahabang Parang','Malupak','Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil','Tiawe','Tinamnan',
 ];
 
-// const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
-// const loadSchedules = () => {
-//   try { const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
-// };
-// const saveSchedulesToStorage = (schedules) => {
-//   try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
-// };
+const SCHEDULE_STORAGE_KEY = 'agrice_delivery_schedules';
+const loadSchedules = () => {
+  try { const raw = localStorage.getItem(SCHEDULE_STORAGE_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
+};
+const saveSchedulesToStorage = (schedules) => {
+  try { localStorage.setItem(SCHEDULE_STORAGE_KEY, JSON.stringify(schedules)); } catch {}
+};
 
 // ── PROGRAM CARD with drill-down ──
 const ProgramCard = ({
@@ -442,8 +442,7 @@ export default function SeedInventory() {
   const [scheduleForms, setScheduleForms]         = useState({});
   const [scheduleErrors, setScheduleErrors]       = useState({});
   const [scheduleSaving, setScheduleSaving]       = useState(false);
-  // const [schedules, setSchedules]                 = useState(loadSchedules);
-  const [schedules, setSchedules]                 = useState([]);
+  const [schedules, setSchedules]                 = useState(loadSchedules);
   const [schedulesLoading, setSchedulesLoading]   = useState(true);
   const [deliveredModal, setDeliveredModal]       = useState(null);
   const [deliveredForm, setDeliveredForm]         = useState({ confirmed: null, actual_bags: '' });
@@ -991,11 +990,23 @@ export default function SeedInventory() {
     });
   };
 
-  const filteredDeliveries = deliveries.filter(d => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || d.seed_type_name?.toLowerCase().includes(q) || d.variety_name?.toLowerCase().includes(q) || d.lot_number?.toLowerCase().includes(q);
-    const matchSeason = !filterSeason || d.season === filterSeason;
-    return matchSearch && matchSeason;
+  const filteredSchedules = schedules.filter((schedule, sIdx) => {
+    const scheduleLabel = `schedule ${sIdx + 1}`; // walang '#', para tumugma kahit paano itype
+    const q = search.toLowerCase().trim().replace(/#/g, '');
+
+    const matchSeason = !filterSeason || schedule.entries.some(e => e.season === filterSeason);
+
+    const matchSearch = !q ||
+      scheduleLabel.includes(q) ||
+      scheduleLabel.replace(/\s+/g, '').includes(q.replace(/\s+/g, '')) ||
+      String(sIdx + 1) === q ||
+      schedule.entries.some(e =>
+        e.seedTypeName?.toLowerCase().includes(q) ||
+        e.varietyName?.toLowerCase().includes(q) ||
+        e.lot_number?.toLowerCase().includes(q)
+      );
+
+    return matchSeason && matchSearch;
   });
 
   if (loading) return (
@@ -1137,13 +1148,13 @@ export default function SeedInventory() {
                     <History size={13} /> View History
                   </button>
                   <span style={{ fontSize: '0.72rem', color: '#9ca3af', backgroundColor: '#f3f4f6', padding: '0.25rem 0.75rem', borderRadius: '999px', fontWeight: 600 }}>
-                    {schedules.length} program{schedules.length !== 1 ? 's' : ''}
+                    {filteredSchedules.length} of {schedules.length} program{schedules.length !== 1 ? 's' : ''}
                   </span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {schedules.map((schedule, sIdx) => (
+                {filteredSchedules.map((schedule, sIdx) => (
                   <ProgramCard
                     key={schedule.id}
                     schedule={schedule}
@@ -1159,6 +1170,14 @@ export default function SeedInventory() {
                   />
                 ))}
               </div>
+            </div>
+          )}
+
+          {schedules.length > 0 && filteredSchedules.length === 0 && (
+            <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2.5rem', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #f3f4f6', marginTop: '0.5rem' }}>
+              <Search size={40} color="#d1d5db" style={{ display: 'block', margin: '0 auto 1rem' }} />
+              <p style={{ fontWeight: 700, color: '#374151', margin: '0 0 0.5rem' }}>No schedule found.</p>
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', margin: 0 }}>Try a different keyword or remove the filter.</p>
             </div>
           )}
 

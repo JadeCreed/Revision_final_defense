@@ -904,7 +904,8 @@ const BrgyDistribution = () => {
                     return tabs.map(tab => (
                       <button key={tab.key} onClick={() => setActiveDistTab(tab.key)}
                         style={{
-                          flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem', border: 'none',
+                          flex: 1, padding: '0.625rem 0.75rem', borderRadius: '0.5rem',
+                          border: tab.encoded ? 'none' : '1.5px dashed #dc2626',
                           backgroundColor: activeDistTab === tab.key ? 'white' : 'transparent',
                           color: activeDistTab === tab.key ? tab.color : '#6b7280',
                           fontWeight: activeDistTab === tab.key ? 700 : 400,
@@ -914,7 +915,7 @@ const BrgyDistribution = () => {
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
                         }}>
                         {tab.label}
-                        {tab.encoded && <CheckCircle size={13} color={tab.color} />}
+                        {tab.encoded && <CheckCircle size={13} color={GREEN.accent} />}
                       </button>
                     ));
                   })()}

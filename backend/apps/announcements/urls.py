@@ -20,6 +20,8 @@ from .views import (
     UserAnnouncementDetailView,
     UserUnreadCountView,
 )
+from .views_sms import send_distribution_schedule_sms_view
+
 
 urlpatterns = [
     path('admin/',AdminAnnouncementListCreateView.as_view(),name='admin-announcement-list'),
@@ -28,6 +30,8 @@ urlpatterns = [
     path('unread-count/',UserUnreadCountView.as_view(),name='unread-count'),
 
     path('<int:pk>/',UserAnnouncementDetailView.as_view(),name='announcement-detail'),
+
+    path('send-distribution-sms/', send_distribution_schedule_sms_view),
 
     path('',UserAnnouncementListView.as_view(),name='announcement-list'),
     
