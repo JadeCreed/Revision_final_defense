@@ -382,6 +382,7 @@ class FarmerListSerializer(serializers.ModelSerializer):
     profile_complete = serializers.SerializerMethodField()
     gender = serializers.SerializerMethodField()
     hectares = serializers.SerializerMethodField()
+    is_deceased = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -389,8 +390,14 @@ class FarmerListSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'contact_number',
             'barangay', 'rsbsa_number', 'gender', 'hectares', 'status',
             'is_verified', 'is_active', 'date_joined',
-            'profile_complete'
+            'profile_complete','is_deceased'
         ]
+
+    def get_is_deceased(self, obj):
+        try:
+            return obj.profile.is_deceased
+        except (FarmerProfile.DoesNotExist, AttributeError):
+            return False
 
     def get_gender(self, obj):
         if hasattr(obj, 'gender'):

@@ -143,6 +143,10 @@ class FarmerProfile(models.Model):
     four_ps = models.BooleanField(default=False)
     hectares = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text='Total farm hectares')  # Total farm hectares
 
+    # 🔹 Deceased status 
+    is_deceased = models.BooleanField(default=False, help_text='Marks farmer as deceased for record-keeping')
+    date_deceased = models.DateField(blank=True, null=True, help_text='Date farmer was recorded as deceased')
+    
     # 🔹 ID Card upload (NEW)
     id_card = models.ImageField(
         upload_to=farmer_id_upload_path,

@@ -117,6 +117,7 @@ const FarmerAccountsTab = () => {
   const [accountsEditLoading, setAccountsEditLoading] = useState(false);
   const [accountsEditError, setAccountsEditError] = useState('');
   const [accountsEditSuccess, setAccountsEditSuccess] = useState('');
+  const initialAccountsFormRef            = useRef({});
 
   const scheduleNewBadgeHide = (id) => {
     if (newTimeouts.current[id]) clearTimeout(newTimeouts.current[id]);
@@ -187,12 +188,12 @@ const FarmerAccountsTab = () => {
     }
   };
 
-  const openAccountsDetails = async (userId) => {
+    const openAccountsDetails = async (userId) => {
     try {
       const res = await getFarmerFullProfile(userId);
       const farmer = res.data;
       setAccountsDetailsModal(farmer);
-      setAccountsEditForm({
+      const loadedAccountsForm = {
         first_name: farmer.first_name || '',
         last_name: farmer.last_name || '',
         middle_name: farmer.profile?.middle_name || '',
@@ -209,7 +210,9 @@ const FarmerAccountsTab = () => {
         gender: farmer.profile?.gender || '',
         hectares: farmer.profile?.hectares ?? '',
         id_card_url: farmer.profile?.id_card_url || '',
-      });
+      };
+      setAccountsEditForm(loadedAccountsForm);
+      initialAccountsFormRef.current = loadedAccountsForm;
       setAccountsEditError('');
       setAccountsEditSuccess('');
     } catch (err) {
@@ -243,6 +246,7 @@ const FarmerAccountsTab = () => {
         },
       });
       setAccountsEditSuccess('Profile updated successfully.');
+      initialAccountsFormRef.current = accountsEditForm;
       await fetchFarmers(false);
     } catch (err) {
       setAccountsEditError(err.response?.data?.error || 'Update failed.');
@@ -250,6 +254,8 @@ const FarmerAccountsTab = () => {
       setAccountsEditLoading(false);
     }
   };
+
+  const isAccountsFormDirty = JSON.stringify(accountsEditForm) !== JSON.stringify(initialAccountsFormRef.current);
 
   return (
     <div>
@@ -302,7 +308,7 @@ const FarmerAccountsTab = () => {
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.status }}>
                       <span style={{ backgroundColor: s.bg, color: s.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{s.label}</span>
                     </td>
-                    
+
                     <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
                       <button onClick={() => openAccountsDetails(farmer.id)}
                         style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -451,8 +457,14 @@ const FarmerAccountsTab = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1.25rem' }}>
               <button onClick={() => setAccountsDetailsModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
-              <button onClick={handleAccountsSave} disabled={accountsEditLoading}
-                style={{ padding: '0.5rem 1.5rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: accountsEditLoading ? 0.7 : 1 }}>
+                            <button onClick={handleAccountsSave} disabled={accountsEditLoading || !isAccountsFormDirty}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  backgroundColor: (accountsEditLoading || !isAccountsFormDirty) ? '#d1d5db' : '#2d6a2d',
+                  color: 'white', border: 'none', borderRadius: '0.5rem',
+                  cursor: (accountsEditLoading || !isAccountsFormDirty) ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                }}>
                 {accountsEditLoading ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
@@ -482,6 +494,7 @@ const FarmerMasterlistTab = () => {
   const [editLoading, setEditLoading]           = useState(false);
   const [editError, setEditError]               = useState('');
   const [editSuccess, setEditSuccess]           = useState('');
+  const initialFormRef                          = useRef({});
   const [deactivateModal, setDeactivateModal]   = useState(null);
   const [deactivateLoading, setDeactivateLoading] = useState(false);
   const [resetModal, setResetModal]             = useState(null);
@@ -535,7 +548,7 @@ const FarmerMasterlistTab = () => {
     try {
       const res = await getFarmerFullProfile(farmerId);
       setDetailsModal(res.data);
-      setEditForm({
+      const loadedForm = {
         first_name: res.data.first_name || '', last_name: res.data.last_name || '',
         email: res.data.email || '', contact_number: res.data.contact_number || '',
         barangay: res.data.barangay || '', rsbsa_number: res.data.rsbsa_number || '',
@@ -549,12 +562,16 @@ const FarmerMasterlistTab = () => {
         farm_barangay: res.data.profile?.farm_barangay || '',
         hectares: res.data.profile?.hectares ?? '',
         id_card_url: res.data.profile?.id_card_url || '',
+        is_deceased: res.data.profile?.is_deceased || false,
+        date_deceased: res.data.profile?.date_deceased || '',
         ip: res.data.profile?.ip || false,
         senior_citizen: res.data.profile?.senior_citizen || false,
         pwd: res.data.profile?.pwd || false,
         arbs: res.data.profile?.arbs || false,
         four_ps: res.data.profile?.four_ps || false,
-      });
+      };
+      setEditForm(loadedForm);
+      initialFormRef.current = loadedForm;
       setEditError(''); setEditSuccess('');
     } catch { setError('Failed to load farmer details.'); }
   };
@@ -577,9 +594,12 @@ const FarmerMasterlistTab = () => {
           hectares: editForm.hectares,
           ip: editForm.ip, senior_citizen: editForm.senior_citizen,
           pwd: editForm.pwd, arbs: editForm.arbs, four_ps: editForm.four_ps,
+          is_deceased: editForm.is_deceased,
+          date_deceased: editForm.date_deceased || null,
         },
       });
       setEditSuccess('Profile updated!');
+      initialFormRef.current = editForm;
       fetchFarmers(false);
     } catch (err) {
       setEditError(err.response?.data?.error || 'Update failed.');
@@ -597,6 +617,9 @@ const FarmerMasterlistTab = () => {
       setError(err.response?.data?.error || 'Deactivation failed.');
     } finally { setDeactivateLoading(false); }
   };
+  
+  const isFormDirty = JSON.stringify(editForm) !== JSON.stringify(initialFormRef.current);
+
 
   const handleReset = async (mode) => {
     if (!resetModal) return;
@@ -639,16 +662,16 @@ const FarmerMasterlistTab = () => {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
             <thead>
               <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
-                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Gender', '90px'],['Hectares', '90px'],['Date Joined', COL_WIDTHS.date],['Details', COL_WIDTHS.details],['Reset Request', '140px'],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
+                {[['RSBSA', COL_WIDTHS.rsbsa],['Name', COL_WIDTHS.name],['Contact', COL_WIDTHS.contact],['Barangay', COL_WIDTHS.barangay],['Gender', '90px'],['Hectares', '90px'],['Status', '110px'],['Date Joined', COL_WIDTHS.date],['Details', COL_WIDTHS.details],['Reset Request', '140px'],['Action', COL_WIDTHS.actions]].map(([col, w]) => (
                   <th key={col} style={{ padding: '0.875rem 1rem', textAlign: 'left', fontWeight: '600', color: '#374151', minWidth: w, whiteSpace: 'nowrap' }}>{col}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Loading...</td></tr>
               ) : farmers.length === 0 ? (
-                <tr><td colSpan={10} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No approved farmers found.</td></tr>
+                <tr><td colSpan={11} style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>No approved farmers found.</td></tr>
               ) : farmers.map((f, idx) => (
                 <tr key={f.id} style={{ borderBottom: '1px solid #f3f4f6', backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa' }}>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', fontFamily: 'monospace', minWidth: COL_WIDTHS.rsbsa }}>{f.rsbsa_number || '—'}</td>
@@ -659,8 +682,16 @@ const FarmerMasterlistTab = () => {
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.contact }}>{f.contact_number}</td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.barangay }}>{f.barangay || '—'}</td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{f.gender || '—'}</td>
-                  <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{typeof f.hectares === 'number' ? f.hectares.toFixed(2) : '—'}</td>
+                                    <td style={{ padding: '0.875rem 1rem', color: '#6b7280' }}>{typeof f.hectares === 'number' ? f.hectares.toFixed(2) : '—'}</td>
+                  <td style={{ padding: '0.875rem 1rem' }}>
+                    {f.is_deceased ? (
+                      <span style={{ backgroundColor: '#f3f4f6', color: '#374151', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Deceased</span>
+                    ) : (
+                      <span style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>Active</span>
+                    )}
+                  </td>
                   <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(f.date_joined)}</td>
+
                   <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.details }}>
                     <button onClick={() => openDetails(f.id)}
                       style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
@@ -779,6 +810,22 @@ const FarmerMasterlistTab = () => {
               </div>
             </div>
 
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#991b1b', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Farmer Status</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: editForm.is_deceased ? '0.75rem' : '1.25rem' }}>
+              <input type="checkbox" checked={editForm.is_deceased}
+                onChange={e => setEditForm(p => ({ ...p, is_deceased: e.target.checked }))}
+                style={{ width: '18px', height: '18px', cursor: 'pointer' }} />
+              <label style={{ fontSize: '0.85rem', color: '#374151', cursor: 'pointer' }}>Mark this farmer as Deceased</label>
+            </div>
+            {editForm.is_deceased && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <label style={labelStyle}>Date Deceased</label>
+                <input type="date" value={editForm.date_deceased}
+                  onChange={e => setEditForm(p => ({ ...p, date_deceased: e.target.value }))}
+                  style={{ ...inputStyle, maxWidth: '220px' }} />
+              </div>
+            )}
+
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={labelStyle}>ID Card</label>
               {editForm.id_card_url ? (
@@ -791,7 +838,14 @@ const FarmerMasterlistTab = () => {
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', borderTop: '1px solid #f3f4f6', paddingTop: '1.25rem' }}>
               <button onClick={() => setDetailsModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
-              <button onClick={handleSave} disabled={editLoading} style={{ padding: '0.5rem 1.5rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}>
+                            <button onClick={handleSave} disabled={editLoading || !isFormDirty}
+                style={{
+                  padding: '0.5rem 1.5rem',
+                  backgroundColor: (editLoading || !isFormDirty) ? '#d1d5db' : '#2d6a2d',
+                  color: 'white', border: 'none', borderRadius: '0.5rem',
+                  cursor: (editLoading || !isFormDirty) ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
+                }}>
                 {editLoading ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
