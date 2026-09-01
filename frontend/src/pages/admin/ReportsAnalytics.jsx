@@ -475,7 +475,7 @@ export default function ReportsAnalytics() {
           )}
         </div>
 
-                <div ref={monitoringMapRef}>
+        <div ref={monitoringMapRef}>
           <div style={{ padding: '0 16px' }}>
             <div style={{ display: 'flex', gap: '20px', marginBottom: '4px' }}>
               <span style={{ fontSize: '10px', color: '#475569' }}>
