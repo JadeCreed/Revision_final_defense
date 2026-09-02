@@ -35,6 +35,7 @@ import FarmerRecords     from '../pages/admin/users/FarmerRecords';
 import SystemUsers       from '../pages/admin/users/SystemUsers';
 import ResetRequests     from '../pages/admin/users/ResetRequests';
 import Archive           from '../pages/admin/users/Archive';
+import AdminSeedHistory  from '../pages/admin/users/AdminSeedHistory';
 
 import AdminProfile from '../pages/admin/AdminProfile';
 
@@ -46,6 +47,7 @@ import YieldEncode          from '../pages/farmer/YieldEncode';
 import FarmerAnnouncements  from '../pages/farmer/FarmerAnnouncements';
 import FarmerPoll           from '../pages/farmer/FarmerPoll';
 import FarmerGisMap from '../pages/farmer/FarmerGisMap';
+import FarmerSeedHistory    from '../pages/farmer/FarmerSeedHistory';
 
 // ── AT pages ──
 import ATDashboard      from '../pages/at/ATDashboard';
@@ -122,6 +124,7 @@ const AppRoutes = () => (
           <Route path="/admin/users/officials"         element={<SystemUsers />} />
           <Route path="/admin/users/reset-requests"    element={<ResetRequests />} />
           <Route path="/admin/users/archive"           element={<Archive />} />
+          <Route path="/admin/users/seed-history"      element={<AdminSeedHistory />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
       </Route>
@@ -135,6 +138,7 @@ const AppRoutes = () => (
           <Route path="/farmer/announcements" element={<FarmerAnnouncements />} />
           <Route path="/farmer/poll"          element={<FarmerPoll />} />
           <Route path="/farmer/gis" element={<FarmerGisMap />} />
+          <Route path="/farmer/seed-history" element={<FarmerSeedHistory />} />
           <Route path="/farmer/announcements/:id" element={<AnnouncementDetail />} />
         </Route>
       </Route>

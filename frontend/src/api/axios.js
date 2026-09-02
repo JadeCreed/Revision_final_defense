@@ -204,6 +204,17 @@ export const getDistributionStats   = ()       => API.get('/distribution/admin/s
 export const confirmSeedDelivery    = (eventId) => API.post(`/distribution/events/${eventId}/confirm-delivery/`);
 
 
+// Seed Distribution History — read-only, all-time (NEW, Revision #6)
+export const getHistoryFilterOptions = (params) =>
+  API.get('/distribution/history/filter-options/', { params });
+export const getMyFarmerSeedHistory = (params) =>
+  API.get('/distribution/farmers/my-seed-history/', { params });
+export const getFarmerSeedHistory = (farmerId, params) =>
+  API.get(`/distribution/farmers/${farmerId}/seed-history/`, { params });
+export const getAdminSeedHistory  = (params) =>
+  API.get('/distribution/admin/seed-history/', { params });
+
+
 // ── SEED INVENTORY ──
 export const getInventorySummary      = ()           => API.get('/inventory/summary/');
 export const getSeedDeliveries        = (params)     => API.get('/inventory/deliveries/', { params });

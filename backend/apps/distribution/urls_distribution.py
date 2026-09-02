@@ -11,6 +11,12 @@ from .views_distribution import (
     AdminConfirmSeedDeliveryView,
     FarmerHarvestContextView,
 )
+from .views_history import (
+    FarmerSeedHistoryView,
+    AdminSeedHistoryListView,
+    MyFarmerSeedHistoryView,
+    HistoryFilterOptionsView, 
+)
 
 urlpatterns = [
     # Farmer search — distribution-scoped
@@ -34,4 +40,10 @@ urlpatterns = [
     
     # Harvest context
     path('entries/farmer-harvest-context/', FarmerHarvestContextView.as_view()),
+
+    # Seed distribution history — read-only, all-time (NEW, Revision #6)
+    path('farmers/my-seed-history/', MyFarmerSeedHistoryView.as_view()),
+    path('farmers/<int:farmer_id>/seed-history/', FarmerSeedHistoryView.as_view()),
+    path('admin/seed-history/', AdminSeedHistoryListView.as_view()),
+    path('history/filter-options/', HistoryFilterOptionsView.as_view()),
 ]

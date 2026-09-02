@@ -11,6 +11,7 @@ import {
   Package,
   Truck,
   Map,  
+  History,
 } from 'lucide-react';
 
 // ── FARMER: 5 nav items ──
@@ -21,6 +22,7 @@ const FARMER_NAV = [
   { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
   // { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
   { label: 'Map',     path: '/farmer/gis',           icon: Map         },
+  { label: 'History', path: '/farmer/seed-history',  icon: History     },
   { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
 ];
 

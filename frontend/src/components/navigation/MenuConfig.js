@@ -2,7 +2,7 @@
 import {
   Home, Sprout, Megaphone, Archive, Package, Wheat,
   BarChart3, Map, Users, ClipboardList, Landmark,
-  Settings, User, UserCircle, Tractor, Truck, FileText
+  Settings, User, UserCircle, Tractor, Truck, FileText,History
 } from 'lucide-react';
 
 export const MENU_CONFIG = {
@@ -24,6 +24,7 @@ export const MENU_CONFIG = {
         { label: 'Farmer Records', path: '/admin/users/farmers', icon: User, badgeKey: 'pending_farmers' },
         { label: 'Officials',      path: '/admin/users/officials', icon: Landmark },
         { label: 'Archive',        path: '/admin/users/archive', icon: Archive },
+        { label: 'Seed History',   path: '/admin/users/seed-history', icon: History },
       ],
     },
 
@@ -49,6 +50,7 @@ export const MENU_CONFIG = {
     { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
     { label: 'Harvest', path: '/farmer/harvest',       icon: Wheat       },
     { label: 'Map',     path: '/farmer/gis',           icon: Map         },
+    { label: 'History', path: '/farmer/seed-history',  icon: History     },
     { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
   ],
 
@@ -108,6 +110,7 @@ const FARMER_NAV = [
   { label: 'News',    path: '/farmer/announcements', icon: Megaphone   },
   { label: 'Poll',    path: '/farmer/poll',          icon: Sprout      },
   { label: 'Map',     path: '/farmer/gis',           icon: Map         },
+  { label: 'History', path: '/farmer/seed-history',  icon: History     },
   { label: 'Profile', path: '/farmer/profile',       icon: UserCircle  },
 ];
 

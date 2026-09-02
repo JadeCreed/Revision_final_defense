@@ -38,9 +38,11 @@ Backend/
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
 │   │   │   ├── serializers.py
+│   │   │   ├── sms_service.py
 │   │   │   ├── tests.py
 │   │   │   ├── urls.py
-│   │   │   └── views.py
+│   │   │   ├── views.py
+│   │   │   └── views_sms.py
 │   │   ├── crop_monitoring/
 │   │   │   ├── __init__.py
 │   │   │   ├── admin.py
@@ -167,7 +169,8 @@ Backend/
 │   │   ├── favicon.svg
 │   │   ├── icons.svg
 │   │   ├── logo.png
-│   │   └── manifest.json
+│   │   ├── manifest.json
+│   │   └── sw.js
 │   ├── README.md
 │   ├── src/
 │   │   ├── api/
@@ -201,6 +204,9 @@ Backend/
 │   │   │   │   ├── AnnouncementDetail.jsx
 │   │   │   │   └── AnnouncementsListPage.jsx
 │   │   │   ├── AnnouncementsSection.jsx
+│   │   │   ├── app/
+│   │   │   │   ├── AppSplashScreen.jsx
+│   │   │   │   └── OfflineBanner.jsx
 │   │   │   ├── AreaMonitoring.jsx
 │   │   │   ├── AttentionPanel.jsx
 │   │   │   ├── AuthBox.jsx
@@ -248,6 +254,10 @@ Backend/
 │   │   │   ├── address.json
 │   │   │   ├── LucbanGIS.json
 │   │   │   └── luzon_formatted.json
+│   │   ├── hooks/
+│   │   │   ├── useAppDisplayMode.js
+│   │   │   ├── useNetworkStatus.js
+│   │   │   └── usePwaInstall.js
 │   │   ├── index.css
 │   │   ├── layouts/
 │   │   │   ├── DashboardLayout.jsx
@@ -318,6 +328,7 @@ Backend/
 │   ├── tailwind.config.js
 │   └── vite.config.js
 ├── gen_tree.py
+├── gen_tree_updated.py
 ├── LOGIN_VALIDATION_SUMMARY.md
 ├── SEASON_IMPLEMENTATION_SUMMARY.md
 ├── system_flow.txt
@@ -328,4 +339,5 @@ Backend/
 ├── tree_clean.txt
 ├── tree_full.txt
 ├── tree_structure.txt
-└── try.py
+├── try.py
+└── try.txt

@@ -1,8 +1,13 @@
 Backend/
 ├── .gitignore
 ├── backend/
+│   ├── .env
+│   ├── .env.example
+│   ├── .gitignore
+│   ├── address.json
 │   ├── apps/
 │   │   ├── accounts/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── authentication.py
@@ -19,6 +24,7 @@ Backend/
 │   │   │   ├── views.py
 │   │   │   └── views_dashboard.py
 │   │   ├── analytics/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -27,14 +33,18 @@ Backend/
 │   │   │   ├── views.py
 │   │   │   └── views_monthly.py
 │   │   ├── announcements/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
 │   │   │   ├── serializers.py
+│   │   │   ├── sms_service.py
 │   │   │   ├── tests.py
 │   │   │   ├── urls.py
-│   │   │   └── views.py
+│   │   │   ├── views.py
+│   │   │   └── views_sms.py
 │   │   ├── crop_monitoring/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -44,6 +54,7 @@ Backend/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── crop_phase/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -51,6 +62,7 @@ Backend/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── distribution/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -65,6 +77,7 @@ Backend/
 │   │   │   ├── views_beneficiaries.py
 │   │   │   └── views_distribution.py
 │   │   ├── gis_map/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -74,6 +87,7 @@ Backend/
 │   │   │   ├── views.py
 │   │   │   └── views_public.py
 │   │   ├── production/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -83,16 +97,18 @@ Backend/
 │   │   │   ├── views.py
 │   │   │   └── views_brgy_report.py
 │   │   ├── reports/
-│   │   │   ├── templates_excel/
-│   │   │   │   └── hybrid_masterlist.xlsx
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
 │   │   │   ├── serializers.py
+│   │   │   ├── templates_excel/
+│   │   │   │   └── hybrid_masterlist.xlsx
 │   │   │   ├── tests.py
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   ├── seed_inventory/
+│   │   │   ├── __init__.py
 │   │   │   ├── admin.py
 │   │   │   ├── apps.py
 │   │   │   ├── models.py
@@ -101,79 +117,67 @@ Backend/
 │   │   │   ├── urls.py
 │   │   │   └── views.py
 │   │   └── seed_poll/
-│   │       ├── management/
-│   │       │   └── commands/
-│   │       │       └── seed_seed_types.py
+│   │       ├── __init__.py
 │   │       ├── admin.py
 │   │       ├── apps.py
+│   │       ├── management/
+│   │       │   ├── __init__.py
+│   │       │   └── commands/
+│   │       │       ├── __init__.py
+│   │       │       └── seed_seed_types.py
 │   │       ├── models.py
 │   │       ├── serializers.py
 │   │       ├── tests.py
 │   │       ├── urls.py
 │   │       ├── utils.py
 │   │       └── views.py
+│   ├── check_gis_data.py
 │   ├── config/
+│   │   ├── __init__.py
+│   │   ├── asgi.py
 │   │   ├── settings/
+│   │   │   ├── __init__.py
 │   │   │   ├── base.py
 │   │   │   ├── dev.py
 │   │   │   └── prod.py
-│   │   ├── asgi.py
 │   │   ├── urls.py
 │   │   └── wsgi.py
-│   ├── media/
-│   │   └── farmer_ids/
-│   │       ├── farmer_10_id.png
-│   │       ├── farmer_11_id.png
-│   │       ├── farmer_12_id.png
-│   │       ├── farmer_13_id.png
-│   │       ├── farmer_13_id_7zIyZFc.png
-│   │       ├── farmer_14_id.png
-│   │       ├── farmer_2_id.png
-│   │       ├── farmer_30_id.png
-│   │       ├── farmer_3_id.png
-│   │       ├── farmer_4_id.png
-│   │       ├── farmer_4_id_PTfi6Ao.png
-│   │       ├── farmer_5_id.png
-│   │       ├── farmer_5_id_BNMTuxW.png
-│   │       ├── farmer_5_id_tqJNbtX.png
-│   │       ├── farmer_6_id.png
-│   │       ├── farmer_6_id_9WKVQyI.png
-│   │       ├── farmer_6_id_kWPEhoF.png
-│   │       ├── farmer_7_id.png
-│   │       ├── farmer_7_id_CdL3rMq.png
-│   │       ├── farmer_8_id.png
-│   │       ├── farmer_8_id_49O4RWK.png
-│   │       ├── farmer_8_id_gk8Jk8R.png
-│   │       └── farmer_9_id.png
-│   ├── templates/
-│   │   ├── login.html
-│   │   └── register.html
-│   ├── .env
-│   ├── .env.example
-│   ├── .gitignore
-│   ├── README_ENV.md
-│   ├── address.json
 │   ├── db.sqlite3
 │   ├── db.sqlite3.backup
-│   ├── check_gis_data.py
 │   ├── fix_encoding.py
 │   ├── fixtures/
 │   │   ├── data.json
 │   │   └── data_fixed.json
 │   ├── generate_luzon.py
 │   ├── manage.py
-│   └── requirements.txt
+│   ├── README_ENV.md
+│   ├── requirements.txt
+│   └── templates/
+│       ├── login.html
+│       └── register.html
+├── CAPSTONE_SEED_UTILIZATION_PLAN.txt
+├── COMPLETE_UI_UX_SPECIFICATIONS.md
+├── FarmerRecordsCode.txt
 ├── frontend/
-│   ├── node_modules/
+│   ├── .gitignore
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
 │   ├── public/
 │   │   ├── favicon.svg
 │   │   ├── icons.svg
 │   │   ├── logo.png
-│   │   └── manifest.json
+│   │   ├── manifest.json
+│   │   └── sw.js
+│   ├── README.md
 │   ├── src/
 │   │   ├── api/
 │   │   │   ├── adminDashboard.js
 │   │   │   └── axios.js
+│   │   ├── App.css
+│   │   ├── App.jsx
 │   │   ├── assets/
 │   │   │   ├── hero.png
 │   │   │   ├── logo.png
@@ -183,6 +187,8 @@ Backend/
 │   │   │   ├── AuthContext.jsx
 │   │   │   └── useInactivityTimeout.js
 │   │   ├── components/
+│   │   │   ├── AboutSection.jsx
+│   │   │   ├── AddressSelector.jsx
 │   │   │   ├── admin/
 │   │   │   │   └── dashboard/
 │   │   │   │       ├── DashBarangayChart.jsx
@@ -197,15 +203,35 @@ Backend/
 │   │   │   │   ├── AnnouncementCard.jsx
 │   │   │   │   ├── AnnouncementDetail.jsx
 │   │   │   │   └── AnnouncementsListPage.jsx
+│   │   │   ├── AnnouncementsSection.jsx
+│   │   │   ├── app/
+│   │   │   │   ├── AppSplashScreen.jsx
+│   │   │   │   └── OfflineBanner.jsx
+│   │   │   ├── AreaMonitoring.jsx
+│   │   │   ├── AttentionPanel.jsx
+│   │   │   ├── AuthBox.jsx
+│   │   │   ├── ComplianceDonut.jsx
+│   │   │   ├── DamageChart.jsx
+│   │   │   ├── DelayChart.jsx
+│   │   │   ├── DocumentationSection.jsx
+│   │   │   ├── FooterSection.jsx
+│   │   │   ├── GanttChart.jsx
 │   │   │   ├── gis/
 │   │   │   │   ├── GisLegend.jsx
 │   │   │   │   ├── LucbanGisMap.jsx
 │   │   │   │   └── PublicGisMap.jsx
+│   │   │   ├── GisMapSection.jsx
+│   │   │   ├── Hero.jsx
+│   │   │   ├── InactivityWarningDialog.jsx
+│   │   │   ├── Input.jsx
+│   │   │   ├── KpiCards.jsx
+│   │   │   ├── Navbar.jsx
 │   │   │   ├── navigation/
 │   │   │   │   ├── BottomNav.jsx
 │   │   │   │   ├── MenuConfig.js
 │   │   │   │   ├── Sidebar.jsx
 │   │   │   │   └── UserNavConfig.js
+│   │   │   ├── PhaseDistribution.jsx
 │   │   │   ├── poll/
 │   │   │   │   ├── PollCard.jsx
 │   │   │   │   └── VoteForm.jsx
@@ -219,48 +245,27 @@ Backend/
 │   │   │   │   ├── ProductionFilterBar.jsx
 │   │   │   │   ├── ProductionInsights.jsx
 │   │   │   │   ├── ProductionTiles.jsx
-│   │   │   │   ├── YieldGapTable.jsx
-│   │   │   │   └── productionUtils.jsx
-│   │   │   ├── tables/
-│   │   │   │   └── TableBase.jsx
-│   │   │   ├── AboutSection.jsx
-│   │   │   ├── AddressSelector.jsx
-│   │   │   ├── AnnouncementsSection.jsx
-│   │   │   ├── AreaMonitoring.jsx
-│   │   │   ├── AttentionPanel.jsx
-│   │   │   ├── AuthBox.jsx
-│   │   │   ├── ComplianceDonut.jsx
-│   │   │   ├── DamageChart.jsx
-│   │   │   ├── DelayChart.jsx
-│   │   │   ├── DocumentationSection.jsx
-│   │   │   ├── FooterSection.jsx
-│   │   │   ├── GanttChart.jsx
-│   │   │   ├── GisMapSection.jsx
-│   │   │   ├── Hero.jsx
-│   │   │   ├── InactivityWarningDialog.jsx
-│   │   │   ├── Input.jsx
-│   │   │   ├── KpiCards.jsx
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── PhaseDistribution.jsx
-│   │   │   └── SeasonalSowing.jsx
+│   │   │   │   ├── productionUtils.jsx
+│   │   │   │   └── YieldGapTable.jsx
+│   │   │   ├── SeasonalSowing.jsx
+│   │   │   └── tables/
+│   │   │       └── TableBase.jsx
 │   │   ├── data/
-│   │   │   ├── LucbanGIS.json
 │   │   │   ├── address.json
+│   │   │   ├── LucbanGIS.json
 │   │   │   └── luzon_formatted.json
+│   │   ├── hooks/
+│   │   │   ├── useAppDisplayMode.js
+│   │   │   ├── useNetworkStatus.js
+│   │   │   └── usePwaInstall.js
+│   │   ├── index.css
 │   │   ├── layouts/
 │   │   │   ├── DashboardLayout.jsx
 │   │   │   ├── PublicLayout.jsx
 │   │   │   └── UserLayout.jsx
+│   │   ├── main.jsx
 │   │   ├── pages/
 │   │   │   ├── admin/
-│   │   │   │   ├── users/
-│   │   │   │   │   ├── Archive.jsx
-│   │   │   │   │   ├── FarmerMasterlist.jsx
-│   │   │   │   │   ├── FarmerRecords.jsx
-│   │   │   │   │   ├── FarmerRequests.jsx
-│   │   │   │   │   ├── OfficialMasterlist.jsx
-│   │   │   │   │   ├── ResetRequests.jsx
-│   │   │   │   │   └── SystemUsers.jsx
 │   │   │   │   ├── AdminBeneficiaries.jsx
 │   │   │   │   ├── AdminDashboard.jsx
 │   │   │   │   ├── AdminDistribution.jsx
@@ -274,7 +279,16 @@ Backend/
 │   │   │   │   ├── SeedInventory.jsx
 │   │   │   │   ├── SeedPoll.jsx
 │   │   │   │   ├── Settings.jsx
-│   │   │   │   └── UserManagement.jsx
+│   │   │   │   ├── UserManagement.jsx
+│   │   │   │   └── users/
+│   │   │   │       ├── Archive.jsx
+│   │   │   │       ├── FarmerMasterlist.jsx
+│   │   │   │       ├── FarmerRecords.jsx
+│   │   │   │       ├── FarmerRequests.jsx
+│   │   │   │       ├── OfficialMasterlist.jsx
+│   │   │   │       ├── ResetRequests.jsx
+│   │   │   │       └── SystemUsers.jsx
+│   │   │   ├── AdminReset.jsx
 │   │   │   ├── at/
 │   │   │   │   ├── ATAnnouncements.jsx
 │   │   │   │   ├── ATDashboard.jsx
@@ -301,7 +315,6 @@ Backend/
 │   │   │   │   ├── FarmerPoll.jsx
 │   │   │   │   ├── FarmerProfile.jsx
 │   │   │   │   └── YieldEncode.jsx
-│   │   │   ├── AdminReset.jsx
 │   │   │   ├── ForgotPassword.jsx
 │   │   │   ├── Landing.jsx
 │   │   │   ├── NotFound.jsx
@@ -309,36 +322,22 @@ Backend/
 │   │   │   ├── Register.jsx
 │   │   │   ├── ResetPassword.jsx
 │   │   │   └── VerifyOTP.jsx
-│   │   ├── routes/
-│   │   │   ├── AppRoutes.jsx
-│   │   │   └── ProtectedRoute.jsx
-│   │   ├── App.css
-│   │   ├── App.jsx
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── .gitignore
-│   ├── README.md
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── postcss.config.js
+│   │   └── routes/
+│   │       ├── AppRoutes.jsx
+│   │       └── ProtectedRoute.jsx
 │   ├── tailwind.config.js
 │   └── vite.config.js
-├── venv/
-├── .gitignore
-├── CAPSTONE_SEED_UTILIZATION_PLAN.txt
-├── COMPLETE_UI_UX_SPECIFICATIONS.md
-├── FarmerRecordsCode.txt
 ├── gen_tree.py
+├── gen_tree_updated.py
 ├── LOGIN_VALIDATION_SUMMARY.md
 ├── SEASON_IMPLEMENTATION_SUMMARY.md
-├── SYSTEM_FLOW_ANALYSIS.md
 ├── system_flow.txt
+├── SYSTEM_FLOW_ANALYSIS.md
 ├── test_gis_api.py
 ├── tmp_tree_cleanup.py
 ├── tree.txt
 ├── tree_clean.txt
 ├── tree_full.txt
 ├── tree_structure.txt
-└── try.py
+├── try.py
+└── try.txt
