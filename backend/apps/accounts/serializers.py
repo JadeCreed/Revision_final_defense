@@ -268,13 +268,18 @@ class AdminCreateBPSerializer(serializers.ModelSerializer):
 
 class FarmerProfileSerializer(serializers.ModelSerializer):
     id_card_url = serializers.SerializerMethodField()
+    succession_document_url = serializers.SerializerMethodField()
+    predecessor_name = serializers.SerializerMethodField()
+    successor_claims = serializers.SerializerMethodField()
+
 
     class Meta:
         model = FarmerProfile
         fields = '__all__'
         read_only_fields = ['user']
         extra_kwargs = {
-            'id_card': {'required': False}
+            'id_card': {'required': False},
+            'succession_document': {'required': False},
         }
 
     def get_id_card_url(self, obj):
@@ -283,6 +288,29 @@ class FarmerProfileSerializer(serializers.ModelSerializer):
             if request:
                 return request.build_absolute_uri(obj.id_card.url)
             return obj.id_card.url
+        return None
+
+    def get_predecessor_name(self, obj):
+        if obj.predecessor:
+            return f"{obj.predecessor.user.first_name} {obj.predecessor.user.last_name}"
+        return None
+
+    def get_successor_claims(self, obj):
+        # Reverse lookup: kung sino ang nag-claim na successor si obj (deceased farmer)
+        return [{
+            'user_id': s.user.id,
+            'name': f"{s.user.first_name} {s.user.last_name}",
+            'barangay': s.user.barangay,
+            'relationship': s.predecessor_relationship,
+            'status': s.succession_status,
+        } for s in obj.successors.all()]
+
+    def get_succession_document_url(self, obj):
+        if obj.succession_document:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.succession_document.url)
+            return obj.succession_document.url
         return None
 
     def update(self, instance, validated_data):
@@ -383,6 +411,7 @@ class FarmerListSerializer(serializers.ModelSerializer):
     gender = serializers.SerializerMethodField()
     hectares = serializers.SerializerMethodField()
     is_deceased = serializers.SerializerMethodField()
+    succession_status = serializers.SerializerMethodField()
 
     class Meta:
         model  = User
@@ -390,7 +419,7 @@ class FarmerListSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'contact_number',
             'barangay', 'rsbsa_number', 'gender', 'hectares', 'status',
             'is_verified', 'is_active', 'date_joined',
-            'profile_complete','is_deceased'
+            'profile_complete','is_deceased','succession_status'
         ]
 
     def get_is_deceased(self, obj):
@@ -398,6 +427,12 @@ class FarmerListSerializer(serializers.ModelSerializer):
             return obj.profile.is_deceased
         except (FarmerProfile.DoesNotExist, AttributeError):
             return False
+
+    def get_succession_status(self, obj):
+        try:
+            return obj.profile.succession_status
+        except (FarmerProfile.DoesNotExist, AttributeError):
+            return 'none'
 
     def get_gender(self, obj):
         if hasattr(obj, 'gender'):

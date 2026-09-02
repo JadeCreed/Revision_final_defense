@@ -301,13 +301,27 @@ export const getProductionGISSummary    = ()            => API.get('/production/
 export const getSeedProductivity        = (params = {}) => API.get('/production/seed-productivity/', { params });
 
 
-// 4 tiles for AT/BRGY/Farmer dashboards
 
+// ── SUCCESSION ──
+export const searchDeceasedFarmers = (search) =>
+  API.get('/accounts/succession/deceased-farmers/', { params: { search } });
+
+export const submitSuccessionClaim = (formData) =>
+  API.post('/accounts/succession/claim/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+export const reviewSuccessionClaim = (userId, data) =>
+  API.post(`/accounts/succession/${userId}/review/`, data);
+
+
+// 4 tiles for AT/BRGY/Farmer dashboards
 
 export const getBRGYDashboardStats = () =>
   API.get('/accounts/brgy/dashboard-stats/');
 
 export const getFarmerDashboardStats = () =>
   API.get('/accounts/farmer/dashboard-stats/');
+
 
 export default API;

@@ -43,7 +43,11 @@ from .views import (
     MeView,
     PublicStatsView,
     PublicSeasonView,
-    FarmerRegistryValidateView
+    FarmerRegistryValidateView,
+    DeceasedFarmerSearchView,
+    SubmitSuccessionClaimView,
+    AdminReviewSuccessionView,
+    
 
 )
 
@@ -102,9 +106,13 @@ urlpatterns = [
     path('farmer/deactivate/', FarmerDeactivateView.as_view(), name='farmer-deactivate'),
     path('admin/deactivate-user/<int:user_id>/', AdminDeactivateView.as_view(), name='admin-deactivate-user'),
 
-
     # ── DASHBOARD STATS ENDPOINTS (for charts and summary cards) ──
     path('at/dashboard-stats/', ATDashboardStatsView.as_view(), name='at-dashboard-stats'),
     path('brgy/dashboard-stats/', BRGYDashboardStatsView.as_view(), name='brgy-dashboard-stats'),
     path('farmer/dashboard-stats/', FarmerDashboardStatsView.as_view(), name='farmer-dashboard-stats'),
+
+    # ── SUCCESSION ──
+    path('succession/deceased-farmers/', DeceasedFarmerSearchView.as_view(), name='succession-deceased-farmers'),
+    path('succession/claim/', SubmitSuccessionClaimView.as_view(), name='succession-claim'),
+    path('succession/<int:user_id>/review/', AdminReviewSuccessionView.as_view(), name='succession-review'),
 ]

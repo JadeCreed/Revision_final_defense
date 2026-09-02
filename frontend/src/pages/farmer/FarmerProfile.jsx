@@ -13,11 +13,12 @@ import {
   User, Phone, MapPin, FileText,
   CheckCircle, Clock, AlertCircle,
   XCircle, Save, Send, ChevronRight,
+  Users, X,
 } from 'lucide-react';
 
 import AddressSelector from '../../components/AddressSelector';
 
-import API from '../../api/axios';
+import API, { searchDeceasedFarmers, submitSuccessionClaim } from '../../api/axios';
 
 
 const BARANGAYS = [
@@ -48,7 +49,7 @@ const Field = ({ label, required, error, children }) => (
     </label>
     {children}
     {error && (
-      <span style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', display: 'block' }}>
+      <span className="field-error-text" style={{ fontSize: '0.75rem', color: '#dc2626', marginTop: '0.25rem', display: 'block' }}>
         {error}
       </span>
     )}
@@ -107,6 +108,27 @@ const FarmerProfile = () => {
   // Inline confirmation state — shown before first-time submit
   // Gives user a chance to review before sending to admin
   const [showConfirm, setShowConfirm] = useState(false);
+
+    // ── SUCCESSION STATE (NEW) ──
+  const [successionData, setSuccessionData] = useState({
+    predecessor_name: '',
+    predecessor_relationship: '',
+    succession_document_type: '',
+    succession_document_url: '',
+    succession_status: 'none',
+  });
+  const [showSuccessionForm, setShowSuccessionForm] = useState(false);
+  const [successionSearch, setSuccessionSearch] = useState('');
+  const [successionResults, setSuccessionResults] = useState([]);
+  const [successionSearching, setSuccessionSearching] = useState(false);
+  const [selectedPredecessor, setSelectedPredecessor] = useState(null);
+  const [successionRelationship, setSuccessionRelationship] = useState('');
+  const [successionDocType, setSuccessionDocType] = useState('');
+  const [successionDocFile, setSuccessionDocFile] = useState(null);
+  const [successionSaving, setSuccessionSaving] = useState(false);
+  const [successionError, setSuccessionError] = useState('');
+  const [successionSuccess, setSuccessionSuccess] = useState('');
+  const successionSearchTimeout = useRef(null);
 
   const [form, setForm] = useState({
     // User model fields (pre-filled from registration)
@@ -184,6 +206,16 @@ const FarmerProfile = () => {
         four_ps:        profile.four_ps        ?? false,
       });
       setIdCardPreview(profile.id_card_url || '');
+
+      // ── Load succession data (NEW) ──
+      setSuccessionData({
+        predecessor_name:          profile.predecessor_name          || '',
+        predecessor_relationship:  profile.predecessor_relationship  || '',
+        succession_document_type: profile.succession_document_type || '',
+        succession_document_url:  profile.succession_document_url  || '',
+        succession_status:        profile.succession_status        || 'none',
+      });
+
     } catch (err) {
       setError(
         err.response?.status === 403
@@ -277,6 +309,95 @@ const FarmerProfile = () => {
     handleIdCardFile(file);
   };
 
+  
+    // ── SUCCESSION HANDLERS (NEW) ──
+  const handleSuccessionSearchChange = (value) => {
+    setSuccessionSearch(value);
+    if (successionSearchTimeout.current) clearTimeout(successionSearchTimeout.current);
+    successionSearchTimeout.current = setTimeout(async () => {
+      if (!value.trim()) {
+        setSuccessionResults([]);
+        return;
+      }
+      setSuccessionSearching(true);
+      try {
+        const res = await searchDeceasedFarmers(value.trim());
+        setSuccessionResults(res.data.results || []);
+      } catch {
+        setSuccessionResults([]);
+      } finally {
+        setSuccessionSearching(false);
+      }
+    }, 400);
+  };
+
+    const handleSelectPredecessor = (farmer) => {
+    setSelectedPredecessor(farmer);
+    setSuccessionResults([]);
+    setSuccessionSearch('');
+    setFieldErrors(prev => ({ ...prev, succession_predecessor: '' }));
+  };
+
+  const validateSuccessionDoc = (file) => {
+    const validExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+    const maxSize = 5 * 1024 * 1024;
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!validExtensions.includes(ext)) return 'Only PDF, JPG, and PNG files are allowed.';
+    if (file.size > maxSize) return 'File size must not exceed 5MB.';
+    return '';
+  };
+
+  const handleSuccessionDocFile = (file) => {
+    setSuccessionError('');
+    if (!file) { setSuccessionDocFile(null); return; }
+    const err = validateSuccessionDoc(file);
+    if (err) { setSuccessionError(err); setSuccessionDocFile(null); return; }
+    setSuccessionDocFile(file);
+  };
+
+  const handleSubmitSuccessionClaim = async () => {
+    setSuccessionError('');
+    setSuccessionSuccess('');
+
+    if (!selectedPredecessor) {
+      setSuccessionError('Please select the deceased farmer you are succeeding.');
+      return;
+    }
+    if (!successionRelationship) {
+      setSuccessionError('Please select your relationship to the deceased farmer.');
+      return;
+    }
+
+    setSuccessionSaving(true);
+    try {
+      const fileForm = new FormData();
+      fileForm.append('predecessor_id', selectedPredecessor.id);
+      fileForm.append('predecessor_relationship', successionRelationship);
+      if (successionDocType) fileForm.append('succession_document_type', successionDocType);
+      if (successionDocFile) fileForm.append('succession_document', successionDocFile);
+
+      const res = await submitSuccessionClaim(fileForm);
+
+      setSuccessionData({
+        predecessor_name:          selectedPredecessor.name,
+        predecessor_relationship:  successionRelationship,
+        succession_document_type: successionDocType,
+        succession_document_url:  '',
+        succession_status:        res.data.succession_status || 'pending',
+      });
+      setSuccessionSuccess('Succession claim submitted. Waiting for admin review.');
+      setShowSuccessionForm(false);
+      setSelectedPredecessor(null);
+      setSuccessionRelationship('');
+      setSuccessionDocType('');
+      setSuccessionDocFile(null);
+    } catch (err) {
+      setSuccessionError(err.response?.data?.error || 'Failed to submit succession claim.');
+    } finally {
+      setSuccessionSaving(false);
+    }
+  };
+
   // ── VALIDATE ──
   const validate = () => {
     const errs = {};
@@ -291,6 +412,11 @@ const FarmerProfile = () => {
     if (!form.farm_municipality.trim())      errs.farm_municipality      = 'Required';
     if (!form.farm_barangay.trim())          errs.farm_barangay          = 'Required';
     if (!form.hectares || parseFloat(form.hectares) <= 0) errs.hectares = 'Required - Enter total farm hectares';
+    
+    if (showSuccessionForm && successionData.succession_status === 'none') {
+      if (!selectedPredecessor)    errs.succession_predecessor  = 'Please select the deceased farmer you are succeeding.';
+      if (!successionRelationship) errs.succession_relationship = 'Please select your relationship to the deceased farmer.';
+    }
     return errs;
   };
 
@@ -302,11 +428,20 @@ const FarmerProfile = () => {
     setError('');
     setSuccess('');
 
-    const errs = validate();
+        const errs = validate();
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
       setError('Please fill in all required fields before submitting.');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Mag-scroll sa unang red error field mismo, hindi lang sa taas ng page.
+      // setTimeout ito para mag-render muna ang mga error message bago mag-scroll.
+      setTimeout(() => {
+        const firstErrorEl = document.querySelector('.field-error-text');
+        if (firstErrorEl) {
+          firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      }, 50);
       return;
     }
 
@@ -367,10 +502,28 @@ const FarmerProfile = () => {
         setIdCardFile(null);
       }
 
+            // ── Submit succession claim together with the profile (NEW) ──
+      // Tatakbo lang ito kung binuksan ang succession form at wala pang
+      // existing claim — yung validate() na ang nag-guarantee kumpleto na
+      // ang predecessor/relationship bago pa man makarating dito.
+      if (showSuccessionForm && successionData.succession_status === 'none') {
+        await handleSubmitSuccessionClaim();
+      }
+
       // Re-fetch to get the latest status from server
       const refreshed = await API.get('/accounts/farmer-profile/');
       const newStatus = refreshed.data.user.status;
       setUserStatus(newStatus);
+
+      // Keep succession display in sync with what was just saved (NEW)
+      const refreshedProfile = refreshed.data.profile || {};
+      setSuccessionData({
+        predecessor_name:          refreshedProfile.predecessor_name          || '',
+        predecessor_relationship:  refreshedProfile.predecessor_relationship  || '',
+        succession_document_type: refreshedProfile.succession_document_type || '',
+        succession_document_url:  refreshedProfile.succession_document_url  || '',
+        succession_status:        refreshedProfile.succession_status        || 'none',
+      });
 
       if (newStatus === 'COMPLETE') {
         setSuccess('Profile submitted! The admin will review your information soon.');
@@ -396,7 +549,14 @@ const FarmerProfile = () => {
           flatErrs[k] = Array.isArray(v) ? v[0] : String(v);
         });
         setFieldErrors(flatErrs);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        setTimeout(() => {
+          const firstErrorEl = document.querySelector('.field-error-text');
+          if (firstErrorEl) {
+            firstErrorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }, 50);
       }
       setError('Failed to save profile. Please check the highlighted fields and try again.');
     } finally {
@@ -927,6 +1087,211 @@ const FarmerProfile = () => {
               </label>
             ))}
           </div>
+        </Section>{/* SECTION 6: Succession (NEW) */}
+        <Section icon={Users} title="Succession (Optional)">
+          {successionError && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>
+              {successionError}
+            </div>
+          )}
+          {successionSuccess && (
+            <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>
+              {successionSuccess}
+            </div>
+          )}
+
+          {successionData.succession_status !== 'none' ? (
+            <div style={{ padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', border: '1px solid #e5e7eb' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                <p style={{ margin: 0, fontWeight: 700, color: '#1a1a1a' }}>Succession Claim</p>
+                <span style={{
+                  padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600,
+                  backgroundColor: successionData.succession_status === 'approved' ? '#dcfce7'
+                    : successionData.succession_status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                  color: successionData.succession_status === 'approved' ? '#166534'
+                    : successionData.succession_status === 'rejected' ? '#991b1b' : '#854d0e',
+                }}>
+                  {successionData.succession_status.charAt(0).toUpperCase() + successionData.succession_status.slice(1)}
+                </span>
+              </div>
+              <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#374151' }}>
+                <strong>Predecessor:</strong> {successionData.predecessor_name || '—'}
+              </p>
+              <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#374151' }}>
+                <strong>Relationship:</strong> {successionData.predecessor_relationship || '—'}
+              </p>
+              {successionData.succession_document_type && (
+                <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#374151' }}>
+                  <strong>Document:</strong> {successionData.succession_document_type}
+                </p>
+              )}
+              {successionData.succession_document_url && (
+                <a href={successionData.succession_document_url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: '0.8rem', color: '#2d6a2d', fontWeight: 600 }}>
+                  View submitted document
+                </a>
+              )}
+            </div>
+          ) : !showSuccessionForm ? (
+            <div>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+                Are you registering as a successor of a deceased farmer's record?
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSuccessionForm(true)}
+                style={{
+                  padding: '0.625rem 1.25rem', backgroundColor: 'white', color: '#2d6a2d',
+                  border: '1.5px solid #2d6a2d', borderRadius: '0.5rem', fontWeight: 600,
+                  fontSize: '0.85rem', cursor: 'pointer',
+                }}
+              >
+                Yes, I am a successor
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gap: '1rem' }}>
+
+              {!selectedPredecessor ? (
+                <Field label="Search deceased farmer" error={fieldErrors.succession_predecessor}>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      type="text"
+                      value={successionSearch}
+                      onChange={e => handleSuccessionSearchChange(e.target.value)}
+                      placeholder="Type a name..."
+                      style={inputStyle(!!fieldErrors.succession_predecessor)}
+                    />
+                    {successionSearching && (
+                      <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: '0.375rem' }}>Searching...</p>
+                    )}
+                    {successionResults.length > 0 && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 0.375rem)',
+                        left: 0,
+                        right: 0,
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        backgroundColor: 'white',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '0.5rem',
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
+                        zIndex: 20,
+                      }}>
+                        {successionResults.map(f => (
+                          <div
+                            key={f.id}
+                            onClick={() => handleSelectPredecessor(f)}
+                            style={{ padding: '0.625rem 0.875rem', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', fontSize: '0.85rem' }}
+                          >
+                            <strong>{f.name}</strong>
+                            <span style={{ color: '#6b7280' }}> — {f.barangay || 'No barangay'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Field>
+              ) : (
+                <div style={{ padding: '0.875rem', backgroundColor: '#f0fdf4', borderRadius: '0.75rem', border: '1px solid #86efac' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 700, color: '#166534' }}>{selectedPredecessor.name}</p>
+                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.8rem', color: '#374151' }}>
+                        Barangay: {selectedPredecessor.barangay || '—'}
+                      </p>
+                      <p style={{ margin: '0.125rem 0 0', fontSize: '0.8rem', color: '#374151' }}>
+                        Date Deceased: {selectedPredecessor.date_deceased || '—'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPredecessor(null)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <Field label="Relationship to deceased farmer" required error={fieldErrors.succession_relationship}>
+                <select
+                  value={successionRelationship}
+                  onChange={e => {
+                    setSuccessionRelationship(e.target.value);
+                    setFieldErrors(prev => ({ ...prev, succession_relationship: '' }));
+                  }}
+                  style={inputStyle(!!fieldErrors.succession_relationship)}
+                >
+                  <option value="">Select relationship</option>
+                  <option value="SON">Son</option>
+                  <option value="DAUGHTER">Daughter</option>
+                  <option value="SPOUSE">Spouse</option>
+                  <option value="PARENT">Parent</option>
+                  <option value="SIBLING">Sibling</option>
+                  <option value="OTHER_RELATIVE">Other Relative</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </Field>
+
+              <Field label="Document type">
+                <select
+                  value={successionDocType}
+                  onChange={e => setSuccessionDocType(e.target.value)}
+                  style={inputStyle(false)}
+                >
+                  <option value="">Select document type</option>
+                  <option value="Extrajudicial Settlement">Extrajudicial Settlement</option>
+                  <option value="Affidavit of Heirship">Affidavit of Heirship</option>
+                  <option value="Other">Other</option>
+                </select>
+              </Field>
+
+              <Field label="Upload supporting document">
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={e => handleSuccessionDocFile(e.target.files?.[0])}
+                />
+                <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.375rem' }}>
+                  PDF, JPG, or PNG. Max size 5MB.
+                </p>
+                {successionDocFile && (
+                  <p style={{ fontSize: '0.8rem', color: '#166534', marginTop: '0.25rem' }}>
+                    Selected: {successionDocFile.name}
+                  </p>
+                )}
+              </Field>
+
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSuccessionForm(false);
+                    setSelectedPredecessor(null);
+                    setSuccessionRelationship('');
+                    setSuccessionDocType('');
+                    setSuccessionDocFile(null);
+                    setSuccessionError('');
+                    setFieldErrors(prev => ({ ...prev, succession_predecessor: '', succession_relationship: '' }));
+                  }}
+                  style={{
+                    width: '100%', padding: '0.75rem', backgroundColor: 'white', color: '#374151',
+                    border: '1.5px solid #d1d5db', borderRadius: '0.5rem', fontWeight: 600,
+                    fontSize: '0.9rem', cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0 }}>
+                This will be submitted together with your profile when you press{' '}
+                {userStatus === 'APPROVED' ? '"Update Profile"' : '"Submit Profile"'} below.
+              </p>
+            </div>
+          )}
         </Section>
 
         {/* ── SUBMIT / UPDATE BUTTON ── */}

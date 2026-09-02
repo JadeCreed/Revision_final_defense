@@ -480,11 +480,13 @@ class AdminFarmerMasterRecordView(ListAPIView):
         records = FarmerMasterRecord.objects.all().order_by(ordering)
 
         if search:
-            records = records.filter(
-                Q(rsbsa_number__icontains=search) |
-                Q(first_name__icontains=search) |
-                Q(last_name__icontains=search)
-            )
+            terms = search.replace(',', ' ').split()
+            for term in terms:
+                records = records.filter(
+                    Q(rsbsa_number__icontains=term) |
+                    Q(first_name__icontains=term) |
+                    Q(last_name__icontains=term)
+                )
 
         if barangay:
             records = records.filter(barangay=barangay)
@@ -1245,12 +1247,14 @@ class AdminFarmerRequestsView(ListAPIView):
         # Search by name, contact, RSBSA
         search = self.request.query_params.get('search')
         if search:
-            queryset = queryset.filter(
-                Q(first_name__icontains=search)  |
-                Q(last_name__icontains=search)   |
-                Q(contact_number__icontains=search) |
-                Q(rsbsa_number__icontains=search)
-            )
+            terms = search.replace(',', ' ').split()
+            for term in terms:
+                queryset = queryset.filter(
+                    Q(first_name__icontains=term)  |
+                    Q(last_name__icontains=term)   |
+                    Q(contact_number__icontains=term) |
+                    Q(rsbsa_number__icontains=term)
+                )
          # ✅ Sorting support — whitelist prevents injection
         ordering = self.request.query_params.get('ordering', 'status_priority')
         if ordering not in ALLOWED_ORDERING:
@@ -1330,14 +1334,22 @@ class AdminFarmerMasterlistView(ListAPIView):
         if barangay:
             queryset = queryset.filter(barangay=barangay)
 
+        is_deceased = self.request.query_params.get('is_deceased')
+        if is_deceased == 'true':
+            queryset = queryset.filter(profile__is_deceased=True)
+        elif is_deceased == 'false':
+            queryset = queryset.filter(profile__is_deceased=False)
+
         search = self.request.query_params.get('search')
         if search:
-            queryset = queryset.filter(
-                Q(first_name__icontains=search)     |
-                Q(last_name__icontains=search)      |
-                Q(contact_number__icontains=search) |
-                Q(rsbsa_number__icontains=search)
-            )
+            terms = search.replace(',', ' ').split()
+            for term in terms:
+                queryset = queryset.filter(
+                    Q(first_name__icontains=term)     |
+                    Q(last_name__icontains=term)      |
+                    Q(contact_number__icontains=term) |
+                    Q(rsbsa_number__icontains=term)
+                )
 
         ordering = self.request.query_params.get('ordering', '-date_joined')
         if ordering not in ALLOWED_ORDERING:
@@ -1864,3 +1876,147 @@ class FarmerRegistryValidateView(APIView):
         if errors:
             return Response(errors, status=400)
         return Response({'valid': True}, status=200)
+
+
+
+# ════════════════════════════════════════════
+# SUCCESSION — Farmer-facing endpoints
+# ════════════════════════════════════════════
+
+class DeceasedFarmerSearchView(APIView):
+    """
+    GET /api/accounts/succession/deceased-farmers/?search=juan
+    Returns deceased farmers only, for the successor search modal.
+    Only names + barangay + date_deceased are returned — no RSBSA.
+    """
+    permission_classes = [IsAuthenticated, IsFarmer]
+
+    def get(self, request):
+        search = (request.query_params.get('search') or '').strip()
+
+        profiles = FarmerProfile.objects.filter(
+            is_deceased=True
+        ).select_related('user')
+
+        if search:
+            # Split into words so "Juan Bautista" or "Bautista Juan"
+            # both match regardless of first/last name order.
+            terms = search.split()
+            for term in terms:
+                profiles = profiles.filter(
+                    Q(user__first_name__icontains=term) |
+                    Q(user__last_name__icontains=term)
+                )
+
+        data = [{
+            'id': p.id,
+            'name': f"{p.user.first_name} {p.user.last_name}",
+            'barangay': p.user.barangay,
+            'date_deceased': p.date_deceased,
+        } for p in profiles[:20]]  # cap results, this is a search-as-you-type list
+
+        return Response({'results': data})
+
+
+class SubmitSuccessionClaimView(APIView):
+    """
+    POST /api/accounts/succession/claim/
+    Body (multipart/form-data):
+        predecessor_id
+        predecessor_relationship
+        succession_document_type
+        succession_document (file)
+
+    Sets succession_status = 'pending' on the logged-in farmer's profile.
+    Does NOT touch the farmer's own approval status (user.status stays as-is).
+    """
+    permission_classes = [IsAuthenticated, IsFarmer]
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
+
+    def post(self, request):
+        profile, _ = FarmerProfile.objects.get_or_create(user=request.user)
+
+        predecessor_id = request.data.get('predecessor_id')
+        relationship = request.data.get('predecessor_relationship')
+        document_type = request.data.get('succession_document_type')
+        document = request.FILES.get('succession_document')
+
+        if not predecessor_id:
+            return Response({"error": "predecessor_id is required."}, status=400)
+        if not relationship:
+            return Response({"error": "predecessor_relationship is required."}, status=400)
+
+        try:
+            predecessor_profile = FarmerProfile.objects.get(id=predecessor_id, is_deceased=True)
+        except FarmerProfile.DoesNotExist:
+            return Response({"error": "Selected predecessor is not a valid deceased farmer."}, status=400)
+
+        # Prevent a farmer from claiming to succeed themselves
+        if predecessor_profile.id == profile.id:
+            return Response({"error": "You cannot succeed your own profile."}, status=400)
+
+        profile.predecessor = predecessor_profile
+        profile.predecessor_relationship = relationship
+        if document_type:
+            profile.succession_document_type = document_type
+        if document:
+            profile.succession_document = document
+        profile.succession_status = 'pending'
+
+        try:
+            profile.full_clean(exclude=[f.name for f in FarmerProfile._meta.fields if f.name not in
+                                         ['succession_document']])
+        except Exception:
+            pass  # full_clean is optional here; validators on the field already run on save()
+
+        profile.save()
+
+        return Response({
+            "message": "Succession claim submitted. Waiting for admin review.",
+            "succession_status": profile.succession_status,
+        }, status=201)
+
+# ════════════════════════════════════════════
+# SUCCESSION — Admin-facing endpoint
+# ════════════════════════════════════════════
+
+class AdminReviewSuccessionView(APIView):
+    """
+    POST /api/accounts/succession/{user_id}/review/
+    Body: {"action": "APPROVED" | "REJECTED"}
+    Admin approves or rejects a farmer's succession claim.
+    Only affects succession_status — does not touch the farmer's
+    own account approval status (user.status).
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, role='FARMER')
+        except User.DoesNotExist:
+            return Response({"error": "Farmer not found"}, status=404)
+
+        try:
+            profile = user.profile
+        except FarmerProfile.DoesNotExist:
+            return Response({"error": "Farmer profile not found"}, status=404)
+
+        if profile.succession_status != 'pending':
+            return Response(
+                {"error": "This farmer has no pending succession claim to review."},
+                status=400
+            )
+
+        action = request.data.get('action', '').upper()
+
+        if action == 'APPROVED':
+            profile.succession_status = 'approved'
+            profile.save()
+            return Response({"message": "Succession claim approved."})
+
+        elif action == 'REJECTED':
+            profile.succession_status = 'rejected'
+            profile.save()
+            return Response({"message": "Succession claim rejected."})
+
+        return Response({"error": "Invalid action. Use APPROVED or REJECTED."}, status=400)

@@ -34,6 +34,50 @@ def validate_id_card(file):
         raise ValidationError("Only JPG and PNG files are allowed.")
 
 
+def succession_document_upload_path(instance, filename):
+    """
+    Rename uploaded succession document to farmer_{user_id}_succession.{ext}
+    Stored in media/succession_documents/
+    Separate from id_card — never trust the original filename.
+    """
+    ext = filename.rsplit('.', 1)[-1].lower()
+    return f'succession_documents/farmer_{instance.user_id}_succession.{ext}'
+
+
+def validate_succession_document(file):
+    """
+    Security checks for uploaded succession document.
+    1. File size max 5MB
+    2. PDF, JPG, JPEG, PNG allowed (broader than id_card, which is image-only)
+    """
+    max_size = 5 * 1024 * 1024  # 5MB
+    if file.size > max_size:
+        raise ValidationError("File size must not exceed 5MB.")
+
+    allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png']
+    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
+    if ext not in allowed_extensions:
+        raise ValidationError("Only PDF, JPG, and PNG files are allowed.")
+
+
+RELATIONSHIP_CHOICES = (
+    ('SON', 'Son'),
+    ('DAUGHTER', 'Daughter'),
+    ('SPOUSE', 'Spouse'),
+    ('PARENT', 'Parent'),
+    ('SIBLING', 'Sibling'),
+    ('OTHER_RELATIVE', 'Other Relative'),
+    ('OTHER', 'Other'),
+)
+
+SUCCESSION_STATUS_CHOICES = (
+    ('none', 'None'),
+    ('pending', 'Pending'),
+    ('approved', 'Approved'),
+    ('rejected', 'Rejected'),
+)
+
+
 class User(AbstractBaseUser, PermissionsMixin):
     """
     Custom User Model for AGRICE System
@@ -143,10 +187,42 @@ class FarmerProfile(models.Model):
     four_ps = models.BooleanField(default=False)
     hectares = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True, help_text='Total farm hectares')  # Total farm hectares
 
-    # 🔹 Deceased status 
+        # 🔹 Deceased status 
     is_deceased = models.BooleanField(default=False, help_text='Marks farmer as deceased for record-keeping')
     date_deceased = models.DateField(blank=True, null=True, help_text='Date farmer was recorded as deceased')
-    
+
+    # 🔹 Succession (successor claiming a deceased farmer's record)
+    predecessor = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='successors',
+        help_text='Deceased farmer that this farmer is claiming to succeed'
+    )
+    predecessor_relationship = models.CharField(
+        max_length=20,
+        choices=RELATIONSHIP_CHOICES,
+        blank=True,
+        null=True
+    )
+    succession_document_type = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True
+    )
+    succession_document = models.FileField(
+        upload_to=succession_document_upload_path,
+        blank=True,
+        null=True,
+        validators=[validate_succession_document]
+    )
+    succession_status = models.CharField(
+        max_length=20,
+        choices=SUCCESSION_STATUS_CHOICES,
+        default='none'
+    )
+
     # 🔹 ID Card upload (NEW)
     id_card = models.ImageField(
         upload_to=farmer_id_upload_path,

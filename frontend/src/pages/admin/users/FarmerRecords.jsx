@@ -7,6 +7,7 @@ import {
   adminResetPassword,
   getFarmerRegistry, addFarmerRegistry,
   updateFarmerRegistry, deleteFarmerRegistry, bulkUploadRegistry,
+  reviewSuccessionClaim,
 } from '../../../api/axios';
 import {
   Pagination, SortDropdown, COL_WIDTHS, NewBadge, getSeenIds,
@@ -94,6 +95,15 @@ const TABLE_KEY = 'farmer_requests';
 const formatDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
 
+// ── PENDING SUCCESSION DOT (NEW) ──
+// Small red dot shown on a button to indicate an action awaiting admin review.
+const PendingDot = () => (
+  <span style={{
+    position: 'absolute', top: '-4px', right: '-4px',
+    width: '10px', height: '10px', borderRadius: '50%',
+    backgroundColor: '#dc2626', border: '2px solid white',
+  }} />
+);
 
 // ── TAB 1: FARMER ACCOUNTS (exact logic from FarmerRequests.jsx) ──
 const FarmerAccountsTab = () => {
@@ -118,6 +128,14 @@ const FarmerAccountsTab = () => {
   const [accountsEditError, setAccountsEditError] = useState('');
   const [accountsEditSuccess, setAccountsEditSuccess] = useState('');
   const initialAccountsFormRef            = useRef({});
+
+  // ── SUCCESSION REVIEW STATE (NEW) ──
+  const [successionModal, setSuccessionModal] = useState(null);
+  const [successionReviewLoading, setSuccessionReviewLoading] = useState(false);
+  const [successionReviewError, setSuccessionReviewError] = useState('');
+
+  // ── VIEW SUCCESSOR STATE (NEW, reverse view — deceased farmer's side) ──
+  const [successorViewModal, setSuccessorViewModal] = useState(null);
 
   const scheduleNewBadgeHide = (id) => {
     if (newTimeouts.current[id]) clearTimeout(newTimeouts.current[id]);
@@ -257,6 +275,30 @@ const FarmerAccountsTab = () => {
 
   const isAccountsFormDirty = JSON.stringify(accountsEditForm) !== JSON.stringify(initialAccountsFormRef.current);
 
+  // ── SUCCESSION REVIEW HANDLERS (NEW) ──
+  const openSuccessionModal = () => {
+    if (!accountsDetailsModal) return;
+    setSuccessionModal(accountsDetailsModal);
+    setSuccessionReviewError('');
+  };
+
+  const handleSuccessionReview = async (action) => {
+    if (!successionModal) return;
+    setSuccessionReviewLoading(true);
+    setSuccessionReviewError('');
+    try {
+      await reviewSuccessionClaim(successionModal.id, { action });
+      setSuccessionModal(null);
+      // Refresh the details modal so it reflects the new succession_status
+      await openAccountsDetails(successionModal.id);
+      await fetchFarmers(false);
+    } catch (err) {
+      setSuccessionReviewError(err.response?.data?.error || 'Failed to review succession claim.');
+    } finally {
+      setSuccessionReviewLoading(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.25rem', alignItems: 'center' }}>
@@ -308,13 +350,14 @@ const FarmerAccountsTab = () => {
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.status }}>
                       <span style={{ backgroundColor: s.bg, color: s.color, padding: '0.25rem 0.75rem', borderRadius: '999px', fontSize: '0.75rem', fontWeight: '600', whiteSpace: 'nowrap' }}>{s.label}</span>
                     </td>
-
+                    
                     <td style={{ padding: '0.875rem 1rem', minWidth: '110px' }}>
                       <button onClick={() => openAccountsDetails(farmer.id)}
-                        style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                        style={{ position: 'relative', padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                         View Details
+                        {farmer.succession_status === 'pending' && <PendingDot />}
                       </button>
-                    </td> 
+                    </td>
                     
                     <td style={{ padding: '0.875rem 1rem', color: '#6b7280', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(farmer.date_joined)}</td>
                     <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.actions }}>
@@ -356,7 +399,7 @@ const FarmerAccountsTab = () => {
         </div>
       )}
 
-      {accountsDetailsModal && (
+      {accountsDetailsModal && !successionModal && !successorViewModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 110, padding: '1rem', overflowY: 'auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '720px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.25rem', gap: '1rem' }}>
@@ -366,6 +409,41 @@ const FarmerAccountsTab = () => {
               </div>
               <button onClick={() => setAccountsDetailsModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
             </div>
+
+           {/* ── VIEW SUCCESSION BUTTON (NEW) — only shown if this farmer has a predecessor ── */}
+            {accountsDetailsModal.profile?.predecessor && (
+              <button
+                type="button"
+                onClick={openSuccessionModal}
+                style={{
+                  position: 'relative',
+                  padding: '0.5rem 1rem', backgroundColor: '#fef9c3', color: '#854d0e',
+                  border: '1.5px solid #fde047', borderRadius: '0.5rem', fontWeight: 600,
+                  fontSize: '0.8rem', cursor: 'pointer', marginBottom: '1.25rem', marginRight: '0.5rem',
+                }}
+              >
+                View Succession Claim ({accountsDetailsModal.profile.succession_status})
+                {accountsDetailsModal.profile.succession_status === 'pending' && <PendingDot />}
+              </button>
+            )}
+
+            {/* ── VIEW SUCCESSOR BUTTON (NEW, reverse view) — shown if someone claims this farmer as predecessor ── */}
+            {accountsDetailsModal.profile?.successor_claims?.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSuccessorViewModal(accountsDetailsModal)}
+                style={{
+                  position: 'relative',
+                  padding: '0.5rem 1rem', backgroundColor: '#dbeafe', color: '#1e40af',
+                  border: '1.5px solid #93c5fd', borderRadius: '0.5rem', fontWeight: 600,
+                  fontSize: '0.8rem', cursor: 'pointer', marginBottom: '1.25rem',
+                }}
+              >
+                View Successor ({accountsDetailsModal.profile.successor_claims.length})
+                {accountsDetailsModal.profile.successor_claims.some(s => s.status === 'pending') && <PendingDot />}
+              </button>
+            )}
+
             {accountsEditError && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{accountsEditError}</div>}
             {accountsEditSuccess && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{accountsEditSuccess}</div>}
 
@@ -471,10 +549,151 @@ const FarmerAccountsTab = () => {
           </div>
         </div>
       )}
+
+      {/* ── SUCCESSION INFO MODAL (NEW) ── */}
+      {successionModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 120, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '520px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSuccessionModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2d6a2d', fontSize: '0.8rem', fontWeight: 600, padding: 0, marginBottom: '0.5rem' }}
+                >
+                  ← Back to Farmer Details
+                </button>
+                <h2 style={{ fontWeight: '700', margin: 0 }}>Succession Information</h2>
+              </div>
+              <button onClick={() => { setSuccessionModal(null); setAccountsDetailsModal(null); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {successionReviewError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                {successionReviewError}
+              </div>
+            )}
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Successor</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.25rem' }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>{successionModal.first_name} {successionModal.last_name}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Barangay: {successionModal.barangay || '—'}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
+                Relationship: {successionModal.profile?.predecessor_relationship || '—'}
+              </p>
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Predecessor (Deceased Farmer)</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.25rem' }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>{successionModal.profile?.predecessor_name || '—'}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Status: Deceased</p>
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Supporting Document</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.5rem' }}>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#374151' }}>
+                Document Type: {successionModal.profile?.succession_document_type || '—'}
+              </p>
+              {successionModal.profile?.succession_document_url ? (
+                <a
+                  href={successionModal.profile.succession_document_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: 'inline-block', marginTop: '0.5rem', fontSize: '0.85rem', color: '#2d6a2d', fontWeight: 600 }}
+                >
+                  View Document
+                </a>
+              ) : (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#9ca3af' }}>No document uploaded.</p>
+              )}
+            </div>
+
+            {successionModal.profile?.succession_status === 'pending' ? (
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => handleSuccessionReview('REJECTED')}
+                  disabled={successionReviewLoading}
+                  style={{
+                    flex: 1, padding: '0.75rem', backgroundColor: 'white', color: '#dc2626',
+                    border: '1.5px solid #dc2626', borderRadius: '0.5rem', fontWeight: 600,
+                    fontSize: '0.9rem', cursor: successionReviewLoading ? 'not-allowed' : 'pointer',
+                    opacity: successionReviewLoading ? 0.7 : 1,
+                  }}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSuccessionReview('APPROVED')}
+                  disabled={successionReviewLoading}
+                  style={{
+                    flex: 1, padding: '0.75rem', backgroundColor: '#2d6a2d', color: 'white',
+                    border: 'none', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem',
+                    cursor: successionReviewLoading ? 'not-allowed' : 'pointer',
+                    opacity: successionReviewLoading ? 0.7 : 1,
+                  }}
+                >
+                  {successionReviewLoading ? 'Processing...' : 'Approve'}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                padding: '0.75rem 1rem', borderRadius: '0.5rem', textAlign: 'center', fontWeight: 600, fontSize: '0.85rem',
+                backgroundColor: successionModal.profile?.succession_status === 'approved' ? '#dcfce7' : '#fee2e2',
+                color: successionModal.profile?.succession_status === 'approved' ? '#166534' : '#991b1b',
+              }}>
+                This claim has already been {successionModal.profile?.succession_status}.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW SUCCESSOR MODAL (NEW, reverse view) ── */}{successorViewModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 120, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '520px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSuccessorViewModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2d6a2d', fontSize: '0.8rem', fontWeight: 600, padding: 0, marginBottom: '0.5rem' }}
+                >
+                  ← Back to Farmer Details
+                </button>
+                <h2 style={{ fontWeight: '700', margin: 0 }}>Successor Information</h2>
+              </div>
+                <button onClick={() => { setSuccessorViewModal(null); setAccountsDetailsModal(null); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem' }}>
+              The following farmer(s) have claimed to succeed <strong>{successorViewModal.first_name} {successorViewModal.last_name}</strong>.
+            </p>
+
+            {successorViewModal.profile?.successor_claims?.map((s, idx) => (
+              <div key={s.user_id} style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{s.name}</p>
+                  <span style={{
+                    padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600,
+                    backgroundColor: s.status === 'approved' ? '#dcfce7' : s.status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                    color: s.status === 'approved' ? '#166534' : s.status === 'rejected' ? '#991b1b' : '#854d0e',
+                  }}>
+                    {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>Barangay: {s.barangay || '—'}</p>
+                <p style={{ margin: '0.125rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Relationship: {s.relationship || '—'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
+    
 
 // ── TAB 2: FARMER MASTERLIST (exact logic from FarmerMasterlist.jsx) ──
 const FarmerMasterlistTab = () => {
@@ -485,6 +704,7 @@ const FarmerMasterlistTab = () => {
   const [page, setPage]                     = useState(1);
   const [search, setSearch]                 = useState('');
   const [barangayFilter, setBarangayFilter] = useState('');
+  const [deceasedFilter, setDeceasedFilter] = useState('ALL');
   const [sort, setSort]                     = useState('-date_joined');
   const [newIds, setNewIds]                 = useState(new Set());
   const knownIds                            = useRef(new Set());
@@ -504,11 +724,21 @@ const FarmerMasterlistTab = () => {
   const [resetSuccess, setResetSuccess]         = useState('');
   const [newPassword, setNewPassword]           = useState('');
 
+  // ── SUCCESSION REVIEW STATE (NEW) ──
+  const [successionModal, setSuccessionModal] = useState(null);
+  const [successionReviewLoading, setSuccessionReviewLoading] = useState(false);
+  const [successionReviewError, setSuccessionReviewError] = useState('');
+
+  // ── VIEW SUCCESSOR STATE (NEW, reverse view — deceased farmer's side) ──
+  const [successorViewModal, setSuccessorViewModal] = useState(null);
+
+
   const fetchFarmers = useCallback(async (isInitial = false) => {
     try {
       const params = { page, ordering: sort };
       if (search)         params.search   = search;
       if (barangayFilter) params.barangay = barangayFilter;
+      if (deceasedFilter !== 'ALL') params.is_deceased = deceasedFilter === 'DECEASED' ? 'true' : 'false';
 
       const res   = await getFarmerMasterlist(params);
       const items = res.data.results || res.data;
@@ -534,7 +764,7 @@ const FarmerMasterlistTab = () => {
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [page, search, barangayFilter, sort]);
+  }, [page, search, barangayFilter, deceasedFilter, sort]);
 
   useEffect(() => { fetchFarmers(true); }, [fetchFarmers]);
   useEffect(() => {
@@ -542,7 +772,7 @@ const FarmerMasterlistTab = () => {
     return () => clearInterval(poll);
   }, [fetchFarmers]);
   useEffect(() => () => Object.values(timeouts.current).forEach(clearTimeout), []);
-  useEffect(() => { setPage(1); }, [search, barangayFilter, sort]);
+  useEffect(() => { setPage(1); }, [search, barangayFilter, deceasedFilter, sort]);
 
   const openDetails = async (farmerId) => {
     try {
@@ -620,6 +850,28 @@ const FarmerMasterlistTab = () => {
   
   const isFormDirty = JSON.stringify(editForm) !== JSON.stringify(initialFormRef.current);
 
+  // ── SUCCESSION REVIEW HANDLERS (NEW) ──
+  const openSuccessionModal = () => {
+    if (!detailsModal) return;
+    setSuccessionModal(detailsModal);
+    setSuccessionReviewError('');
+  };
+
+  const handleSuccessionReview = async (action) => {
+    if (!successionModal) return;
+    setSuccessionReviewLoading(true);
+    setSuccessionReviewError('');
+    try {
+      await reviewSuccessionClaim(successionModal.id, { action });
+      setSuccessionModal(null);
+      await openDetails(successionModal.id);
+      await fetchFarmers(false);
+    } catch (err) {
+      setSuccessionReviewError(err.response?.data?.error || 'Failed to review succession claim.');
+    } finally {
+      setSuccessionReviewLoading(false);
+    }
+  };
 
   const handleReset = async (mode) => {
     if (!resetModal) return;
@@ -651,6 +903,11 @@ const FarmerMasterlistTab = () => {
         <select value={barangayFilter} onChange={e => setBarangayFilter(e.target.value)} style={filterStyle}>
           <option value="">All Barangays</option>
           {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+        </select>
+        <select value={deceasedFilter} onChange={e => setDeceasedFilter(e.target.value)} style={filterStyle}>
+          <option value="ALL">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="DECEASED">Deceased</option>
         </select>
         <SortDropdown value={sort} onChange={setSort} options={MASTERLIST_SORT} />
       </div>
@@ -694,10 +951,12 @@ const FarmerMasterlistTab = () => {
 
                   <td style={{ padding: '0.875rem 1rem', minWidth: COL_WIDTHS.details }}>
                     <button onClick={() => openDetails(f.id)}
-                      style={{ padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                      style={{ position: 'relative', padding: '0.375rem 0.75rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>
                       View Details
+                      {f.succession_status === 'pending' && <PendingDot />}
                     </button>
                   </td>
+
                   <td style={{ padding: '0.875rem 1rem' }}>
                     <button onClick={() => {
                         setResetModal(f);
@@ -724,7 +983,7 @@ const FarmerMasterlistTab = () => {
         <Pagination count={count} page={page} pageSize={10} onPageChange={setPage} />
       </div>
 
-      {detailsModal && (
+      {detailsModal && !successionModal && !successorViewModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, padding: '1rem', overflowY: 'auto' }}>
           <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '680px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
@@ -734,6 +993,41 @@ const FarmerMasterlistTab = () => {
               </div>
               <button onClick={() => setDetailsModal(null)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
             </div>
+
+            {/* ── VIEW SUCCESSION BUTTON (NEW) ── */}
+            {detailsModal.profile?.predecessor && (
+              <button
+                type="button"
+                onClick={openSuccessionModal}
+                style={{
+                  position: 'relative',
+                  padding: '0.5rem 1rem', backgroundColor: '#fef9c3', color: '#854d0e',
+                  border: '1.5px solid #fde047', borderRadius: '0.5rem', fontWeight: 600,
+                  fontSize: '0.8rem', cursor: 'pointer', marginBottom: '1.25rem',
+                }}
+              >
+                View Succession Claim ({detailsModal.profile.succession_status})
+                {detailsModal.profile.succession_status === 'pending' && <PendingDot />}
+              </button>
+            )}
+
+            {/* ── VIEW SUCCESSOR BUTTON (NEW, reverse view) ── */}
+            {detailsModal.profile?.successor_claims?.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setSuccessorViewModal(detailsModal)}
+                style={{
+                  position: 'relative',
+                  padding: '0.5rem 1rem', backgroundColor: '#dbeafe', color: '#1e40af',
+                  border: '1.5px solid #93c5fd', borderRadius: '0.5rem', fontWeight: 600,
+                  fontSize: '0.8rem', cursor: 'pointer', marginBottom: '1.25rem',
+                }}
+              >
+                View Successor ({detailsModal.profile.successor_claims.length})
+                {detailsModal.profile.successor_claims.some(s => s.status === 'pending') && <PendingDot />}
+              </button>
+            )}
+            
             {editError   && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{editError}</div>}
             {editSuccess && <div style={{ backgroundColor: '#dcfce7', color: '#166534', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>{editSuccess}</div>}
             <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.75rem' }}>Basic Info</p>
@@ -939,10 +1233,151 @@ const FarmerMasterlistTab = () => {
           </div>
         </div>
       )}
+
+      {/* ── SUCCESSION INFO MODAL (NEW) ── */}
+      {successionModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 120, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '520px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSuccessionModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2d6a2d', fontSize: '0.8rem', fontWeight: 600, padding: 0, marginBottom: '0.5rem' }}
+                >
+                  ← Back to Farmer Details
+                </button>
+                <h2 style={{ fontWeight: '700', margin: 0 }}>Succession Information</h2>
+              </div>
+              <button onClick={() => { setSuccessionModal(null); setDetailsModal(null); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div>
+
+            {successionReviewError && (
+              <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '0.75rem', borderRadius: '0.5rem', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                {successionReviewError}
+              </div>
+            )}
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Successor</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.25rem' }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>{successionModal.first_name} {successionModal.last_name}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Barangay: {successionModal.barangay || '—'}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>
+                Relationship: {successionModal.profile?.predecessor_relationship || '—'}
+              </p>
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Predecessor (Deceased Farmer)</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.25rem' }}>
+              <p style={{ margin: 0, fontWeight: 700 }}>{successionModal.profile?.predecessor_name || '—'}</p>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Status: Deceased</p>
+            </div>
+
+            <p style={{ fontWeight: '700', fontSize: '0.8rem', color: '#2d6a2d', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Supporting Document</p>
+            <div style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '1.5rem' }}>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#374151' }}>
+                Document Type: {successionModal.profile?.succession_document_type || '—'}
+              </p>
+              {successionModal.profile?.succession_document_url ? (
+                <a
+                  href={successionModal.profile.succession_document_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ display: 'inline-block', marginTop: '0.5rem', fontSize: '0.85rem', color: '#2d6a2d', fontWeight: 600 }}
+                >
+                  View Document
+                </a>
+              ) : (
+                <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#9ca3af' }}>No document uploaded.</p>
+              )}
+            </div>
+
+            {successionModal.profile?.succession_status === 'pending' ? (
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  onClick={() => handleSuccessionReview('REJECTED')}
+                  disabled={successionReviewLoading}
+                  style={{
+                    flex: 1, padding: '0.75rem', backgroundColor: 'white', color: '#dc2626',
+                    border: '1.5px solid #dc2626', borderRadius: '0.5rem', fontWeight: 600,
+                    fontSize: '0.9rem', cursor: successionReviewLoading ? 'not-allowed' : 'pointer',
+                    opacity: successionReviewLoading ? 0.7 : 1,
+                  }}
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSuccessionReview('APPROVED')}
+                  disabled={successionReviewLoading}
+                  style={{
+                    flex: 1, padding: '0.75rem', backgroundColor: '#2d6a2d', color: 'white',
+                    border: 'none', borderRadius: '0.5rem', fontWeight: 700, fontSize: '0.9rem',
+                    cursor: successionReviewLoading ? 'not-allowed' : 'pointer',
+                    opacity: successionReviewLoading ? 0.7 : 1,
+                  }}
+                >
+                  {successionReviewLoading ? 'Processing...' : 'Approve'}
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                padding: '0.75rem 1rem', borderRadius: '0.5rem', textAlign: 'center', fontWeight: 600, fontSize: '0.85rem',
+                backgroundColor: successionModal.profile?.succession_status === 'approved' ? '#dcfce7' : '#fee2e2',
+                color: successionModal.profile?.succession_status === 'approved' ? '#166534' : '#991b1b',
+              }}>
+                This claim has already been {successionModal.profile?.succession_status}.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── VIEW SUCCESSOR MODAL (NEW, reverse view — display-only) ── */}
+      {successorViewModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 120, padding: '1rem', overflowY: 'auto' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '520px', width: '100%', margin: '2rem auto', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setSuccessorViewModal(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2d6a2d', fontSize: '0.8rem', fontWeight: 600, padding: 0, marginBottom: '0.5rem' }}
+                >
+                  ← Back to Farmer Details
+                </button>
+                <h2 style={{ fontWeight: '700', margin: 0 }}>Successor Information</h2>
+              </div>
+              <button onClick={() => { setSuccessorViewModal(null); setDetailsModal(null); }} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer' }}>×</button>
+            </div> 
+
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem' }}>
+              The following farmer(s) have claimed to succeed <strong>{successorViewModal.first_name} {successorViewModal.last_name}</strong>.
+            </p>
+
+            {successorViewModal.profile?.successor_claims?.map((s) => (
+              <div key={s.user_id} style={{ padding: '0.875rem', backgroundColor: '#f9fafb', borderRadius: '0.75rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+                  <p style={{ margin: 0, fontWeight: 700 }}>{s.name}</p>
+                  <span style={{
+                    padding: '0.2rem 0.625rem', borderRadius: '999px', fontSize: '0.7rem', fontWeight: 600,
+                    backgroundColor: s.status === 'approved' ? '#dcfce7' : s.status === 'rejected' ? '#fee2e2' : '#fef9c3',
+                    color: s.status === 'approved' ? '#166534' : s.status === 'rejected' ? '#991b1b' : '#854d0e',
+                  }}>
+                    {s.status.charAt(0).toUpperCase() + s.status.slice(1)}
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>Barangay: {s.barangay || '—'}</p>
+                <p style={{ margin: '0.125rem 0 0', fontSize: '0.85rem', color: '#6b7280' }}>Relationship: {s.relationship || '—'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
 
 // ── TAB 3: FARMER REGISTRY (MAO Master List) ──
 const FarmerRegistryTab = () => {
