@@ -91,10 +91,12 @@ export const adminResetPassword  = (id, data) => API.post(`/accounts/admin/users
 
 // ── ARCHIVE (Tab 5) ──
 export const getArchive      = (params) => API.get('/accounts/admin/users/archive/', { params });
-export const reactivateUser  = (id)     => API.post(`/accounts/admin/users/${id}/reactivate/`);
+export const getReactivationPreview = (id) => API.get(`/accounts/admin/users/${id}/reactivate/`);
+export const reactivateUser  = (id, data = {}) => API.post(`/accounts/admin/users/${id}/reactivate/`, data);
 
 // ── BARANGAYS ──
 export const getAvailableBarangays = () => API.get('/accounts/barangays/available/');
+export const getAvailableBrgyBarangays = () => API.get('/accounts/barangays/available-brgy/');
 
 // ── CANCEL RESET REQUEST (Admin) ──
 export const cancelResetRequest = (id) => API.post(`/accounts/admin/users/${id}/cancel-reset-request/`);

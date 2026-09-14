@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  getOfficials, createOfficial, deactivateUser, getAvailableBarangays,
+  getOfficials, createOfficial, deactivateUser, getAvailableBarangays, getAvailableBrgyBarangays,
   updateOfficialAssignedBarangays
 } from '../../../api/axios';
 import { Pagination, SortDropdown, COL_WIDTHS, NewBadge } from '../../../components/tables/TableBase';
@@ -73,6 +73,9 @@ const SystemUsers = () => {
   // Create modal
   const [createModal, setCreateModal]             = useState(false);
   const [availableBarangays, setAvailableBarangays] = useState([]);
+  const [availableBrgyBarangays, setAvailableBrgyBarangays] = useState([]);
+    const [brgyAvailabilityLoading, setBrgyAvailabilityLoading] = useState(false);
+  const [brgyAvailabilityError, setBrgyAvailabilityError]     = useState(false);
   const [createForm, setCreateForm]               = useState({ ...EMPTY_FORM });
   const [fieldErrors, setFieldErrors]             = useState({});
   const [createError, setCreateError]             = useState('');
@@ -91,6 +94,20 @@ const SystemUsers = () => {
   // Deactivate modal
   const [deactivateModal, setDeactivateModal]     = useState(null);
   const [deactivateLoading, setDeactivateLoading] = useState(false);
+
+   // Toast notification — reusable for any API error/success message
+  const [toast, setToast]         = useState(null); // { message, type: 'error' | 'success' }
+  const toastTimeoutRef           = useRef(null);
+
+  const showToast = (message, type = 'error') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000);
+  };
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+  }, []);
 
   const fetchOfficials = useCallback(async (isInitial = false) => {
     try {
@@ -135,6 +152,10 @@ const SystemUsers = () => {
       const res = await getAvailableBarangays();
       setAvailableBarangays(res.data.available_barangays || []);
     } catch { setAvailableBarangays(BARANGAYS); }
+    try {
+      const brgyRes = await getAvailableBrgyBarangays();
+      setAvailableBrgyBarangays(brgyRes.data.available_barangays || []);
+    } catch { setAvailableBrgyBarangays(BARANGAYS); }
     setCreateForm({ ...EMPTY_FORM });
     setFieldErrors({});
     setCreateError('');
@@ -151,12 +172,24 @@ const SystemUsers = () => {
         assigned_barangays: [],   // reset AT barangays
         barangay: '',             // reset BRGY barangay
       }));
+      if (value === 'BRGY') {
+        setBrgyAvailabilityLoading(true);
+        setBrgyAvailabilityError(false);
+        getAvailableBrgyBarangays()
+          .then(res => setAvailableBrgyBarangays(res.data.available_barangays || []))
+          .catch(() => {
+            setAvailableBrgyBarangays([]); // fail safe: nothing shown as available
+            setBrgyAvailabilityError(true);
+          })
+          .finally(() => setBrgyAvailabilityLoading(false));
+      }
     } else {
       setCreateForm(prev => ({ ...prev, [key]: value }));
     }
     // Clear field error when user types
     setFieldErrors(prev => ({ ...prev, [key]: '' }));
   };
+
 
   const toggleBarangay = (brgy) => {
     setCreateForm(prev => ({
@@ -265,8 +298,13 @@ const SystemUsers = () => {
   };
 
   const toggleEditBarangay = (brgy) => {
+    const isSelected = editSelectedBarangays.includes(brgy);
+    // Block unchecking the last remaining barangay — backend still enforces this too.
+    if (isSelected && editSelectedBarangays.length === 1) {
+      return;
+    }
     setEditSelectedBarangays(prev => (
-      prev.includes(brgy)
+      isSelected
         ? prev.filter(item => item !== brgy)
         : [...prev, brgy]
     ));
@@ -298,7 +336,10 @@ const SystemUsers = () => {
       const data = err.response?.data;
       if (data && typeof data === 'object') {
         if (data.assigned_barangays) setEditError(data.assigned_barangays);
-        else if (typeof data.error === 'string') setEditError(data.error);
+        else if (typeof data.error === 'string') {
+          setEditError(data.error);
+          showToast(data.error, 'error');
+        }
         else setEditError('Failed to save changes.');
       } else {
         setEditError('Failed to save changes.');
@@ -308,7 +349,7 @@ const SystemUsers = () => {
     }
   };
 
-  const handleDeactivate = async () => {
+    const handleDeactivate = async () => {
     if (!deactivateModal) return;
     setDeactivateLoading(true);
     try {
@@ -316,7 +357,8 @@ const SystemUsers = () => {
       setDeactivateModal(null);
       fetchOfficials(false);
     } catch (err) {
-      setError(err.response?.data?.error || 'Deactivation failed.');
+      // Modal stays open on failure — Admin sees the toast and can retry or cancel.
+      showToast(err.response?.data?.error || 'Deactivation failed.', 'error');
     } finally { setDeactivateLoading(false); }
   };
 
@@ -533,15 +575,27 @@ const SystemUsers = () => {
               </div>
             )}
 
-            {/* BRGY — single barangay */}
+          {/* BRGY — single barangay */}
             {createForm.role === 'BRGY' && (
               <div style={{ marginBottom: '0.75rem' }}>
                 <label style={labelStyle}>Assigned Barangay *</label>
                 <select value={createForm.barangay} onChange={e => handleField('barangay', e.target.value)}
+                  disabled={brgyAvailabilityLoading}
                   style={{ ...inputStyle, borderColor: fieldErrors.barangay ? '#dc2626' : '#d1d5db' }}>
-                  <option value="">Select Barangay</option>
-                  {BARANGAYS.map(b => <option key={b} value={b}>{b}</option>)}
+                  <option value="">
+                    {brgyAvailabilityLoading ? 'Loading barangays...' : 'Select Barangay'}
+                  </option>
+                  {BARANGAYS.map(b => (
+                    <option key={b} value={b} disabled={!availableBrgyBarangays.includes(b)}>
+                      {b}{!availableBrgyBarangays.includes(b) ? ' (Occupied)' : ''}
+                    </option>
+                  ))}
                 </select>
+                {brgyAvailabilityError && (
+                  <span style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '0.2rem', display: 'block' }}>
+                    Could not load barangay availability. Please try selecting BRGY again.
+                  </span>
+                )}
                 {fieldErrors.barangay && (
                   <span style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '0.2rem', display: 'block' }}>{fieldErrors.barangay}</span>
                 )}
@@ -640,12 +694,23 @@ const SystemUsers = () => {
                 ))}
               </div>
             ) : <p style={{ color: '#9ca3af', textAlign: 'center', padding: '1rem' }}>No barangays assigned.</p>}
-            <div style={{ marginTop: '1.5rem', textAlign: 'right' }}>
+               <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+              <button
+                onClick={() => {
+                  const atUser = viewBrgyModal;
+                  setViewBrgyModal(null);
+                  openEditBarangaysModal(atUser);
+                }}
+                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}
+              >
+                Edit Assigned Barangays
+              </button>
               <button onClick={() => setViewBrgyModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Close</button>
             </div>
           </div>
         </div>
       )}
+
 
       {/* ── EDIT BARANGAYS MODAL ── */}
       {editBrgyModal && (
@@ -668,14 +733,22 @@ const SystemUsers = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
               {editAvailableBarangays.map(brgy => {
                 const selected = editSelectedBarangays.includes(brgy);
+                const isLastSelected = selected && editSelectedBarangays.length === 1;
                 return (
                   <button type="button" key={brgy}
                     onClick={() => toggleEditBarangay(brgy)}
+                    disabled={isLastSelected}
+                    title={isLastSelected ? 'An AT must have at least one assigned barangay.' : undefined}
                     style={{
                       padding: '0.65rem 0.9rem', textAlign: 'left', borderRadius: '0.65rem', border: selected ? '1.5px solid #2563eb' : '1.5px solid #d1d5db',
-                      backgroundColor: selected ? '#dbeafe' : 'white', color: '#111827', cursor: 'pointer', fontSize: '0.85rem'
+                      backgroundColor: selected ? '#dbeafe' : 'white', color: '#111827',
+                      cursor: isLastSelected ? 'not-allowed' : 'pointer', fontSize: '0.85rem',
+                      opacity: isLastSelected ? 0.7 : 1
                     }}>
                     <span style={{ fontWeight: selected ? 700 : 500 }}>{brgy}</span>
+                    {isLastSelected && (
+                      <span style={{ fontSize: '0.7rem', color: '#6b7280', marginLeft: '0.4rem' }}>(minimum)</span>
+                    )}
                   </button>
                 );
               })}
@@ -737,6 +810,31 @@ const SystemUsers = () => {
           </div>
         </div>
       )}
+
+      {/* ── TOAST NOTIFICATION — bottom-center, auto-dismiss ── */}
+      {toast && (
+        <div
+          key={toast.message}
+          style={{
+            position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
+            backgroundColor: toast.type === 'error' ? '#dc2626' : '#16a34a',
+            color: 'white', padding: '0.875rem 1.5rem', borderRadius: '0.75rem',
+            fontSize: '0.875rem', fontWeight: '600',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)', zIndex: 9999,
+            maxWidth: '90vw', display: 'flex', alignItems: 'center', gap: '0.5rem',
+            animation: 'toastPopUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+        >
+          <span>{toast.type === 'error' ? '⚠️' : '✅'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
+      <style>{`
+        @keyframes toastPopUp {
+          from { opacity: 0; transform: translate(-50%, 16px) scale(0.95); }
+          to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+      `}</style>
     </div>
   );
 };

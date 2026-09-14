@@ -33,6 +33,7 @@ import random
 import requests
 from django.core.mail import send_mail
 from django.conf import settings
+from apps.seed_poll.utils import is_encoding_allowed
 
 def generate_otp():
     return str(random.randint(100000, 999999))
@@ -88,3 +89,13 @@ def send_otp_sms(user, otp):
     )
     response.raise_for_status()
     return response.json()
+
+def is_official_management_allowed():
+    """
+    Returns True when Admin is allowed to manage
+    AT/BRGY official accounts and their barangay assignments.
+
+    Official management is blocked once the latest seed poll
+    is CLOSED and FinalSeed has been finalized.
+    """
+    return not is_encoding_allowed()

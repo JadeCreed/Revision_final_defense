@@ -6,7 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import parsers
 
 from .models import PasswordResetOTP
-from .utils import generate_otp, send_otp_email, send_otp_sms
+from .utils import generate_otp, send_otp_email, send_otp_sms, is_official_management_allowed
 from .rate_limit import LoginRateLimiter
 from django.db.models import Q, Case, When, IntegerField
 from django.utils import timezone
@@ -1475,6 +1475,11 @@ class AdminUpdateATAssignedBarangaysView(APIView):
         except AgriculturalTechnicianProfile.DoesNotExist:
             return Response({"error": "AT profile not found"}, status=404)
 
+        if not is_official_management_allowed():
+            return Response({
+                "error": "Official account management is currently locked because the agricultural cycle is active."
+            }, status=400)
+        
         serializer = AdminUpdateATAssignedBarangaysSerializer(data=request.data, context={'user': user})
         if not serializer.is_valid():
             return Response(serializer.errors, status=400)
@@ -1514,15 +1519,57 @@ class AdminDeactivateUserView(APIView):
         except User.DoesNotExist:
             return Response({"error": "User not found"}, status=404)
 
+        # Prevent deactivating an already inactive user
+        if not user.is_active:
+            return Response({"error": "User is already inactive"}, status=400)
+
         # Prevent deactivating the last active admin
         if user.role == 'ADMIN':
-            active_admins = User.objects.filter(role='ADMIN', is_active=True).exclude(id=user_id)
+            active_admins = User.objects.filter(
+                role='ADMIN',
+                is_active=True
+            ).exclude(id=user_id)
+
             if not active_admins.exists():
-                return Response({"error": "Cannot deactivate the last active admin"}, status=400)
+                return Response(
+                    {"error": "Cannot deactivate the last active admin"},
+                    status=400
+                )
 
-        User.objects.filter(pk=user.pk).update(is_active=False)
-        return Response({"message": f"{user.first_name} {user.last_name} deactivated"})
+        # AT/BRGY deactivation is locked during an active agricultural cycle.
+        # ADMIN has no barangay assignment, so this gate does not apply to ADMIN.
+        if user.role in ('AT', 'BRGY'):
+            if not is_official_management_allowed():
+                return Response({
+                    "error": "Official account management is currently locked because the agricultural cycle is active."
+                }, status=400)
 
+        # Snapshot AT's current barangays before archiving.
+        if user.role == 'AT':
+            try:
+                at_profile = user.at_profile
+                current_barangays = list(
+                    at_profile.barangays.values_list('name', flat=True)
+                )
+
+                at_profile.archived_barangays_snapshot = current_barangays
+                at_profile.save(
+                    update_fields=['archived_barangays_snapshot']
+                )
+
+            except AgriculturalTechnicianProfile.DoesNotExist:
+                pass
+
+        User.objects.filter(pk=user.pk).update(
+            is_active=False,
+            archived_at=timezone.now()
+        )
+
+        return Response({
+            "message": f"{user.first_name} {user.last_name} deactivated"
+        })
+
+    
 class AdminResetRequestsListView(ListAPIView):
     """
     GET /admin/users/reset-requests/
@@ -1636,14 +1683,100 @@ class AdminArchiveListView(ListAPIView):
             ordering = '-date_joined'
         return queryset.order_by(ordering)
 
-    
+
+
+def _barangay_available_for_at(barangay_obj, at_profile):
+    """
+    A barangay is available to restore to this AT if:
+    - it's currently unassigned, OR
+    - it's still assigned to this same AT profile, OR
+    - it's assigned to another AT whose account is inactive.
+    It's unavailable only if it's assigned to a DIFFERENT active AT.
+    """
+    if not barangay_obj or barangay_obj.assigned_at_id is None:
+        return True
+    if barangay_obj.assigned_at_id == at_profile.id:
+        return True
+    return not barangay_obj.assigned_at.user.is_active
+
 
 class AdminReactivateUserView(APIView):
     """
-    POST /admin/users/{id}/reactivate/
-    Reactivates a deactivated user from the Archive tab
+    GET  /admin/users/{id}/reactivate/  — preview only, no DB changes.
+         Returns previous assignment(s) and current availability so
+         Admin can choose what to restore.
+    POST /admin/users/{id}/reactivate/  — commits reactivation.
+         AT body:    {"barangays": ["Aliliw", "Igang"]}
+         BRGY body:  {"barangay": "Piis"}
+         ADMIN body: {} (no barangay involved)
     """
     permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request, user_id):
+        try:
+            user = User.objects.get(id=user_id, is_active=False)
+        except User.DoesNotExist:
+            return Response({"error": "Archived user not found"}, status=404)
+
+        # Lazy 30-day permanent-archive check (never uses date_joined as fallback)
+        if not user.permanently_archived and user.archived_at:
+            if timezone.now() - user.archived_at > timedelta(days=30):
+                User.objects.filter(pk=user.pk).update(permanently_archived=True)
+                user.permanently_archived = True
+
+        if user.permanently_archived:
+            return Response({
+                "error": "This account has been permanently archived and can no longer be reactivated."
+            }, status=400)
+
+        if user.role in ('AT', 'BRGY'):
+            if not is_official_management_allowed():
+                return Response({
+                    "error": "Official account management is currently locked because the agricultural cycle is active."
+                }, status=400)
+
+        data = {"role": user.role}
+
+        if user.role == 'AT':
+            try:
+                at_profile = user.at_profile
+                snapshot = at_profile.archived_barangays_snapshot or []
+            except AgriculturalTechnicianProfile.DoesNotExist:
+                at_profile = None
+                snapshot = []
+
+            previous_barangays = []
+            for name in snapshot:
+                barangay_obj = Barangay.objects.filter(name=name).first()
+                available = _barangay_available_for_at(barangay_obj, at_profile) if at_profile else False
+                previous_barangays.append({"name": name, "available": available})
+
+            data["previous_barangays"] = previous_barangays
+
+        elif user.role == 'BRGY':
+            from .choices import BARANGAY_CHOICES
+
+            previous_barangay = user.barangay
+            available = True
+            if previous_barangay:
+                occupied = User.objects.filter(
+                    role='BRGY', barangay=previous_barangay, is_active=True
+                ).exclude(id=user.id).exists()
+                available = not occupied
+            data["previous_barangay"] = previous_barangay
+            data["available"] = available
+
+            occupied_names = set(
+                User.objects.filter(role='BRGY', is_active=True)
+                .exclude(id=user.id)
+                .values_list('barangay', flat=True)
+            )
+            data["barangays"] = [
+                {"name": name, "available": name not in occupied_names}
+                for name, _ in BARANGAY_CHOICES
+            ]
+
+        return Response(data)
 
     def post(self, request, user_id):
         try:
@@ -1651,8 +1784,79 @@ class AdminReactivateUserView(APIView):
         except User.DoesNotExist:
             return Response({"error": "Archived user not found"}, status=404)
 
-        User.objects.filter(pk=user.pk).update(is_active=True)
-        return Response({"message": f"{user.first_name} {user.last_name} reactivated"})
+        # Lazy 30-day permanent-archive check
+        if not user.permanently_archived and user.archived_at:
+            if timezone.now() - user.archived_at > timedelta(days=30):
+                User.objects.filter(pk=user.pk).update(permanently_archived=True)
+                return Response({
+                    "error": "This account has been permanently archived and can no longer be reactivated."
+                }, status=400)
+
+        if user.permanently_archived:
+            return Response({
+                "error": "This account has been permanently archived and can no longer be reactivated."
+            }, status=400)
+
+        if user.role in ('AT', 'BRGY'):
+            if not is_official_management_allowed():
+                return Response({
+                    "error": "Official account management is currently locked because the agricultural cycle is active."
+                }, status=400)
+
+        if user.role == 'AT':
+            try:
+                at_profile = user.at_profile
+            except AgriculturalTechnicianProfile.DoesNotExist:
+                return Response({"error": "AT profile not found"}, status=404)
+
+            requested = request.data.get('barangays', [])
+            if not isinstance(requested, list):
+                return Response({"error": "barangays must be a list"}, status=400)
+
+            snapshot = at_profile.archived_barangays_snapshot or []
+            invalid = [name for name in requested if name not in snapshot]
+            if invalid:
+                return Response({
+                    "error": f"These barangays were not previously assigned to this AT: {', '.join(invalid)}"
+                }, status=400)
+
+            unavailable = [
+                name for name in requested
+                if not _barangay_available_for_at(Barangay.objects.filter(name=name).first(), at_profile)
+            ]
+            if unavailable:
+                return Response({
+                    "error": f"These barangays are currently assigned to another active AT: {', '.join(unavailable)}"
+                }, status=400)
+
+            for name in requested:
+                barangay_obj, _ = Barangay.objects.get_or_create(name=name)
+                barangay_obj.assigned_at = at_profile
+                barangay_obj.save()
+
+        elif user.role == 'BRGY':
+            chosen_barangay = (request.data.get('barangay') or '').strip()
+            if not chosen_barangay:
+                return Response({"error": "barangay is required to reactivate a BRGY official"}, status=400)
+
+            occupied = User.objects.filter(
+                role='BRGY', barangay=chosen_barangay, is_active=True
+            ).exclude(id=user.id).exists()
+            if occupied:
+                return Response({
+                    "error": f"{chosen_barangay} is already assigned to another active Barangay President."
+                }, status=400)
+
+            User.objects.filter(pk=user.pk).update(barangay=chosen_barangay)
+
+        User.objects.filter(pk=user.pk).update(
+            is_active=True,
+            archived_at=None
+        )
+
+        return Response({
+            "message": f"{user.first_name} {user.last_name} reactivated"
+        })
 
 class AvailableBarangaysView(APIView):
     """
@@ -1670,14 +1874,39 @@ class AvailableBarangaysView(APIView):
 
         # Barangays already assigned to an AT
         assigned = Barangay.objects.filter(
-            assigned_at__isnull=False
+            assigned_at__isnull=False,
+            assigned_at__user__is_active=True
         ).values_list('name', flat=True)
 
         # Return only unassigned ones
         available = [b for b in all_barangays if b not in assigned]
 
         return Response({"available_barangays": available})
-    
+
+class AvailableBrgyBarangaysView(APIView):
+    """
+    GET /barangays/available-brgy/
+    Returns list of barangay names with NO currently active BRGY President.
+    Used by the BRGY create modal barangay select.
+    BRGY occupancy lives on User.barangay directly (not Barangay.assigned_at).
+    """
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+
+    def get(self, request):
+        from .choices import BARANGAY_CHOICES
+
+        all_barangays = [name for name, _ in BARANGAY_CHOICES]
+
+        occupied = User.objects.filter(
+            role='BRGY', is_active=True
+        ).values_list('barangay', flat=True)
+
+        available = [b for b in all_barangays if b not in occupied]
+
+        return Response({"available_barangays": available})
+
+
+
 # views.py — add this new view after AdminResetUserPasswordView
 
 class AdminCancelResetRequestView(APIView):

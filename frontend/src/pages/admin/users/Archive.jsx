@@ -6,8 +6,16 @@
 // ============================================================
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getArchive, reactivateUser } from '../../../api/axios';
+import { getArchive, reactivateUser, getReactivationPreview } from '../../../api/axios';
 import { Pagination, SortDropdown, COL_WIDTHS, NewBadge } from '../../../components/tables/TableBase';
+
+const BARANGAYS = [
+  'Abang','Aliliw','Atulinao','Ayuti','Igang','Kabatete','Kakawit',
+  'Kalangay','Kalyaat','Kilib','Kulapi','Mahabang Parang','Malupak',
+  'Manasa','May-It','Nagsinamo','Nalunao','Palola','Piis','Samil',
+  'Tiawe','Tinamnan'
+];
+
 
 const ROLE_BADGE = {
   ADMIN:  { bg: '#f3e8ff', color: '#7c3aed', label: 'Admin' },
@@ -38,8 +46,28 @@ const Archive = () => {
   const timeouts                = useRef({});
   const didInit                 = useRef(false);
 
-  const [reactivateModal, setReactivateModal]     = useState(null);
+    // Reactivate flow — two-step modal (confirm → assignment selection)
+  const [reactivateModal, setReactivateModal]     = useState(null); // the user being reactivated
+  const [reactivateStep, setReactivateStep]       = useState('confirm'); // 'confirm' | 'assign'
   const [reactivateLoading, setReactivateLoading] = useState(false);
+  const [previewLoading, setPreviewLoading]       = useState(false);
+  const [previewData, setPreviewData]             = useState(null);
+  const [selectedBarangays, setSelectedBarangays] = useState([]); // AT
+  const [selectedBrgyBarangay, setSelectedBrgyBarangay] = useState(''); // BRGY
+
+  // Toast notification — bottom-center, auto-dismiss
+  const [toast, setToast]     = useState(null); // { message, type: 'error' | 'success' }
+  const toastTimeoutRef       = useRef(null);
+
+  const showToast = (message, type = 'error') => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToast({ message, type });
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 4000);
+  };
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+  }, []);
 
   // ── FETCH FUNCTION ──
   const fetchArchive = useCallback(async (isInitial = false) => {
@@ -95,19 +123,100 @@ const Archive = () => {
   // Reset to page 1 when filters change
   useEffect(() => { setPage(1); }, [search, roleFilter, sort]);
 
-  const handleReactivate = async () => {
-    if (!reactivateModal) return;
+  
+
+  const closeReactivateFlow = () => {
+    setReactivateModal(null);
+    setReactivateStep('confirm');
+    setPreviewData(null);
+    setSelectedBarangays([]);
+    setSelectedBrgyBarangay('');
+  };
+
+  const openReactivateModal = (user) => {
+    setReactivateModal(user);
+    setReactivateStep('confirm');
+    setPreviewData(null);
+    setSelectedBarangays([]);
+    setSelectedBrgyBarangay('');
+  };
+
+  const doReactivate = async (payload) => {
     setReactivateLoading(true);
     try {
-      await reactivateUser(reactivateModal.id);
-      setReactivateModal(null);
+      await reactivateUser(reactivateModal.id, payload);
+      closeReactivateFlow();
       fetchArchive(false);
     } catch (err) {
-      setError(err.response?.data?.error || 'Reactivation failed.');
+      showToast(err.response?.data?.error || 'Reactivation failed.', 'error');
     } finally {
       setReactivateLoading(false);
     }
   };
+
+  // Modal 1 "Continue" — ADMIN skips straight to reactivation (no barangay
+  // involved). AT/BRGY fetch the preview and move to Modal 2.
+  const handleContinue = async () => {
+    if (!reactivateModal) return;
+
+    if (reactivateModal.role === 'ADMIN') {
+      await doReactivate({});
+      return;
+    }
+
+    setPreviewLoading(true);
+    try {
+      const res = await getReactivationPreview(reactivateModal.id);
+      setPreviewData(res.data);
+
+      if (reactivateModal.role === 'AT') {
+        // Preselect previously-assigned barangays that are still available
+        const preselected = (res.data.previous_barangays || [])
+          .filter(b => b.available)
+          .map(b => b.name);
+        setSelectedBarangays(preselected);
+      } else if (reactivateModal.role === 'BRGY') {
+        setSelectedBrgyBarangay(res.data.available ? res.data.previous_barangay : '');
+      }
+
+      setReactivateStep('assign');
+    } catch (err) {
+      // Modal 1 stays open — Admin sees why (e.g. cycle locked, permanently archived)
+      showToast(err.response?.data?.error || 'Unable to load reactivation details.', 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  // Modal 2 "Back" — return to Modal 1, discard the fetched preview
+  const handleBack = () => {
+    setReactivateStep('confirm');
+    setPreviewData(null);
+  };
+
+  const toggleSelectedBarangay = (name) => {
+    setSelectedBarangays(prev =>
+      prev.includes(name) ? prev.filter(b => b !== name) : [...prev, name]
+    );
+  };
+
+  // Modal 2 "Reactivate" — commits with the Admin's selection
+  const handleFinalReactivate = async () => {
+    if (!reactivateModal) return;
+
+    if (reactivateModal.role === 'AT') {
+      await doReactivate({ barangays: selectedBarangays });
+    } else if (reactivateModal.role === 'BRGY') {
+      if (!selectedBrgyBarangay) {
+        showToast('Please select a barangay before reactivating.', 'error');
+        return;
+      }
+      await doReactivate({ barangay: selectedBrgyBarangay });
+    } else {
+      await doReactivate({});
+    }
+  };
+  
 
   const formatDate = (d) =>
     d ? new Date(d).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
@@ -188,7 +297,7 @@ const Archive = () => {
                     <td style={{ padding: '0.875rem 1rem', color: '#9ca3af', minWidth: COL_WIDTHS.date, whiteSpace: 'nowrap' }}>{formatDate(u.date_joined)}</td>
                     <td style={{ padding: '0.875rem 1rem' }}>
                       <button
-                        onClick={() => setReactivateModal(u)}
+                        onClick={() => openReactivateModal(u)}
                         style={{ padding: '0.375rem 0.875rem', backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe', borderRadius: '0.375rem', fontSize: '0.8rem', cursor: 'pointer', fontWeight: '500', whiteSpace: 'nowrap' }}
                       >
                         Reactivate
@@ -203,23 +312,157 @@ const Archive = () => {
         <Pagination count={count} page={page} pageSize={10} onPageChange={setPage} />
       </div>
 
-      {reactivateModal && (
+            {/* ── MODAL 1 — Confirm Reactivation (only one modal layer visible at a time) ── */}
+      {reactivateModal && reactivateStep === 'confirm' && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '400px', width: '100%' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '400px', width: '100%', animation: 'modalPopUp 0.2s ease-out' }}>
             <h3 style={{ fontWeight: '700', marginBottom: '0.75rem' }}>✅ Reactivate Account</h3>
             <p style={{ color: '#6b7280', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-              Reactivate <strong>{reactivateModal.first_name} {reactivateModal.last_name}</strong>? They will regain access immediately.
+              Reactivate <strong>{reactivateModal.first_name} {reactivateModal.last_name}</strong>?
+              {reactivateModal.role !== 'ADMIN' && ' You will choose which assignment to restore next.'}
             </p>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setReactivateModal(null)} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={handleReactivate} disabled={reactivateLoading}
-                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600' }}>
+              <button onClick={closeReactivateFlow} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={handleContinue} disabled={previewLoading || reactivateLoading}
+                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: (previewLoading || reactivateLoading) ? 0.7 : 1 }}>
+                {previewLoading ? 'Loading...' : reactivateLoading ? 'Reactivating...' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2 — Assignment Selection ── */}
+      {reactivateModal && reactivateStep === 'assign' && previewData && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '1rem' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1rem', padding: '2rem', maxWidth: '460px', width: '100%', maxHeight: '85vh', overflowY: 'auto', animation: 'modalPopUp 0.2s ease-out' }}>
+            <h3 style={{ fontWeight: '700', marginBottom: '0.5rem' }}>
+              {reactivateModal.role === 'AT' ? 'Restore Assigned Barangays' : 'Restore Barangay'}
+            </h3>
+            <p style={{ color: '#6b7280', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+              {reactivateModal.first_name} {reactivateModal.last_name}
+            </p>
+
+            {reactivateModal.role === 'AT' && (
+              <>
+                {(previewData.previous_barangays || []).length === 0 ? (
+                  <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                    No previous barangay assignments on record.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
+                    {previewData.previous_barangays.map(b => (
+                      <label key={b.name} style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '0.625rem 0.875rem', borderRadius: '0.5rem',
+                        border: `1.5px solid ${selectedBarangays.includes(b.name) ? '#2563eb' : '#e5e7eb'}`,
+                        backgroundColor: !b.available ? '#f9fafb' : selectedBarangays.includes(b.name) ? '#eff6ff' : 'white',
+                        cursor: b.available ? 'pointer' : 'not-allowed',
+                        opacity: b.available ? 1 : 0.7,
+                      }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <input
+                            type="checkbox"
+                            disabled={!b.available}
+                            checked={selectedBarangays.includes(b.name)}
+                            onChange={() => toggleSelectedBarangay(b.name)}
+                          />
+                          <span style={{ fontWeight: 500 }}>{b.name}</span>
+                        </span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: b.available ? '#16a34a' : '#dc2626' }}>
+                          {b.available ? 'Available' : 'Currently assigned'}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {reactivateModal.role === 'BRGY' && (
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{
+                  padding: '0.625rem 0.875rem', borderRadius: '0.5rem', border: '1.5px solid #e5e7eb',
+                  backgroundColor: '#f9fafb', marginBottom: '0.75rem', fontSize: '0.875rem',
+                }}>
+                  Previous barangay: <strong>{previewData.previous_barangay || '—'}</strong>{' '}
+                  <span style={{ color: previewData.available ? '#16a34a' : '#dc2626', fontWeight: 600 }}>
+                    ({previewData.available ? 'Available' : 'Currently assigned'})
+                  </span>
+                </div>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '0.375rem', display: 'block' }}>
+                  Select barangay to assign
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '260px', overflowY: 'auto' }}>
+                  {(previewData.barangays || BARANGAYS.map(b => ({ name: b, available: true }))).map(b => (
+                    <label key={b.name} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '0.625rem 0.875rem', borderRadius: '0.5rem',
+                      border: `1.5px solid ${selectedBrgyBarangay === b.name ? '#2563eb' : '#e5e7eb'}`,
+                      backgroundColor: !b.available ? '#f9fafb' : selectedBrgyBarangay === b.name ? '#eff6ff' : 'white',
+                      cursor: b.available ? 'pointer' : 'not-allowed',
+                      opacity: b.available ? 1 : 0.7,
+                    }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                        <input
+                          type="radio"
+                          name="brgy-reactivate-barangay"
+                          disabled={!b.available}
+                          checked={selectedBrgyBarangay === b.name}
+                          onChange={() => setSelectedBrgyBarangay(b.name)}
+                        />
+                        <span style={{ fontWeight: 500 }}>{b.name}</span>
+                      </span>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: b.available ? '#16a34a' : '#dc2626' }}>
+                        {b.available ? 'Available' : 'Occupied'}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button onClick={handleBack} style={{ padding: '0.5rem 1.25rem', border: '1.5px solid #d1d5db', borderRadius: '0.5rem', backgroundColor: 'white', cursor: 'pointer' }}>
+                Back
+              </button>
+              <button onClick={handleFinalReactivate} disabled={reactivateLoading}
+                style={{ padding: '0.5rem 1.25rem', backgroundColor: '#2d6a2d', color: 'white', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontWeight: '600', opacity: reactivateLoading ? 0.7 : 1 }}>
                 {reactivateLoading ? 'Reactivating...' : 'Reactivate'}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── TOAST NOTIFICATION — bottom-center, auto-dismiss ── */}
+      {toast && (
+        <div
+          key={toast.message}
+          style={{
+            position: 'fixed', bottom: '2rem', left: '50%', transform: 'translateX(-50%)',
+            backgroundColor: toast.type === 'error' ? '#dc2626' : '#16a34a',
+            color: 'white', padding: '0.875rem 1.5rem', borderRadius: '0.75rem',
+            fontSize: '0.875rem', fontWeight: '600',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)', zIndex: 9999,
+            maxWidth: '90vw', display: 'flex', alignItems: 'center', gap: '0.5rem',
+            animation: 'toastPopUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+          }}
+        >
+          <span>{toast.type === 'error' ? '⚠️' : '✅'}</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
+      <style>{`
+        @keyframes toastPopUp {
+          from { opacity: 0; transform: translate(-50%, 16px) scale(0.95); }
+          to   { opacity: 1; transform: translate(-50%, 0) scale(1); }
+        }
+        @keyframes modalPopUp {
+          from { opacity: 0; transform: scale(0.96); }
+          to   { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 };

@@ -226,7 +226,8 @@ class AdminUpdateATAssignedBarangaysSerializer(serializers.Serializer):
 
         already_taken = Barangay.objects.filter(
             name__in=data['assigned_barangays'],
-            assigned_at__isnull=False
+            assigned_at__isnull=False,
+            assigned_at__user__is_active=True
         ).exclude(assigned_at=at_profile).values_list('name', flat=True)
 
         if already_taken:
@@ -250,6 +251,15 @@ class AdminCreateBPSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Passwords do not match")
         if not data.get('barangay'):
             raise serializers.ValidationError({"barangay": "Barangay is required for BRGY role"})
+
+        occupied = User.objects.filter(
+            role='BRGY', barangay=data['barangay'], is_active=True
+        ).exists()
+        if occupied:
+            raise serializers.ValidationError({
+                "barangay": f"{data['barangay']} is already assigned to another active Barangay President."
+            })
+        
         return data
 
     def create(self, validated_data):

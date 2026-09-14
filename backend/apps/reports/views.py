@@ -357,7 +357,7 @@ def _is_philrice(event):
 
 
 
-def generate_region_masterlist(entries_qs, event):
+def generate_region_masterlist(entries_qs, event, header_label='LISTS OF FARMER-BENEFICIARIES'):
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = 'Region Masterlist'
@@ -393,11 +393,12 @@ def generate_region_masterlist(entries_qs, event):
 
         # ── HEADER per batch ──
         ws.merge_cells(f'H{current_row}:K{current_row}')
+
         ws[f'H{current_row}'] = (
             'Republic of the Philippines\n'
             'Department of Agriculture\n'
             'Regional Field Office No. IV-A\n'
-            'LISTS OF FARMER-BENEFICIARIES'
+            f'{header_label}'
         )
         ws[f'H{current_row}'].font      = _bold_font(9)
         ws[f'H{current_row}'].alignment = _center()
@@ -812,7 +813,7 @@ def generate_distribution_region(entries_qs, event):
     # Reuse the same generator — the data is the same table,
     # the difference is that the BRGY has now confirmed qty_bags
     # through the Distribution menu before admin approved.
-    return generate_region_masterlist(entries_qs, event)
+    return generate_region_masterlist(entries_qs, event, header_label='LISTS OF FARMER-DISTRIBUTION')
 
 
 def generate_distribution_philrice(entries_qs, event):

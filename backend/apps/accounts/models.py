@@ -126,6 +126,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
     password_reset_requested_at = models.DateTimeField(null=True, blank=True)
+
+    # 🔹 Archive lifecycle
+    archived_at = models.DateTimeField(null=True, blank=True)
+    permanently_archived = models.BooleanField(default=False)
     
     # 🔹 Timestamps
     date_joined = models.DateTimeField(auto_now_add=True)
@@ -258,6 +262,8 @@ class FarmerProfile(models.Model):
 # Agricultural Technician profile
 class AgriculturalTechnicianProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='at_profile')
+    archived_barangays_snapshot = models.JSONField(null=True, blank=True, default=list)
+
 
     def get_assigned_barangays(self):
         """Returns list of barangay names assigned to this AT"""

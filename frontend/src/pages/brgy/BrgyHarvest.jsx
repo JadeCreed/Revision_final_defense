@@ -437,7 +437,7 @@ const HarvestForm = ({
             boxShadow: '0 12px 28px rgba(15,23,42,0.1)',
           }}>
             {filteredFarmers.slice(0, 10).map(farmer => (
-              <button key={farmer.id} type='button' onClick={() => selectFarmer(farmer)}
+              <button key={farmer.id} type='button' onMouseDown={(e) => e.preventDefault()} onClick={() => selectFarmer(farmer)}
                 style={{
                   width: '100%', textAlign: 'left', padding: '0.75rem 1rem',
                   border: 'none', borderBottom: '1px solid #f3f4f6',
