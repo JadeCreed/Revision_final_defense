@@ -16,6 +16,7 @@ from apps.crop_monitoring.models import CropMonitoringRecord
 from apps.production.models import HarvestRecord
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import Poll
+from .views import SEED_LABELS, get_latest_per_farmer
 
 STANDARD_YIELDS = getattr(settings, 'STANDARD_YIELDS', {'HYBRID': 5000, 'INBRED': 3500, 'OWN_SEED': 2000})
 
@@ -147,12 +148,17 @@ def _build_monthly_data(season, year, month_num=None, barangay=None):
         monitoring_by_barangay.setdefault(brgy, _Counter())
         monitoring_by_barangay[brgy][rec.crop_phase] += 1
 
+      # ── AREA MONITORED + SEED TYPE BREAKDOWN (parehong scope ng live GIS Map) ──
+    latest_per_farmer = get_latest_per_farmer(mon_qs)
+    monitored_farmer_ids = set(mon_qs.values_list('farmer_id', flat=True))
+
+
         # ── AREA MONITORED + SEED TYPE BREAKDOWN (parehong scope ng live GIS Map) ──
     area_by_farmer = {}
     seed_type_by_farmer = {}
     for rec in latest_per_farmer.values():
-        area_by_farmer[rec.farmer_id] = float(rec.area_ha or 0)
-        seed_type_by_farmer[rec.farmer_id] = getattr(rec, 'seed_type', None) or 'HYBRID'
+        area_by_farmer[rec.farmer_id] = float(rec.area_monitored_ha or 0)
+        seed_type_by_farmer[rec.farmer_id] = getattr(rec, 'seed_source', None) or 'HYBRID'
 
     monitoring_barangay_list = []
     for brgy, counter in monitoring_by_barangay.items():
