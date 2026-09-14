@@ -15,7 +15,8 @@
 #   Beneficiaries reports use signing-phase fields (farm_area_ha, signature, etc.)
 #   Distribution reports use distribution-phase fields (qty_bags, date_received, etc.)
 # ─────────────────────────────────────────────────────────────
-
+import datetime
+from collections import defaultdict
 import io
 from collections import defaultdict
 
@@ -170,6 +171,8 @@ def _is_region(event):
     return ('HYBRID' in name or 'HYBRID' in inter
             or inter in ('NRP', 'RFO'))
 
+# ─────────────────────────────────────────────────────────────
+# REGION (HYBRID) MASTERLIST — Beneficiaries format
 
 def _is_philrice(event):
     """True if the event is an Inbred / RCEF / PhilRice program."""
@@ -177,6 +180,7 @@ def _is_philrice(event):
     inter = (event.intervention or '').upper()
     return ('INBRED' in name or 'INBRED' in inter
             or inter in ('RCEF', 'PHILRICE'))
+
 
 
 # ─────────────────────────────────────────────────────────────
@@ -821,131 +825,467 @@ def generate_distribution_philrice(entries_qs, event):
     """
     return generate_philrice_masterlist(entries_qs, event)
 
-
 # ─────────────────────────────────────────────────────────────
-# PLANTING ACCOMPLISHMENT REPORT
-# Summary per barangay — not per farmer
+# PLANTING REPORT — DATA CALCULATOR (new, doesn't touch anything else)
 # ─────────────────────────────────────────────────────────────
 
-def generate_planting_report(entries_qs, season, year):
-    """
-    Generates the Planting Accomplishment Report.
-    Groups data by barangay → program → variety.
-    Shows: number of beneficiaries, total area, variety,
-    crop establishment method, expected sowing date, bags.
-    """
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'Planting Accomplishment'
+PLANTING_REPORT_BARANGAY_ORDER = [
+    'Abang', 'Aliliw', 'Atulinao', 'Ayuti', 'Igang', 'Kabatete', 'Kakawit',
+    'Kalangay', 'Kalyaat', 'Kilib', 'Kulapi', 'Mahabang Parang', 'Malupak',
+    'Manasa', 'May-It', 'Nagsinamo', 'Nalunao', 'Palola', 'Piis', 'Samil',
+    'Tiawe', 'Tinamnan',
+]
 
-    widths = {
-        'A': 5, 'B': 22, 'C': 18, 'D': 12, 'E': 12,
-        'F': 14, 'G': 14, 'H': 16, 'I': 10,
+
+def _planting_report_date_range(season, report_year, month_num=None):
+    season = (season or '').upper()
+    MONTH_NAMES = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
+        6: 'June', 7: 'July', 8: 'August', 9: 'September',
+        10: 'October', 11: 'November', 12: 'December',
     }
-    for col, w in widths.items():
-        ws.column_dimensions[col].width = w
+    if season == 'DRY':
+        season_start = datetime.date(report_year - 1, 11, 1)
+        season_end   = datetime.date(report_year, 5, 31)
+        month_year_map = {
+            11: report_year - 1, 12: report_year - 1,
+            1: report_year, 2: report_year, 3: report_year,
+            4: report_year, 5: report_year,
+        }
+    elif season == 'WET':
+        season_start = datetime.date(report_year, 6, 1)
+        season_end   = datetime.date(report_year, 10, 31)
+        month_year_map = {
+            6: report_year, 7: report_year, 8: report_year,
+            9: report_year, 10: report_year,
+        }
+    else:
+        return None, None, 'For the Whole Season'
 
-    # Title
-    ws.merge_cells('A1:I1')
-    ws['A1'] = 'PLANTING ACCOMPLISHMENT REPORT'
-    ws['A1'].font      = _bold_font(13)
-    ws['A1'].alignment = _center(False)
-    ws.row_dimensions[1].height = 22
+    if not month_num or month_num not in month_year_map:
+        return season_start, season_end, 'For the Whole Season'
 
-    ws.merge_cells('A2:I2')
-    ws['A2'] = (
-        f'Municipal Agriculture Office — Lucban, Quezon  |  '
-        f'{season} Season {year}'
+    actual_year = month_year_map[month_num]
+    if month_num == 12:
+        next_month_first = datetime.date(actual_year + 1, 1, 1)
+    else:
+        next_month_first = datetime.date(actual_year, month_num + 1, 1)
+    month_start = datetime.date(actual_year, month_num, 1)
+    month_end   = next_month_first - datetime.timedelta(days=1)
+
+    period_label = f'For the Period of {MONTH_NAMES[month_num]} {actual_year}'
+    return month_start, month_end, period_label
+
+
+def _planting_report_title_lines(season, report_year, period_label):
+    season = (season or '').upper()
+    if season == 'DRY':
+        season_line = f'DRY SEASON {report_year - 1}-{report_year}'
+    elif season == 'WET':
+        season_line = f'WET SEASON {report_year}'
+    else:
+        season_line = f'{season} SEASON {report_year}'
+    return season_line, period_label
+
+
+def _build_planting_accomplishment_data(season, report_year, barangay=None, month_num=None):
+    from apps.crop_monitoring.models import CropMonitoringRecord
+
+    start_date, end_date, period_label = _planting_report_date_range(
+        season, report_year, month_num
     )
-    ws['A2'].font      = _normal_font(10)
-    ws['A2'].alignment = _center(False)
-    ws.row_dimensions[2].height = 16
+    season_line, period_label = _planting_report_title_lines(
+        season, report_year, period_label
+    )
 
-    # Column headers
-    headers = [
-        'No.', 'Barangay', 'Program',
-        'No. of\nBeneficiaries', 'Total Area\nPlanted (ha)',
-        'Variety', 'Crop\nEstab.', 'Expected\nSowing Date',
-        'No. of\nBags',
-    ]
-    ws.row_dimensions[4].height = 32
-    for col_idx, header in enumerate(headers, start=1):
-        cell = ws.cell(row=4, column=col_idx, value=header)
-        cell.font      = _bold_font(9, 'FFFFFF')
-        cell.fill      = PatternFill('solid', start_color='1A4D1A')
-        cell.alignment = _center()
-        cell.border    = _thin_border()
+    dist_qs = DistributionEntry.objects.filter(
+        batch__status='APPROVED',
+        batch__event__season=(season or '').upper(),
+    ).select_related(
+        'farmer', 'batch__event', 'batch__event__seed_type'
+    )
+    mon_qs = CropMonitoringRecord.objects.filter(
+        seed_source='OWN_SEED',
+    ).select_related('farmer')
+    if season:
+        mon_qs = mon_qs.filter(poll__season=(season or '').upper())
 
-    # Group by barangay → event
-    brgy_groups = defaultdict(list)
-    for entry in entries_qs.select_related('batch__event', 'farmer', 'variety'):
-        brgy_groups[entry.batch.event.barangay].append(entry)
+    if barangay:
+        dist_qs = dist_qs.filter(batch__event__barangay=barangay)
+        mon_qs = mon_qs.filter(barangay=barangay)
 
-    current_row = 5
-    row_num = 1
-    total_farmers = total_area = total_bags = 0
+    if start_date and end_date:
+        dist_qs = dist_qs.filter(
+            date_received__gte=start_date,
+            date_received__lte=end_date,
+        )
+        mon_qs = mon_qs.filter(
+            date_observed__gte=start_date,
+            date_observed__lte=end_date,
+        )
 
-    for brgy in sorted(brgy_groups.keys()):
-        brgy_entries = brgy_groups[brgy]
-        # Sub-group by event (program) within barangay
-        event_groups = defaultdict(list)
-        for e in brgy_entries:
-            event_groups[e.batch.event.id].append(e)
+    hybrid_entries = [e for e in dist_qs if _is_region(e.batch.event)]
+    certified_entries = [e for e in dist_qs if _is_philrice(e.batch.event)]
 
-        for ev_entries in event_groups.values():
-            ev = ev_entries[0].batch.event
-            program = (
-                'Hybrid (Region)'
-                if _is_region(ev) else 'Inbred (PhilRice)'
-            )
-            area = sum(
-                float(e.area_planted or e.farm_area_ha or 0)
-                for e in ev_entries
-            )
-            bags = sum(int(e.qty_bags or 0) for e in ev_entries)
-            varieties = ', '.join(
-                set(e.variety.name for e in ev_entries if e.variety)
-            ) or '—'
-            estab = ', '.join(
-                set(e.crop_establishment or '' for e in ev_entries
-                    if e.crop_establishment)
-            ) or '—'
-            sowing = ', '.join(
-                set(getattr(e, 'expected_sowing_date', '') or '' for e in ev_entries
-                    if getattr(e, 'expected_sowing_date', ''))
-            ) or '—'
+    latest_own_seed = {}
+    for rec in mon_qs.order_by('farmer_id', '-date_observed', '-encoded_at'):
+        if rec.farmer_id not in latest_own_seed:
+            latest_own_seed[rec.farmer_id] = rec
+    own_seed_records = list(latest_own_seed.values())
 
-            row_values = [
-                row_num, brgy, program,
-                len(ev_entries), round(area, 4),
-                varieties, estab, sowing, bags,
-            ]
-            ws.row_dimensions[current_row].height = 15
-            _write_row(ws, current_row, row_values,
-                       alt_row=(current_row % 2 == 0))
+    def _brgy_of_entry(e):
+        return e.batch.event.barangay
 
-            total_farmers += len(ev_entries)
-            total_area    += area
-            total_bags    += bags
-            current_row   += 1
-            row_num       += 1
+    per_brgy = {}
+    for brgy in PLANTING_REPORT_BARANGAY_ORDER:
+        h = [e for e in hybrid_entries if _brgy_of_entry(e) == brgy]
+        c = [e for e in certified_entries if _brgy_of_entry(e) == brgy]
+        o = [r for r in own_seed_records if r.barangay == brgy]
 
-    # Totals row
-    ws.row_dimensions[current_row].height = 16
-    totals = [
-        '', 'TOTAL', '',
-        total_farmers, round(total_area, 4),
-        '', '', '', total_bags,
-    ]
-    for col_idx, value in enumerate(totals, start=1):
-        cell = ws.cell(row=current_row, column=col_idx, value=value)
-        cell.font      = _bold_font(9)
-        cell.alignment = _center(False)
-        cell.border    = _thin_border()
-        cell.fill      = PatternFill('solid', start_color='DCFCE7')
+        hybrid_area = sum(float(e.farm_area_ha or 0) for e in h)
+        hybrid_farmer_ids = set(e.farmer_id for e in h)
+
+        certified_area = sum(float(e.area_planted or 0) for e in c)
+        certified_farmer_ids = set(e.farmer_id for e in c)
+
+        own_seed_area = sum(float(r.area_monitored_ha or 0) for r in o)
+        own_seed_farmer_ids = set(r.farmer_id for r in o)
+
+        municipal_area = hybrid_area + certified_area + own_seed_area
+        municipal_farmer_ids = hybrid_farmer_ids | certified_farmer_ids
+
+# ─────────────────────────────────────────────────────────────
+# PLANTING REPORT — DATA CALCULATOR (new, doesn't touch anything else)
+# ─────────────────────────────────────────────────────────────
+
+PLANTING_REPORT_BARANGAY_ORDER = [
+    'Abang', 'Aliliw', 'Atulinao', 'Ayuti', 'Igang', 'Kabatete', 'Kakawit',
+    'Kalangay', 'Kalyaat', 'Kilib', 'Kulapi', 'Mahabang Parang', 'Malupak',
+    'Manasa', 'May-It', 'Nagsinamo', 'Nalunao', 'Palola', 'Piis', 'Samil',
+    'Tiawe', 'Tinamnan',
+]
+
+
+def _planting_report_date_range(season, report_year, month_num=None):
+    season = (season or '').upper()
+    MONTH_NAMES = {
+        1: 'January', 2: 'February', 3: 'March', 4: 'April', 5: 'May',
+        6: 'June', 7: 'July', 8: 'August', 9: 'September',
+        10: 'October', 11: 'November', 12: 'December',
+    }
+    if season == 'DRY':
+        season_start = datetime.date(report_year - 1, 11, 1)
+        season_end   = datetime.date(report_year, 5, 31)
+        month_year_map = {
+            11: report_year - 1, 12: report_year - 1,
+            1: report_year, 2: report_year, 3: report_year,
+            4: report_year, 5: report_year,
+        }
+    elif season == 'WET':
+        season_start = datetime.date(report_year, 6, 1)
+        season_end   = datetime.date(report_year, 10, 31)
+        month_year_map = {
+            6: report_year, 7: report_year, 8: report_year,
+            9: report_year, 10: report_year,
+        }
+    else:
+        return None, None, 'For the Whole Season'
+
+    if not month_num or month_num not in month_year_map:
+        return season_start, season_end, 'For the Whole Season'
+
+    actual_year = month_year_map[month_num]
+    if month_num == 12:
+        next_month_first = datetime.date(actual_year + 1, 1, 1)
+    else:
+        next_month_first = datetime.date(actual_year, month_num + 1, 1)
+    month_start = datetime.date(actual_year, month_num, 1)
+    month_end   = next_month_first - datetime.timedelta(days=1)
+
+    period_label = f'For the Period of {MONTH_NAMES[month_num]} {actual_year}'
+    return month_start, month_end, period_label
+
+
+def _planting_report_title_lines(season, report_year, period_label):
+    season = (season or '').upper()
+    if season == 'DRY':
+        season_line = f'DRY SEASON {report_year - 1}-{report_year}'
+    elif season == 'WET':
+        season_line = f'WET SEASON {report_year}'
+    else:
+        season_line = f'{season} SEASON {report_year}'
+    return season_line, period_label
+
+
+def _build_planting_accomplishment_data(season, report_year, barangay=None, month_num=None):
+    """
+    Planting accomplishment = what the AT actually verified in the field,
+    not what was distributed or approved as a beneficiary.
+
+    All three columns (Hybrid, Certified, Own Seed) come exclusively
+    from CropMonitoringRecord, split by seed_source. DistributionEntry
+    is not used here at all.
+    """
+    from apps.crop_monitoring.models import CropMonitoringRecord
+
+    start_date, end_date, period_label = _planting_report_date_range(
+        season, report_year, month_num
+    )
+    season_line, period_label = _planting_report_title_lines(
+        season, report_year, period_label
+    )
+
+    mon_qs = CropMonitoringRecord.objects.filter(
+        seed_source__in=['HYBRID', 'INBRED', 'OWN_SEED'],
+    ).select_related('farmer')
+
+    # NOTE: deliberately NOT filtering by poll__season or poll__year here.
+    # CropMonitoringRecord.poll is nullable, and DistributionEvent.year's
+    # convention was never confirmed to match Poll.year's "ending year"
+    # rule. The date-range filter below is the only thing that decides
+    # which season/month a record belongs to — it's already unambiguous
+    # since DRY and WET date windows never overlap.
+
+    if barangay:
+        mon_qs = mon_qs.filter(barangay=barangay)
+
+    if start_date and end_date:
+        mon_qs = mon_qs.filter(
+            date_observed__gte=start_date,
+            date_observed__lte=end_date,
+        )
+
+    # Latest record per (farmer, seed_source) — prevents repeated AT
+    # visits to the same field from being summed as separate plantings.
+    latest_per_farmer_seed = {}
+    for rec in mon_qs.order_by('farmer_id', 'seed_source', '-date_observed', '-encoded_at'):
+        key = (rec.farmer_id, rec.seed_source)
+        if key not in latest_per_farmer_seed:
+            latest_per_farmer_seed[key] = rec
+    planting_records = list(latest_per_farmer_seed.values())
+
+    per_brgy = {}
+    for brgy in PLANTING_REPORT_BARANGAY_ORDER:
+        barangay_records = [r for r in planting_records if r.barangay == brgy]
+
+        hybrid_records = [r for r in barangay_records if r.seed_source == 'HYBRID']
+        hybrid_area = sum(float(r.area_monitored_ha or 0) for r in hybrid_records)
+        hybrid_farmer_ids = {r.farmer_id for r in hybrid_records}
+
+        certified_records = [r for r in barangay_records if r.seed_source == 'INBRED']
+        certified_area = sum(float(r.area_monitored_ha or 0) for r in certified_records)
+        certified_farmer_ids = {r.farmer_id for r in certified_records}
+
+        own_seed_records = [r for r in barangay_records if r.seed_source == 'OWN_SEED']
+        own_seed_area = sum(float(r.area_monitored_ha or 0) for r in own_seed_records)
+        own_seed_farmer_ids = {r.farmer_id for r in own_seed_records}
+
+        municipal_area = hybrid_area + certified_area + own_seed_area
+        municipal_farmer_ids = hybrid_farmer_ids | certified_farmer_ids | own_seed_farmer_ids
+
+        per_brgy[brgy] = {
+            'municipal_area': round(municipal_area, 4),
+            'municipal_farmers': len(municipal_farmer_ids),
+            'hybrid_area': round(hybrid_area, 4),
+            'hybrid_farmers': len(hybrid_farmer_ids),
+            'certified_area': round(certified_area, 4),
+            'certified_farmers': len(certified_farmer_ids),
+            'own_seed_area': round(own_seed_area, 4),
+            'own_seed_farmers': len(own_seed_farmer_ids),
+        }
+
+    totals = {
+        'municipal_area': round(sum(v['municipal_area'] for v in per_brgy.values()), 4),
+        'municipal_farmers': sum(v['municipal_farmers'] for v in per_brgy.values()),
+        'hybrid_area': round(sum(v['hybrid_area'] for v in per_brgy.values()), 4),
+        'hybrid_farmers': sum(v['hybrid_farmers'] for v in per_brgy.values()),
+        'certified_area': round(sum(v['certified_area'] for v in per_brgy.values()), 4),
+        'certified_farmers': sum(v['certified_farmers'] for v in per_brgy.values()),
+        'own_seed_area': round(sum(v['own_seed_area'] for v in per_brgy.values()), 4),
+        'own_seed_farmers': sum(v['own_seed_farmers'] for v in per_brgy.values()),
+    }
+
+    return {
+        'season_line': season_line,
+        'period_label': period_label,
+        'per_barangay': per_brgy,
+        'totals': totals,
+        'date_range': {
+            'start': start_date.isoformat() if start_date else None,
+            'end': end_date.isoformat() if end_date else None,
+        },
+    }
+
+# def generate_planting_report(entries_qs, season, year):
+#     """
+#     Generates the Planting Accomplishment Report.
+#     Groups data by barangay → program → variety.
+#     Shows: number of beneficiaries, total area, variety,
+#     crop establishment method, expected sowing date, bags.
+#     """
+#     wb = openpyxl.Workbook()
+#     ws = wb.active
+#     ws.title = 'Planting Accomplishment'
+
+#     widths = {
+#         'A': 5, 'B': 22, 'C': 18, 'D': 12, 'E': 12,
+#         'F': 14, 'G': 14, 'H': 16, 'I': 10,
+#     }
+#     for col, w in widths.items():
+#         ws.column_dimensions[col].width = w
+
+#     # Title
+#     ws.merge_cells('A1:I1')
+#     ws['A1'] = 'PLANTING ACCOMPLISHMENT REPORT'
+#     ws['A1'].font      = _bold_font(13)
+#     ws['A1'].alignment = _center(False)
+#     ws.row_dimensions[1].height = 22
+
+#     ws.merge_cells('A2:I2')
+#     ws['A2'] = (
+#         f'Municipal Agriculture Office — Lucban, Quezon  |  '
+#         f'{season} Season {year}'
+#     )
+#     ws['A2'].font      = _normal_font(10)
+#     ws['A2'].alignment = _center(False)
+#     ws.row_dimensions[2].height = 16
+
+#     # Column headers
+#     headers = [
+#         'No.', 'Barangay', 'Program',
+#         'No. of\nBeneficiaries', 'Total Area\nPlanted (ha)',
+#         'Variety', 'Crop\nEstab.', 'Expected\nSowing Date',
+#         'No. of\nBags',
+#     ]
+#     ws.row_dimensions[4].height = 32
+#     for col_idx, header in enumerate(headers, start=1):
+#         cell = ws.cell(row=4, column=col_idx, value=header)
+#         cell.font      = _bold_font(9, 'FFFFFF')
+#         cell.fill      = PatternFill('solid', start_color='1A4D1A')
+#         cell.alignment = _center()
+#         cell.border    = _thin_border()
+
+#     # Group by barangay → event
+#     brgy_groups = defaultdict(list)
+#     for entry in entries_qs.select_related('batch__event', 'farmer', 'variety'):
+#         brgy_groups[entry.batch.event.barangay].append(entry)
+
+#     current_row = 5
+#     row_num = 1
+#     total_farmers = total_area = total_bags = 0
+
+#     for brgy in sorted(brgy_groups.keys()):
+#         brgy_entries = brgy_groups[brgy]
+#         # Sub-group by event (program) within barangay
+#         event_groups = defaultdict(list)
+#         for e in brgy_entries:
+#             event_groups[e.batch.event.id].append(e)
+
+#         for ev_entries in event_groups.values():
+#             ev = ev_entries[0].batch.event
+#             program = (
+#                 'Hybrid (Region)'
+#                 if _is_region(ev) else 'Inbred (PhilRice)'
+#             )
+#             area = sum(
+#                 float(e.area_planted or e.farm_area_ha or 0)
+#                 for e in ev_entries
+#             )
+#             bags = sum(int(e.qty_bags or 0) for e in ev_entries)
+#             varieties = ', '.join(
+#                 set(e.variety.name for e in ev_entries if e.variety)
+#             ) or '—'
+#             estab = ', '.join(
+#                 set(e.crop_establishment or '' for e in ev_entries
+#                     if e.crop_establishment)
+#             ) or '—'
+#             sowing = ', '.join(
+#                 set(getattr(e, 'expected_sowing_date', '') or '' for e in ev_entries
+#                     if getattr(e, 'expected_sowing_date', ''))
+#             ) or '—'
+
+#             row_values = [
+#                 row_num, brgy, program,
+#                 len(ev_entries), round(area, 4),
+#                 varieties, estab, sowing, bags,
+#             ]
+#             ws.row_dimensions[current_row].height = 15
+#             _write_row(ws, current_row, row_values,
+#                        alt_row=(current_row % 2 == 0))
+
+#             total_farmers += len(ev_entries)
+#             total_area    += area
+#             total_bags    += bags
+#             current_row   += 1
+#             row_num       += 1
+
+#     # Totals row
+#     ws.row_dimensions[current_row].height = 16
+#     totals = [
+#         '', 'TOTAL', '',
+#         total_farmers, round(total_area, 4),
+#         '', '', '', total_bags,
+#     ]
+#     for col_idx, value in enumerate(totals, start=1):
+#         cell = ws.cell(row=current_row, column=col_idx, value=value)
+#         cell.font      = _bold_font(9)
+#         cell.alignment = _center(False)
+#         cell.border    = _thin_border()
+#         cell.fill      = PatternFill('solid', start_color='DCFCE7')
+
+#     return wb
+
+def generate_planting_report(season, report_year, barangay=None, month_num=None):
+    """
+    Loads the REAL Planting Accomplishment Report template file
+    and fills in only the computed numbers.
+    """
+    import os
+    from django.conf import settings
+
+    template_filename = 'Planting_Accomplishment_Report.xlsx'
+
+    template_path = os.path.join(
+        settings.BASE_DIR, 'apps', 'reports', 'templates_excel',
+        template_filename
+    )
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
+
+    data = _build_planting_accomplishment_data(
+        season, report_year, barangay=barangay, month_num=month_num
+    )
+
+    title_lines = (ws['A1'].value or '').split('\n')
+    while len(title_lines) < 5:
+        title_lines.append('')
+    title_lines[3] = data['season_line']
+    title_lines[4] = data['period_label']
+    ws['A1'] = '\n'.join(title_lines)
+
+    for idx, brgy in enumerate(PLANTING_REPORT_BARANGAY_ORDER):
+        row = 7 + idx
+        vals = data['per_barangay'][brgy]
+
+        ws[f'B{row}'] = vals['municipal_area']
+        ws[f'C{row}'] = vals['municipal_farmers']
+        ws[f'D{row}'] = vals['hybrid_area']
+        ws[f'E{row}'] = vals['hybrid_farmers']
+        ws[f'J{row}'] = vals['certified_area']
+        ws[f'K{row}'] = vals['certified_farmers']
+        ws[f'X{row}'] = vals['own_seed_area']
+        ws[f'Y{row}'] = vals['own_seed_farmers']
+
+    ws['B37'] = '=SUM(B7:B28)'
+    ws['C37'] = '=SUM(C7:C28)'
+    ws['D37'] = '=SUM(D7:D28)'
+    ws['E37'] = '=SUM(E7:E28)'
+    ws['J37'] = '=SUM(J7:J28)'
+    ws['K37'] = '=SUM(K7:K28)'
+    ws['X37'] = '=SUM(X7:X28)'
+    ws['Y37'] = '=SUM(Y7:Y28)'
 
     return wb
-
 
 # ─────────────────────────────────────────────────────────────
 # HARVESTING ACCOMPLISHMENT REPORT — Placeholder
@@ -1249,6 +1589,44 @@ class ReportPreviewView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # PLANTING_REPORT uses its own aggregated barangay-level data
+        # (CropMonitoringRecord) — a completely separate path from the
+        # per-farmer DistributionEntry preview used by every other type.
+        if report_type == 'PLANTING_REPORT':
+            try:
+                report_year = int(year)
+            except (TypeError, ValueError):
+                return Response({'error': 'A valid year is required.'}, status=400)
+
+            data = _build_planting_accomplishment_data(
+                season, report_year, barangay=barangay or None, month_num=None
+            )
+
+            rows = []
+            for brgy in PLANTING_REPORT_BARANGAY_ORDER:
+                if barangay and brgy != barangay:
+                    continue
+                vals = data['per_barangay'][brgy]
+                rows.append({
+                    'barangay': brgy,
+                    'municipal_area': vals['municipal_area'],
+                    'municipal_farmers': vals['municipal_farmers'],
+                    'hybrid_area': vals['hybrid_area'],
+                    'hybrid_farmers': vals['hybrid_farmers'],
+                    'certified_area': vals['certified_area'],
+                    'certified_farmers': vals['certified_farmers'],
+                    'own_seed_area': vals['own_seed_area'],
+                    'own_seed_farmers': vals['own_seed_farmers'],
+                })
+
+            return Response({
+                'count': len(rows),
+                'rows': rows,
+                'season_line': data['season_line'],
+                'period_label': data['period_label'],
+                'totals': data['totals'],
+            })
+
         qs = _build_entry_qs(report_type, season, year, barangay)
 
         rows = []
@@ -1321,6 +1699,7 @@ class ReportDownloadView(APIView):
         season      = request.query_params.get('season', '')
         year        = request.query_params.get('year', '')
         barangay    = request.query_params.get('barangay', '')
+        month       = request.query_params.get('month', '')
 
         if not report_type:
             return Response(
@@ -1328,16 +1707,14 @@ class ReportDownloadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        qs = _build_entry_qs(report_type, season, year, barangay)
-
-        if not qs.exists():
-            return Response(
-                {'error': 'No approved data found for the selected filters.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-
-        # Get a representative event for header metadata
-        first_event = qs.first().batch.event
+        if report_type != 'PLANTING_REPORT':
+            qs = _build_entry_qs(report_type, season, year, barangay)
+            if not qs.exists():
+                return Response(
+                    {'error': 'No approved data found for the selected filters.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            first_event = qs.first().batch.event
 
         # ── Route to the correct generator ──
         if report_type == 'REGION_MASTERLIST':
@@ -1353,8 +1730,13 @@ class ReportDownloadView(APIView):
             wb       = generate_distribution_philrice(qs, first_event)
             filename = f'Distribution_PhilRice_{season}_{year}'
         elif report_type == 'PLANTING_REPORT':
-            wb       = generate_planting_report(qs, season, year)
-            filename = f'Planting_Report_{season}_{year}'
+            month_num = int(month) if month and month.isdigit() else None
+            try:
+                report_year = int(year)
+            except (TypeError, ValueError):
+                return Response({'error': 'A valid year is required.'}, status=400)
+            wb       = generate_planting_report(season, report_year, barangay=barangay, month_num=month_num)
+            filename = f'Planting_Report_{season}_{report_year}'
         elif report_type == 'HARVESTING_REPORT':
             wb       = generate_harvesting_report(qs, season, year)
             filename = f'Harvesting_Report_{season}_{year}'

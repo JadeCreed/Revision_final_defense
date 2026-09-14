@@ -163,14 +163,16 @@ const PREVIEW_COLS = {
     { key: 'crop_establishment', label: 'Crop Estab.' },
     { key: 'date_received', label: 'Date Received' },
   ],
-  PLANTING_REPORT: [
+    PLANTING_REPORT: [
     { key: 'barangay', label: 'Barangay' },
-    { key: 'organization', label: 'Organization' },
-    { key: 'variety_name', label: 'Variety' },
-    { key: 'farm_area_ha', label: 'Farm Area (ha)' },
-    { key: 'area_planted', label: 'Area Planted (ha)' },
-    { key: 'crop_establishment', label: 'Crop Estab.' },
-    { key: 'qty_bags', label: 'Bags' },
+    { key: 'municipal_area', label: 'Total Area (ha)' },
+    { key: 'municipal_farmers', label: 'Total Farmers' },
+    { key: 'hybrid_area', label: 'Hybrid Area (ha)' },
+    { key: 'hybrid_farmers', label: 'Hybrid Farmers' },
+    { key: 'certified_area', label: 'Certified Area (ha)' },
+    { key: 'certified_farmers', label: 'Certified Farmers' },
+    { key: 'own_seed_area', label: 'Own Seed Area (ha)' },
+    { key: 'own_seed_farmers', label: 'Own Seed Farmers' },
   ],
   HARVESTING_REPORT: [
     { key: 'barangay', label: 'Barangay' },
@@ -1055,7 +1057,7 @@ export default function Reports() {
                     </thead>
                     <tbody>
                       {filteredPreviewRows.slice(0, 100).map((row, idx) => (
-                        <tr key={row.id} style={{
+                        <tr key={row.id ?? row.barangay ?? idx} style={{
                           backgroundColor: idx % 2 === 0 ? 'white' : '#fafafa',
                           borderBottom: '1px solid #f3f4f6',
                           animation: `fadeIn ${0.2 + idx * 0.01}s ease`,
@@ -1081,6 +1083,32 @@ export default function Reports() {
                           ))}
                         </tr>
                       ))}
+                      {/* TOTAL + Remarks rows — Planting Report only */}
+                      {activeReportType === 'PLANTING_REPORT' && previewData?.totals && (
+                        <>
+                          <tr style={{ backgroundColor: GREEN.soft, borderTop: '2px solid #166534' }}>
+                            {previewCols.map((col, i) => (
+                              <td key={col.key} style={{
+                                padding: '0.5rem 0.875rem',
+                                color: GREEN.accent, fontWeight: 800,
+                                borderRight: '1px solid #f3f4f6',
+                                fontSize: '0.78rem',
+                              }}>
+                                {i === 0 ? 'TOTAL' : (previewData.totals[col.key] ?? '—')}
+                              </td>
+                            ))}
+                          </tr>
+                          <tr>
+                            <td colSpan={previewCols.length} style={{
+                              padding: '0.5rem 0.875rem',
+                              color: '#9ca3af', fontStyle: 'italic',
+                              fontSize: '0.75rem',
+                            }}>
+                              Remarks:
+                            </td>
+                          </tr>
+                        </>
+                      )}
                     </tbody>
                   </table>
                   {filteredPreviewRows.length > 100 && (
