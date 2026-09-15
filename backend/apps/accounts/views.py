@@ -72,6 +72,7 @@ class LoginView(APIView):
             login_value = (request.data.get("login") or "").strip()
             password = request.data.get("password") or ""
             remember_me = request.data.get("remember_me", False)
+            login_type = (request.data.get("login_type") or "").strip().lower()
 
             # ─────────────────────────────────────
             # 1️⃣ EMPTY FIELD VALIDATION
@@ -102,41 +103,49 @@ class LoginView(APIView):
                     status=429
                 )
 
+            
+
             user = None
             identifier = login_value  # For rate limiting
 
             # ─────────────────────────────────────
-            # 3️⃣ FORMAT VALIDATION & USER LOOKUP
+            # 3️⃣ LOGIN TYPE VALIDATION & USER LOOKUP
             # ─────────────────────────────────────
-            if "@" in login_value:
-                # 📧 Email path
+            if login_type not in ("email", "contact"):
+                return Response(
+                    {"error": "Please select Email or Contact Number and try again."},
+                    status=400
+                )
+
+            if login_type == "email":
+                # 📧 Email path — selected via the Email tab
                 email = login_value.strip().lower()
-                
-                # Validate email format
+
+                # Format check only — does NOT decide which field to search
                 if not re.match(r'^[a-zA-Z0-9._%+-]+@gmail\.com$', email):
                     return Response(
-                        {"error": "Please enter a valid email address or 11-digit contact number"},
+                        {"error": "Please enter a valid Gmail address"},
                         status=400
                     )
-                
+
                 user = User.objects.filter(email__iexact=email).first()
                 identifier = email
             else:
-                # 📞 Phone path
+                # 📞 Contact path — selected via the Contact Number tab
                 normalized = normalize_contact_number(login_value)
-                
+
                 if not normalized:
                     return Response(
-                        {"error": "Please enter a valid email address or 11-digit contact number"},
+                        {"error": "Please enter a valid 11-digit contact number"},
                         status=400
                     )
-                
+
                 if len(normalized) != 11 or not normalized.isdigit() or not normalized.startswith('09'):
                     return Response(
                         {"error": "Contact number must be 11 digits starting with 09"},
                         status=400
                     )
-                
+
                 user = User.objects.filter(contact_number=normalized).first()
                 identifier = normalized
 

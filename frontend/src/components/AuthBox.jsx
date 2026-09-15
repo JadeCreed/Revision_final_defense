@@ -138,7 +138,8 @@ const AuthBox = () => {
       const res = await loginUser({
         login: trimmedLogin,
         password: trimmedPassword,
-        remember_me: form.remember_me
+        remember_me: form.remember_me,
+        login_type: loginType
       });
 
       login(res.data);

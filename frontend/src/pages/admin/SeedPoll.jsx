@@ -267,6 +267,9 @@ const SeedPoll = () => {
   }, [activeTab, selectedPollId, fetchResults]);
 
   const detectedSeason = getDetectedSeason();
+  const hasUsableSeedConfig = seedTypes.some(
+    st => st.is_active !== false && (st.varieties || []).some(v => v.is_active)
+  );
 
   // ── POLL HANDLERS ──
   const handleField = (key, value) => {
@@ -285,6 +288,11 @@ const SeedPoll = () => {
   };
 
   const openCreateModal = () => {
+    if (!hasUsableSeedConfig) {
+      showToast('error', 'Cannot create poll. Add a seed type and variety first.');
+      return;
+    }
+    
     const season = getDetectedSeason();
     const year = new Date().getFullYear();
     setForm({ title: getSuggestedTitle(season, year), season, year, end_date: '' });
