@@ -267,6 +267,10 @@ export const downloadReport = (params) =>
 export const getReportLogs = () =>
   API.get('/reports/logs/');
 
+// ── AUDIT TRAIL ──
+export const getAuditLogs = (params) =>
+  API.get('/accounts/admin/audit-logs/', { params });
+
 // GIS Map
 export const getGisPlots    = (params) => API.get('/gis/plots/', { params });
 export const createGisPlot  = (data)   => API.post('/gis/plots/', data);

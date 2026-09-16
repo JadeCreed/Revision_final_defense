@@ -48,7 +48,7 @@ from .views import (
     DeceasedFarmerSearchView,
     SubmitSuccessionClaimView,
     AdminReviewSuccessionView,
-    
+    AdminAuditLogListView,
 
 )
 
@@ -117,4 +117,7 @@ urlpatterns = [
     path('succession/deceased-farmers/', DeceasedFarmerSearchView.as_view(), name='succession-deceased-farmers'),
     path('succession/claim/', SubmitSuccessionClaimView.as_view(), name='succession-claim'),
     path('succession/<int:user_id>/review/', AdminReviewSuccessionView.as_view(), name='succession-review'),
+
+    # ── AUDIT LOG ──
+    path('admin/audit-logs/', AdminAuditLogListView.as_view(), name='admin-audit-logs'),
 ]

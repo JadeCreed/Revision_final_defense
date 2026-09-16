@@ -6,7 +6,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import parsers
 
 from .models import PasswordResetOTP
-from .utils import generate_otp, send_otp_email, send_otp_sms, is_official_management_allowed
+from .utils import generate_otp, send_otp_email, send_otp_sms, is_official_management_allowed, log_action
 from .rate_limit import LoginRateLimiter
 from django.db.models import Q, Case, When, IntegerField
 from django.utils import timezone
@@ -21,10 +21,11 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from .permissions import IsAdminUserRole,IsFarmer,IsVerifiedUser,IsATUser,IsBPUser
-from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,PasswordResetOTP,FarmerMasterRecord
+from .models import FarmerProfile,User,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,PasswordResetOTP,FarmerMasterRecord,AuditLog
 from rest_framework import serializers 
 from .serializers import (
     FarmerRegisterSerializer,
+    AuditLogSerializer,
     FarmerProfileSerializer,
     FarmerListSerializer,
     FarmerFullDetailSerializer,
@@ -72,7 +73,6 @@ class LoginView(APIView):
             login_value = (request.data.get("login") or "").strip()
             password = request.data.get("password") or ""
             remember_me = request.data.get("remember_me", False)
-            login_type = (request.data.get("login_type") or "").strip().lower()
 
             # ─────────────────────────────────────
             # 1️⃣ EMPTY FIELD VALIDATION
@@ -103,49 +103,41 @@ class LoginView(APIView):
                     status=429
                 )
 
-            
-
             user = None
             identifier = login_value  # For rate limiting
 
             # ─────────────────────────────────────
-            # 3️⃣ LOGIN TYPE VALIDATION & USER LOOKUP
+            # 3️⃣ FORMAT VALIDATION & USER LOOKUP
             # ─────────────────────────────────────
-            if login_type not in ("email", "contact"):
-                return Response(
-                    {"error": "Please select Email or Contact Number and try again."},
-                    status=400
-                )
-
-            if login_type == "email":
-                # 📧 Email path — selected via the Email tab
+            if "@" in login_value:
+                # 📧 Email path
                 email = login_value.strip().lower()
-
-                # Format check only — does NOT decide which field to search
+                
+                # Validate email format
                 if not re.match(r'^[a-zA-Z0-9._%+-]+@gmail\.com$', email):
                     return Response(
-                        {"error": "Please enter a valid Gmail address"},
+                        {"error": "Please enter a valid email address or 11-digit contact number"},
                         status=400
                     )
-
+                
                 user = User.objects.filter(email__iexact=email).first()
                 identifier = email
             else:
-                # 📞 Contact path — selected via the Contact Number tab
+                # 📞 Phone path
                 normalized = normalize_contact_number(login_value)
-
+                
                 if not normalized:
                     return Response(
-                        {"error": "Please enter a valid 11-digit contact number"},
+                        {"error": "Please enter a valid email address or 11-digit contact number"},
                         status=400
                     )
-
+                
                 if len(normalized) != 11 or not normalized.isdigit() or not normalized.startswith('09'):
                     return Response(
                         {"error": "Contact number must be 11 digits starting with 09"},
                         status=400
                     )
-
+                
                 user = User.objects.filter(contact_number=normalized).first()
                 identifier = normalized
 
@@ -451,8 +443,24 @@ class FarmerRegisterView(APIView):
             serializer = FarmerRegisterSerializer(data=request.data)
 
             if serializer.is_valid():
-                serializer.save() 
-                
+                user = serializer.save()
+
+                log_action(
+                    actor=user,
+                    action='FARMER_ACCOUNT_CREATED',
+                    module='REGISTRATION',
+                    activity_type='USER_MANAGEMENT',
+                    status='SUCCESS',
+                    target=user,
+                    target_repr=f'{user.first_name} {user.last_name}'.strip(),
+                    description='Farmer account created through public self-registration.',
+                    metadata={
+                        'role': user.role,
+                        'barangay': user.barangay,
+                    },
+                    request=request,
+                )
+
                 return Response({
                     "message": "Farmer registered successfully. Wait for admin approval."
                 }, status=status.HTTP_201_CREATED)
@@ -738,7 +746,25 @@ class FarmerProfileView(APIView):
 
                 if profile.is_complete():
                     if user.status in ('PENDING', 'REJECTED'):
+                        previous_status = user.status
+
                         User.objects.filter(pk=user.pk).update(status='COMPLETE')
+
+                        log_action(
+                            actor=user,
+                            action='FARMER_PROFILE_SUBMITTED',
+                            module='FARMER_PROFILE',
+                            activity_type='WORKFLOW',
+                            status='SUCCESS',
+                            target=user,
+                            target_repr=f'{user.first_name} {user.last_name}'.strip(),
+                            description='Farmer profile completed and submitted for admin review.',
+                            metadata={
+                                'previous_status': previous_status,
+                                'new_status': 'COMPLETE',
+                            },
+                            request=request,
+                        )
 
                 return Response({"message": "Profile updated successfully"})
 
@@ -1659,6 +1685,22 @@ class AdminResetUserPasswordView(APIView):
             "message":      "Password reset successfully",
             "new_password": new_password  # shown to admin so they can share with user
         })
+
+
+class AdminAuditLogListView(ListAPIView):
+    """
+    Read-only admin endpoint for the centralized Audit Trail.
+
+    AuditLog records are never created, modified, or deleted through
+    this endpoint. Creation remains centralized through log_action().
+    """
+
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsAuthenticated, IsAdminUserRole]
+    pagination_class = StandardPagination
+
+    def get_queryset(self):
+        return AuditLog.objects.all().order_by('-created_at')
     
 
 class AdminArchiveListView(ListAPIView):

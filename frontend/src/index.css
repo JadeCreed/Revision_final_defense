@@ -1323,6 +1323,54 @@ input::-webkit-contacts-auto-fill-button { visibility: hidden; }
 
 
 
+/* ─────────────────────────────────────────
+   ADMIN SETTINGS — AUDIT TRAIL RESPONSIVE
+   Reuses the project's existing breakpoint
+   strategy (1023 / 767 / 479).
+───────────────────────────────────────── */
+.audit-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.audit-filter-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.audit-main-grid {
+  grid-template-columns: 1fr;
+}
+.audit-main-grid.audit-main-grid--details {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+@media (max-width: 1023px) {
+  .audit-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .audit-filter-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .audit-main-grid.audit-main-grid--details {
+    grid-template-columns: 1fr;
+  }
+  .audit-details-panel {
+    position: static !important;
+    top: auto !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .audit-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 479px) {
+  .audit-filter-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+  }
+}
+
+
+
 
 
 
@@ -1414,4 +1462,25 @@ input::-webkit-contacts-auto-fill-button { visibility: hidden; }
   margin: 0;
   letter-spacing: 1.5px; /* Clean uppercase letter spacing */
   line-height: 1.4;
+}
+
+/* Admin Settings — isolated whitespace fix (Settings page ONLY) */
+@media (max-width: 1023px) {
+  .admin-settings-page {
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    margin-top: -1.5rem;
+    padding: 1rem !important;
+    min-height: calc(100% + 1.5rem) !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-settings-page {
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+    margin-top: -1.5rem;
+    padding: 0.75rem !important;
+    min-height: calc(100% + 1.5rem) !important;
+  }
 }

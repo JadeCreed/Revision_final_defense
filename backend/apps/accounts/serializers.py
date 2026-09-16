@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User,FarmerProfile,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,BARANGAY_CHOICES
+from .models import User,FarmerProfile,AgriculturalTechnicianProfile,BrgyPresidentProfile,Barangay,BARANGAY_CHOICES,AuditLog
 from rest_framework.validators import UniqueValidator
 # -----------------------
 # Farmer registration (mobile self-register)
@@ -505,3 +505,33 @@ class ArchiveUserSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'contact_number',
             'email', 'role', 'barangay', 'date_joined', 'is_active'
         ]
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for the Admin Audit Trail.
+
+    AuditLog records are created only through log_action().
+    This serializer is used only to expose existing audit records
+    through the admin read-only API.
+    """
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id',
+            'actor_name',
+            'actor_role',
+            'action',
+            'module',
+            'activity_type',
+            'status',
+            'target_type',
+            'target_id',
+            'target_repr',
+            'description',
+            'metadata',
+            'ip_address',
+            'created_at',
+        ]
+        read_only_fields = fields

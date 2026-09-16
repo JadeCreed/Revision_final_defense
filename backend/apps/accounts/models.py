@@ -347,3 +347,68 @@ class FarmerMasterRecord(models.Model):
 
     def __str__(self):
         return f"{self.rsbsa_number} — {self.last_name}, {self.first_name}"
+
+class AuditLog(models.Model):
+    """
+    Centralized audit trail record.
+
+    Written through utils.log_action() by convention — Django cannot
+    enforce this at the DB level, but all callers should go through
+    that helper so every write is consistent and hardened.
+    """
+
+    STATUS_CHOICES = (
+        ('SUCCESS', 'Success'),
+        ('FAILED', 'Failed'),
+    )
+
+    ACTIVITY_TYPE_CHOICES = (
+        ('DATA_CHANGE', 'Data Changes'),
+        ('SECURITY', 'Security'),
+        ('USER_MANAGEMENT', 'User Management'),
+        ('WORKFLOW', 'Workflow'),
+        ('SYSTEM_CONFIGURATION', 'System Configuration'),
+        ('SYSTEM_ACTIVITY', 'System Activity'),
+    )
+
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs'
+    )
+    actor_name = models.CharField(max_length=200, blank=True)
+    actor_role = models.CharField(max_length=10, blank=True)
+
+    action = models.CharField(max_length=100)
+    module = models.CharField(max_length=50)
+    activity_type = models.CharField(
+        max_length=30,
+        choices=ACTIVITY_TYPE_CHOICES,
+        default='SYSTEM_ACTIVITY',
+    )
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='SUCCESS')
+
+    target_type = models.CharField(max_length=100, blank=True)
+    target_id = models.PositiveIntegerField(null=True, blank=True)
+    target_repr = models.CharField(max_length=255, blank=True)
+
+    description = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['module', 'action']),
+            models.Index(fields=['activity_type']),
+            models.Index(fields=['created_at']),
+            models.Index(fields=['actor']),
+        ]
+
+    def __str__(self):
+        return f"[{self.created_at}] {self.actor_name or 'System'} — {self.action}"
