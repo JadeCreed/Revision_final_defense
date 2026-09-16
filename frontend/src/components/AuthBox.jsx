@@ -110,9 +110,9 @@ const AuthBox = () => {
 
     try {
       const trimmedLogin = form.login.trim();
-      const trimmedPassword = form.password.trim();
+      const password = form.password;
 
-      if (!trimmedLogin && !trimmedPassword) {
+      if (!trimmedLogin && !password) {
         setError('Email or Contact Number and password are required');
         setLoading(false);
         return;
@@ -122,7 +122,7 @@ const AuthBox = () => {
         setLoading(false);
         return;
       }
-      if (!trimmedPassword) {
+      if (!password) {
         setError('Password is required');
         setLoading(false);
         return;
@@ -137,7 +137,7 @@ const AuthBox = () => {
 
       const res = await loginUser({
         login: trimmedLogin,
-        password: trimmedPassword,
+        password: password,
         remember_me: form.remember_me,
         login_type: loginType
       });
