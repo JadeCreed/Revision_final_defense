@@ -12,8 +12,9 @@ from apps.accounts.permissions import IsATUser, IsAdminUserRole
 from apps.distribution.models import DistributionEntry
 from apps.seed_poll.models import FinalSeed
 from apps.seed_poll.utils import get_current_poll, get_encoding_poll
+from decimal import Decimal, InvalidOperation
 from .models import CropMonitoringRecord, BarangayCropSummary
-
+from .date_validation import get_season_date_range, is_date_in_season
 
 def get_at_profile(user):
     try:
@@ -94,12 +95,31 @@ class ATFarmerListView(APIView):
                     **rec_filter
                 ).order_by('-date_observed', '-encoded_at').first()
                 if rec:
+                    # Establishment baseline for this farmer+seed type —
+                    # authoritative area, used to lock/display later phases.
+                    estab_filter = dict(rec_filter, crop_phase='ESTABLISHMENT')
+                    estab_rec = CropMonitoringRecord.objects.filter(
+                        **estab_filter
+                    ).order_by('-date_observed', '-encoded_at').first()
                     seed_records[seed_key] = {
                         'phase': rec.crop_phase,
                         'phase_display': rec.get_crop_phase_display(),
                         'record_id': rec.id,
                         'date_observed': str(rec.date_observed),
+                        'area_monitored_ha': (
+                            str(estab_rec.area_monitored_ha)
+                            if estab_rec and estab_rec.area_monitored_ha is not None
+                            else None
+                        ),
                     }
+
+            profile = getattr(farmer, 'profile', None)
+            farmer_hectares = (
+                str(profile.hectares)
+                if profile and profile.hectares is not None
+                else None
+            )
+
 
             results.append({
                 'id':           farmer.id,
@@ -119,6 +139,7 @@ class ATFarmerListView(APIView):
                 ),
                 'latest_record_id': latest.id if latest else None,
                 'seed_records': seed_records,
+                'farmer_hectares':  farmer_hectares,
             })
 
             # Gate para sa AT encode modal seed type buttons (HYBRID/INBRED).
@@ -176,6 +197,9 @@ class ATFarmerListView(APIView):
                         'seed_type_name': seed_type_obj.name,
                         'variety_name': entry.variety.name if entry.variety else (
                             entry.batch.event.variety.name if entry.batch.event.variety else ''
+                        ),
+                        'farm_area_ha': (
+                            str(entry.farm_area_ha) if entry.farm_area_ha is not None else None
                         ),
                     }
 
@@ -374,6 +398,24 @@ class ATCropMonitoringCreateView(APIView):
                 status=400
             )
 
+        # Date Observed validation for the finalized encoding cycle
+        if not is_date_in_season(date_observed, active_poll.season, active_poll.year):
+            start_date, end_date = get_season_date_range(active_poll.season, active_poll.year)
+            return Response({
+                'error_code': 'DATE_OUTSIDE_SEASON',
+                'error': (
+                    f'Date Observed must be between {start_date.isoformat()} and '
+                    f'{end_date.isoformat()} for {active_poll.get_season_display()} '
+                    f'{active_poll.year}.'
+                ),
+                'season': active_poll.season,
+                'year': active_poll.year,
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'entered_date': date_observed,
+            }, status=400)
+
+
         existing_record = CropMonitoringRecord.objects.filter(
             farmer=farmer,
             poll=active_poll,
@@ -391,6 +433,103 @@ class ATCropMonitoringCreateView(APIView):
                 'existing_phase':     existing_record.crop_phase,
             }, status=400)
 
+
+                # ── AREA MONITORED — CREATE path. `crop_phase`, `seed_source`,
+        # `farmer`, `active_poll` are already resolved local variables
+        # earlier in this same linear function, so there is no field-order
+        # ambiguity here (that risk is UPDATE-only — see CHANGE 5). ──
+        if crop_phase == 'ESTABLISHMENT':
+            area_raw = request.data.get('area_monitored_ha')
+            if area_raw in [None, '']:
+                return Response({'error': 'Area Monitored is required for Crop Establishment.'}, status=400)
+            try:
+                area_value = Decimal(str(area_raw))
+            except (InvalidOperation, ValueError, TypeError):
+                return Response({'error': 'Area Monitored must be a valid number.'}, status=400)
+            if area_value <= 0:
+                return Response({'error': 'Area Monitored must be greater than zero.'}, status=400)
+
+            profile = getattr(farmer, 'profile', None)
+            farmer_hectares = profile.hectares if profile and profile.hectares is not None else None
+            if farmer_hectares is None:
+                return Response({
+                    'error': "This farmer's total registered hectares is not set. Cannot validate Area Monitored."
+                }, status=400)
+
+            if seed_source in ('HYBRID', 'INBRED'):
+                # Exact existing distribution query/ordering used by
+                # ATFarmerListView — reused verbatim, not reinvented.
+                dist_entry_qs = DistributionEntry.objects.filter(
+                    farmer=farmer,
+                    batch__status='APPROVED',
+                    qty_bags__isnull=False,
+                    qty_bags__gt=0,
+                ).filter(
+                    batch__event__season=active_poll.season,
+                    batch__event__year=active_poll.year,
+                ).select_related('batch__event__seed_type').order_by('-batch__approved_at')
+
+                matching_entry = None
+                for entry in dist_entry_qs:
+                    seed_type_obj = entry.batch.event.seed_type
+                    if not seed_type_obj:
+                        continue
+                    seed_type_upper = seed_type_obj.name.upper()
+                    if seed_source == 'HYBRID' and 'HYBRID' in seed_type_upper:
+                        matching_entry = entry
+                        break
+                    if seed_source == 'INBRED' and 'INBRED' in seed_type_upper:
+                        matching_entry = entry
+                        break
+
+                if not matching_entry or matching_entry.farm_area_ha is None:
+                    return Response({
+                        'error': f'No {seed_source.title()} seed distribution area found for this farmer.'
+                    }, status=400)
+                if area_value > matching_entry.farm_area_ha:
+                    return Response({
+                        'error': (
+                            f"Area Monitored ({area_value} ha) cannot exceed the farmer's "
+                            f"{seed_source.title()} seed distribution area of {matching_entry.farm_area_ha} ha."
+                        )
+                    }, status=400)
+
+            existing_estab_qs = CropMonitoringRecord.objects.filter(
+                farmer=farmer, crop_phase='ESTABLISHMENT', poll=active_poll,
+            )
+            existing_total = sum(
+                (r.area_monitored_ha or Decimal('0')) for r in existing_estab_qs
+            )
+            if existing_total + area_value > farmer_hectares:
+                remaining = max(farmer_hectares - existing_total, Decimal('0'))
+                return Response({
+                    'error': (
+                        f"Area Monitored ({area_value} ha) would exceed the farmer's total "
+                        f"registered hectares of {farmer_hectares} ha. Remaining available: {remaining} ha."
+                    )
+                }, status=400)
+
+            final_area = area_value
+        else:
+            # Later phases: never trust a submitted area — always derive
+            # from the matching Establishment baseline. If none exists,
+            # reject the save; never save NULL.
+            estab_record = CropMonitoringRecord.objects.filter(
+                farmer=farmer,
+                seed_source=seed_source,
+                crop_phase='ESTABLISHMENT',
+                poll=active_poll,
+            ).order_by('-date_observed', '-encoded_at').first()
+            if not estab_record or estab_record.area_monitored_ha is None:
+                return Response({
+                    'error': (
+                        f'No Crop Establishment record found for this farmer and '
+                        f'{seed_source or "this seed type"}. Establishment must be '
+                        f'recorded before {crop_phase.title()}.'
+                    )
+                }, status=400)
+            final_area = estab_record.area_monitored_ha
+
         # Build record
         record = CropMonitoringRecord.objects.create(
             farmer=farmer,
@@ -403,7 +542,7 @@ class ATCropMonitoringCreateView(APIView):
             delay_days=delay_days,
             damage_cause=damage_cause,
             crop_establishment=request.data.get('crop_establishment') or None,
-            area_monitored_ha=request.data.get('area_monitored_ha') or None,
+            area_monitored_ha=final_area,
             sowing_date=request.data.get('sowing_date') or None,
             variety_name=request.data.get('variety_name', '').strip(),
             remarks=request.data.get('remarks', '').strip(),
@@ -587,11 +726,74 @@ class ATCropMonitoringUpdateView(APIView):
         if record.encoded_by != request.user:
             return Response({'error': 'You can only edit your own records.'}, status=403)
 
+        if 'date_observed' in request.data:
+            new_date_observed = request.data.get('date_observed')
+            if not new_date_observed:
+                return Response({'error': 'Date Observed is required.'}, status=400)
+
+            # Existing record's own Poll controls its season/year — never
+            # the currently active poll, and never get_current_poll().
+            if record.poll is None:
+                return Response({
+                    'error_code': 'RECORD_HAS_NO_POLL',
+                    'error': (
+                        'This historical record has no associated Poll '
+                        'and cannot be date-validated.'
+                    ),
+                    'entered_date': new_date_observed,
+                }, status=400)
+
+            if not is_date_in_season(new_date_observed, record.poll.season, record.poll.year):
+                start_date, end_date = get_season_date_range(record.poll.season, record.poll.year)
+                return Response({
+                    'error_code': 'DATE_OUTSIDE_SEASON',
+                    'error': (
+                        f'Date Observed must be between {start_date.isoformat()} and '
+                        f'{end_date.isoformat()} for {record.poll.get_season_display()} '
+                        f'{record.poll.year}.'
+                    ),
+                    'season': record.poll.season,
+                    'year': record.poll.year,
+                    'start_date': start_date.isoformat(),
+                    'end_date': end_date.isoformat(),
+                    'entered_date': new_date_observed,
+                }, status=400)
+
+
         allowed = [
             'crop_phase', 'seed_source', 'crop_establishment', 'area_monitored_ha',
             'sowing_date', 'variety_name', 'remarks', 'date_observed',
             'phase_status', 'delay_days', 'damage_cause',
         ]
+
+        # ── RESOLVE EFFECTIVE VALUES FIRST — before any mutation. This is
+        # the fix: Area Monitored logic must never depend on where a field
+        # sits in `allowed`, and must never be skippable by omitting
+        # area_monitored_ha from the request. ──
+        if 'crop_phase' in request.data:
+            effective_crop_phase = request.data.get('crop_phase', '').strip()
+            valid_phases = [p[0] for p in CropMonitoringRecord.PHASE_CHOICES]
+            if not effective_crop_phase:
+                return Response({'error': 'Crop phase is required.'}, status=400)
+            if effective_crop_phase not in valid_phases:
+                return Response({'error': f'Invalid crop phase: {effective_crop_phase}'}, status=400)
+        else:
+            effective_crop_phase = record.crop_phase
+
+        if 'seed_source' in request.data:
+            effective_seed_source = request.data.get('seed_source', '')
+            if effective_seed_source is not None:
+                effective_seed_source = effective_seed_source.strip() or None
+            valid_sources = [s[0] for s in CropMonitoringRecord.SEED_SOURCE_CHOICES]
+            if effective_seed_source and effective_seed_source not in valid_sources:
+                return Response({'error': f'Invalid seed source: {effective_seed_source}'}, status=400)
+        else:
+            effective_seed_source = record.seed_source
+
+        # The record's own Poll is authoritative and is never mutable
+        # through this endpoint — 'poll' is intentionally absent from
+        # `allowed`, so this can never drift.
+        effective_poll = record.poll
 
         if 'phase_status' in request.data:
             phase_status = request.data.get('phase_status', '').strip()
@@ -620,8 +822,13 @@ class ATCropMonitoringUpdateView(APIView):
                 record.damage_cause = damage_cause
                 record.delay_days = None
 
+        # crop_phase, seed_source, area_monitored_ha are handled explicitly
+        # below — excluded here so they can never be double-processed or
+        # order-dependent.
         for field in allowed:
-            if field in request.data and field != 'phase_status':
+            if field in request.data and field not in (
+                'phase_status', 'crop_phase', 'seed_source', 'area_monitored_ha'
+            ):
                 if field == 'delay_days':
                     if request.data.get('delay_days') in [None, '']:
                         record.delay_days = None
@@ -632,16 +839,134 @@ class ATCropMonitoringUpdateView(APIView):
                             return Response({'error': 'Delay days must be a whole number.'}, status=400)
                 elif field == 'damage_cause':
                     record.damage_cause = request.data.get('damage_cause', '').strip()
-                elif field == 'seed_source':
-                    seed_source = request.data.get('seed_source', '')
-                    if seed_source is not None:
-                        seed_source = seed_source.strip() or None
-                    valid_sources = [s[0] for s in CropMonitoringRecord.SEED_SOURCE_CHOICES]
-                    if seed_source and seed_source not in valid_sources:
-                        return Response({'error': f'Invalid seed source: {seed_source}'}, status=400)
-                    record.seed_source = seed_source
                 else:
                     setattr(record, field, request.data[field] or None if field != 'remarks' else request.data[field])
+                    
+                # elif field == 'seed_source':
+                #     seed_source = request.data.get('seed_source', '')
+                #     if seed_source is not None:
+                #         seed_source = seed_source.strip() or None
+                #     valid_sources = [s[0] for s in CropMonitoringRecord.SEED_SOURCE_CHOICES]
+                #     if seed_source and seed_source not in valid_sources:
+                #         return Response({'error': f'Invalid seed source: {seed_source}'}, status=400)
+                #     record.seed_source = seed_source
+                # else:
+                #     setattr(record, field, request.data[field] or None if field != 'remarks' else request.data[field])
+        
+        record.crop_phase = effective_crop_phase
+        record.seed_source = effective_seed_source
+
+        # ── AREA MONITORED — ALWAYS enforced from here on, regardless of
+        # whether area_monitored_ha is present in request.data. This is
+        # what closes the gap: a request like {"crop_phase": "TILLERING"}
+        # with no area_monitored_ha still gets the baseline re-applied. ──
+        if effective_crop_phase == 'ESTABLISHMENT':
+            if 'area_monitored_ha' in request.data:
+                area_raw = request.data.get('area_monitored_ha')
+                if area_raw in [None, '']:
+                    return Response({'error': 'Area Monitored is required for Crop Establishment.'}, status=400)
+                try:
+                    area_value = Decimal(str(area_raw))
+                except (InvalidOperation, ValueError, TypeError):
+                    return Response({'error': 'Area Monitored must be a valid number.'}, status=400)
+                if area_value <= 0:
+                    return Response({'error': 'Area Monitored must be greater than zero.'}, status=400)
+
+                if effective_poll is None:
+                    return Response({
+                        'error_code': 'RECORD_HAS_NO_POLL',
+                        'error': 'This historical record has no associated season and cannot be area-validated.',
+                    }, status=400)
+
+                profile = getattr(record.farmer, 'profile', None)
+                farmer_hectares = profile.hectares if profile and profile.hectares is not None else None
+                if farmer_hectares is None:
+                    return Response({
+                        'error': "This farmer's total registered hectares is not set. Cannot validate Area Monitored."
+                    }, status=400)
+
+                if effective_seed_source in ('HYBRID', 'INBRED'):
+                    dist_entry_qs = DistributionEntry.objects.filter(
+                        farmer=record.farmer,
+                        batch__status='APPROVED',
+                        qty_bags__isnull=False,
+                        qty_bags__gt=0,
+                    ).filter(
+                        batch__event__season=effective_poll.season,
+                        batch__event__year=effective_poll.year,
+                    ).select_related('batch__event__seed_type').order_by('-batch__approved_at')
+
+                    matching_entry = None
+                    for entry in dist_entry_qs:
+                        seed_type_obj = entry.batch.event.seed_type
+                        if not seed_type_obj:
+                            continue
+                        seed_type_upper = seed_type_obj.name.upper()
+                        if effective_seed_source == 'HYBRID' and 'HYBRID' in seed_type_upper:
+                            matching_entry = entry
+                            break
+                        if effective_seed_source == 'INBRED' and 'INBRED' in seed_type_upper:
+                            matching_entry = entry
+                            break
+
+                    if not matching_entry or matching_entry.farm_area_ha is None:
+                        return Response({
+                            'error': f'No {effective_seed_source.title()} seed distribution area found for this farmer.'
+                        }, status=400)
+                    if area_value > matching_entry.farm_area_ha:
+                        return Response({
+                            'error': (
+                                f"Area Monitored ({area_value} ha) cannot exceed the farmer's "
+                                f"{effective_seed_source.title()} seed distribution area of {matching_entry.farm_area_ha} ha."
+                            )
+                        }, status=400)
+
+                existing_qs = CropMonitoringRecord.objects.filter(
+                    farmer=record.farmer, crop_phase='ESTABLISHMENT', poll=effective_poll,
+                ).exclude(pk=record.pk)
+                existing_total = sum((r.area_monitored_ha or Decimal('0')) for r in existing_qs)
+                if existing_total + area_value > farmer_hectares:
+                    remaining = max(farmer_hectares - existing_total, Decimal('0'))
+                    return Response({
+                        'error': (
+                            f"Area Monitored ({area_value} ha) would exceed the farmer's total "
+                            f"registered hectares of {farmer_hectares} ha. Remaining available: {remaining} ha."
+                        )
+                    }, status=400)
+
+                record.area_monitored_ha = area_value
+            # else: 'area_monitored_ha' was not submitted. This is an edit
+            # to some other field (Date Observed, Remarks, phase_status,
+            # etc.) on an existing Establishment record. Leave the stored
+            # area untouched and do NOT re-run ceiling validation — a
+            # distribution or profile value that changed after this record
+            # was originally saved must not retroactively break an
+            # unrelated edit.
+        else:
+            # Non-Establishment: ALWAYS re-derive from the matching
+            # Establishment baseline, even if area_monitored_ha was not
+            # submitted at all.
+            if effective_poll is None:
+                return Response({
+                    'error_code': 'RECORD_HAS_NO_POLL',
+                    'error': 'This historical record has no associated season and cannot be area-validated.',
+                }, status=400)
+            estab_record = CropMonitoringRecord.objects.filter(
+                farmer=record.farmer,
+                seed_source=effective_seed_source,
+                crop_phase='ESTABLISHMENT',
+                poll=effective_poll,
+            ).exclude(pk=record.pk).order_by('-date_observed', '-encoded_at').first()
+            if not estab_record or estab_record.area_monitored_ha is None:
+                return Response({
+                    'error': (
+                        f'No Crop Establishment record found for this farmer and '
+                        f'{effective_seed_source or "this seed type"}. Establishment must be '
+                        f'recorded before {effective_crop_phase.title() if effective_crop_phase else "this phase"}.'
+                    )
+                }, status=400)
+            record.area_monitored_ha = estab_record.area_monitored_ha
+
         record.save()
 
         serializer = CropMonitoringRecordSerializer(record)

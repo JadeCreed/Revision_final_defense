@@ -1,343 +1,898 @@
 Backend/
-├── .gitignore
-├── backend/
-│   ├── .env
-│   ├── .env.example
-│   ├── .gitignore
-│   ├── address.json
-│   ├── apps/
-│   │   ├── accounts/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── authentication.py
-│   │   │   ├── choices.py
-│   │   │   ├── managers.py
-│   │   │   ├── models.py
-│   │   │   ├── permissions.py
-│   │   │   ├── rate_limit.py
-│   │   │   ├── serializers.py
-│   │   │   ├── signals.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── utils.py
-│   │   │   ├── views.py
-│   │   │   └── views_dashboard.py
-│   │   ├── analytics/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── views.py
-│   │   │   └── views_monthly.py
-│   │   ├── announcements/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── sms_service.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── views.py
-│   │   │   └── views_sms.py
-│   │   ├── crop_monitoring/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── signals.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── crop_phase/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── distribution/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── serializers_beneficiaries.py
-│   │   │   ├── serializers_distribution.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── urls_beneficiaries.py
-│   │   │   ├── urls_distribution.py
-│   │   │   ├── views.py
-│   │   │   ├── views_beneficiaries.py
-│   │   │   └── views_distribution.py
-│   │   ├── gis_map/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── views.py
-│   │   │   └── views_public.py
-│   │   ├── production/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   ├── views.py
-│   │   │   └── views_brgy_report.py
-│   │   ├── reports/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── templates_excel/
-│   │   │   │   └── hybrid_masterlist.xlsx
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   ├── seed_inventory/
-│   │   │   ├── __init__.py
-│   │   │   ├── admin.py
-│   │   │   ├── apps.py
-│   │   │   ├── models.py
-│   │   │   ├── serializers.py
-│   │   │   ├── tests.py
-│   │   │   ├── urls.py
-│   │   │   └── views.py
-│   │   └── seed_poll/
-│   │       ├── __init__.py
-│   │       ├── admin.py
-│   │       ├── apps.py
-│   │       ├── management/
-│   │       │   ├── __init__.py
-│   │       │   └── commands/
-│   │       │       ├── __init__.py
-│   │       │       └── seed_seed_types.py
-│   │       ├── models.py
-│   │       ├── serializers.py
-│   │       ├── tests.py
-│   │       ├── urls.py
-│   │       ├── utils.py
-│   │       └── views.py
-│   ├── check_gis_data.py
-│   ├── config/
-│   │   ├── __init__.py
-│   │   ├── asgi.py
-│   │   ├── settings/
-│   │   │   ├── __init__.py
-│   │   │   ├── base.py
-│   │   │   ├── dev.py
-│   │   │   └── prod.py
-│   │   ├── urls.py
-│   │   └── wsgi.py
-│   ├── db.sqlite3
-│   ├── db.sqlite3.backup
-│   ├── fix_encoding.py
-│   ├── fixtures/
-│   │   ├── data.json
-│   │   └── data_fixed.json
-│   ├── generate_luzon.py
-│   ├── manage.py
-│   ├── README_ENV.md
-│   ├── requirements.txt
-│   └── templates/
-│       ├── login.html
-│       └── register.html
-├── CAPSTONE_SEED_UTILIZATION_PLAN.txt
-├── COMPLETE_UI_UX_SPECIFICATIONS.md
-├── FarmerRecordsCode.txt
-├── frontend/
-│   ├── .gitignore
-│   ├── eslint.config.js
-│   ├── index.html
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── postcss.config.js
-│   ├── public/
-│   │   ├── favicon.svg
-│   │   ├── icons.svg
-│   │   ├── logo.png
-│   │   ├── manifest.json
-│   │   └── sw.js
-│   ├── README.md
-│   ├── src/
-│   │   ├── api/
-│   │   │   ├── adminDashboard.js
-│   │   │   └── axios.js
-│   │   ├── App.css
-│   │   ├── App.jsx
-│   │   ├── assets/
-│   │   │   ├── hero.png
-│   │   │   ├── logo.png
-│   │   │   ├── react.svg
-│   │   │   └── vite.svg
-│   │   ├── auth/
-│   │   │   ├── AuthContext.jsx
-│   │   │   └── useInactivityTimeout.js
-│   │   ├── components/
-│   │   │   ├── AboutSection.jsx
-│   │   │   ├── AddressSelector.jsx
-│   │   │   ├── admin/
-│   │   │   │   └── dashboard/
-│   │   │   │       ├── DashBarangayChart.jsx
-│   │   │   │       ├── DashDamageChart.jsx
-│   │   │   │       ├── DashDelayChart.jsx
-│   │   │   │       ├── DashGanttSummary.jsx
-│   │   │   │       ├── DashInsights.jsx
-│   │   │   │       ├── DashKpiCards.jsx
-│   │   │   │       ├── DashPhaseChart.jsx
-│   │   │   │       └── DashYieldChart.jsx
-│   │   │   ├── announcements/
-│   │   │   │   ├── AnnouncementCard.jsx
-│   │   │   │   ├── AnnouncementDetail.jsx
-│   │   │   │   └── AnnouncementsListPage.jsx
-│   │   │   ├── AnnouncementsSection.jsx
-│   │   │   ├── app/
-│   │   │   │   ├── AppSplashScreen.jsx
-│   │   │   │   └── OfflineBanner.jsx
-│   │   │   ├── AreaMonitoring.jsx
-│   │   │   ├── AttentionPanel.jsx
-│   │   │   ├── AuthBox.jsx
-│   │   │   ├── ComplianceDonut.jsx
-│   │   │   ├── DamageChart.jsx
-│   │   │   ├── DelayChart.jsx
-│   │   │   ├── DocumentationSection.jsx
-│   │   │   ├── FooterSection.jsx
-│   │   │   ├── GanttChart.jsx
-│   │   │   ├── gis/
-│   │   │   │   ├── GisLegend.jsx
-│   │   │   │   ├── LucbanGisMap.jsx
-│   │   │   │   └── PublicGisMap.jsx
-│   │   │   ├── GisMapSection.jsx
-│   │   │   ├── Hero.jsx
-│   │   │   ├── InactivityWarningDialog.jsx
-│   │   │   ├── Input.jsx
-│   │   │   ├── KpiCards.jsx
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── navigation/
-│   │   │   │   ├── BottomNav.jsx
-│   │   │   │   ├── MenuConfig.js
-│   │   │   │   ├── Sidebar.jsx
-│   │   │   │   └── UserNavConfig.js
-│   │   │   ├── PhaseDistribution.jsx
-│   │   │   ├── poll/
-│   │   │   │   ├── PollCard.jsx
-│   │   │   │   └── VoteForm.jsx
-│   │   │   ├── production/
-│   │   │   │   ├── charts/
-│   │   │   │   │   ├── HarvestStatusDonut.jsx
-│   │   │   │   │   ├── ProductionBySeedChart.jsx
-│   │   │   │   │   ├── YieldBySeedChart.jsx
-│   │   │   │   │   └── YieldGapChart.jsx
-│   │   │   │   ├── HarvestPerformanceTable.jsx
-│   │   │   │   ├── ProductionFilterBar.jsx
-│   │   │   │   ├── ProductionInsights.jsx
-│   │   │   │   ├── ProductionTiles.jsx
-│   │   │   │   ├── productionUtils.jsx
-│   │   │   │   └── YieldGapTable.jsx
-│   │   │   ├── SeasonalSowing.jsx
-│   │   │   └── tables/
-│   │   │       └── TableBase.jsx
-│   │   ├── data/
-│   │   │   ├── address.json
-│   │   │   ├── LucbanGIS.json
-│   │   │   └── luzon_formatted.json
-│   │   ├── hooks/
-│   │   │   ├── useAppDisplayMode.js
-│   │   │   ├── useNetworkStatus.js
-│   │   │   └── usePwaInstall.js
-│   │   ├── index.css
-│   │   ├── layouts/
-│   │   │   ├── DashboardLayout.jsx
-│   │   │   ├── PublicLayout.jsx
-│   │   │   └── UserLayout.jsx
-│   │   ├── main.jsx
-│   │   ├── pages/
-│   │   │   ├── admin/
-│   │   │   │   ├── AdminBeneficiaries.jsx
-│   │   │   │   ├── AdminDashboard.jsx
-│   │   │   │   ├── AdminDistribution.jsx
-│   │   │   │   ├── AdminProfile.jsx
-│   │   │   │   ├── Announcement.jsx
-│   │   │   │   ├── CropPhase.jsx
-│   │   │   │   ├── GisMap.jsx
-│   │   │   │   ├── Production.jsx
-│   │   │   │   ├── Reports.jsx
-│   │   │   │   ├── ReportsAnalytics.jsx
-│   │   │   │   ├── SeedInventory.jsx
-│   │   │   │   ├── SeedPoll.jsx
-│   │   │   │   ├── Settings.jsx
-│   │   │   │   ├── UserManagement.jsx
-│   │   │   │   └── users/
-│   │   │   │       ├── Archive.jsx
-│   │   │   │       ├── FarmerMasterlist.jsx
-│   │   │   │       ├── FarmerRecords.jsx
-│   │   │   │       ├── FarmerRequests.jsx
-│   │   │   │       ├── OfficialMasterlist.jsx
-│   │   │   │       ├── ResetRequests.jsx
-│   │   │   │       └── SystemUsers.jsx
-│   │   │   ├── AdminReset.jsx
-│   │   │   ├── at/
-│   │   │   │   ├── ATAnnouncements.jsx
-│   │   │   │   ├── ATDashboard.jsx
-│   │   │   │   ├── ATFarmers.jsx
-│   │   │   │   ├── ATGisMap.jsx
-│   │   │   │   ├── ATProfile.jsx
-│   │   │   │   ├── ATReports.jsx
-│   │   │   │   └── CropMonitoring.jsx
-│   │   │   ├── brgy/
-│   │   │   │   ├── BPDashboard.jsx
-│   │   │   │   ├── BPProfile.jsx
-│   │   │   │   ├── BrgyAnnouncements.jsx
-│   │   │   │   ├── BrgyBeneficiaries.jsx
-│   │   │   │   ├── BrgyDistribution.jsx
-│   │   │   │   ├── BrgyFarmers.jsx
-│   │   │   │   ├── BrgyGisMap.jsx
-│   │   │   │   ├── BrgyHarvest.jsx
-│   │   │   │   ├── BrgyPoll.jsx
-│   │   │   │   └── BrgyReports.jsx
-│   │   │   ├── farmer/
-│   │   │   │   ├── FarmerAnnouncements.jsx
-│   │   │   │   ├── FarmerDashboard.jsx
-│   │   │   │   ├── FarmerGisMap.jsx
-│   │   │   │   ├── FarmerPoll.jsx
-│   │   │   │   ├── FarmerProfile.jsx
-│   │   │   │   └── YieldEncode.jsx
-│   │   │   ├── ForgotPassword.jsx
-│   │   │   ├── Landing.jsx
-│   │   │   ├── NotFound.jsx
-│   │   │   ├── Offline.jsx
-│   │   │   ├── Register.jsx
-│   │   │   ├── ResetPassword.jsx
-│   │   │   └── VerifyOTP.jsx
-│   │   └── routes/
-│   │       ├── AppRoutes.jsx
-│   │       └── ProtectedRoute.jsx
-│   ├── tailwind.config.js
-│   └── vite.config.js
-├── gen_tree.py
-├── gen_tree_updated.py
-├── LOGIN_VALIDATION_SUMMARY.md
-├── SEASON_IMPLEMENTATION_SUMMARY.md
-├── system_flow.txt
-├── SYSTEM_FLOW_ANALYSIS.md
-├── test_gis_api.py
-├── tmp_tree_cleanup.py
-├── tree.txt
-├── tree_clean.txt
-├── tree_full.txt
-├── tree_structure.txt
-├── try.py
-└── try.txt
+|-- .claude/
+|   +-- settings.json
+|-- backend/
+|   |-- apps/
+|   |   |-- accounts/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_user_status_farmerprofile.py
+|   |   |   |   |-- 0003_agriculturaltechnicianprofile_brgypresidentprofile.py
+|   |   |   |   |-- 0004_alter_user_email.py
+|   |   |   |   |-- 0005_passwordresetotp.py
+|   |   |   |   |-- 0006_user_password_reset_requested.py
+|   |   |   |   |-- 0007_passwordresetotp_is_used.py
+|   |   |   |   |-- 0008_barangay.py
+|   |   |   |   |-- 0009_remove_user_password_reset_requested_and_more.py
+|   |   |   |   |-- 0010_remove_agriculturaltechnicianprofile_assigned_barangay_and_more.py
+|   |   |   |   |-- 0011_remove_farmerprofile_contact_number_and_more.py
+|   |   |   |   |-- 0012_add_farmerprofile_hectares.py
+|   |   |   |   |-- 0013_add_farmerprofile_id_card.py
+|   |   |   |   |-- 0014_farmermasterrecord.py
+|   |   |   |   |-- 0015_farmerprofile_date_deceased_and_more.py
+|   |   |   |   |-- 0016_farmerprofile_predecessor_and_more.py
+|   |   |   |   |-- 0017_agriculturaltechnicianprofile_archived_barangays_snapshot_and_more.py
+|   |   |   |   |-- 0018_auditlog.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- authentication.py
+|   |   |   |-- choices.py
+|   |   |   |-- managers.py
+|   |   |   |-- models.py
+|   |   |   |-- permissions.py
+|   |   |   |-- rate_limit.py
+|   |   |   |-- serializers.py
+|   |   |   |-- signals.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- utils.py
+|   |   |   |-- views.py
+|   |   |   +-- views_dashboard.py
+|   |   |-- analytics/
+|   |   |   |-- migrations/
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_monthly.py
+|   |   |-- announcements/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_announcement_announced_date.py
+|   |   |   |   |-- 0003_announcement_action_title_announcement_action_url.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- sms_service.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_sms.py
+|   |   |-- crop_monitoring/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_barangaycropsummary_cropmonitoringrecord_and_more.py
+|   |   |   |   |-- 0003_add_phase_status_fields.py
+|   |   |   |   |-- 0004_cropmonitoringrecord_seed_source.py
+|   |   |   |   |-- 0005_barangaycropsummary_poll_cropmonitoringrecord_poll_and_more.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- date_validation.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- signals.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- crop_phase/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- distribution/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_distributionevent_seed_delivered_and_more.py
+|   |   |   |   |-- 0003_distributionevent_delete_request_note_and_more.py
+|   |   |   |   |-- 0004_add_entry_variety_data_sharing.py
+|   |   |   |   |-- 0005_add_expected_sowing_authorized.py
+|   |   |   |   |-- 0006_distributionevent_final_seed.py
+|   |   |   |   |-- 0007_distributionbatch_distribution_approved_at_and_more.py
+|   |   |   |   |-- 0008_alter_distributionentry_qty_bags.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- serializers_beneficiaries.py
+|   |   |   |-- serializers_distribution.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- urls_beneficiaries.py
+|   |   |   |-- urls_distribution.py
+|   |   |   |-- views.py
+|   |   |   |-- views_beneficiaries.py
+|   |   |   |-- views_distribution.py
+|   |   |   +-- views_history.py
+|   |   |-- gis_map/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_public.py
+|   |   |-- production/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_harvestrecord_moisture_content_pct_and_more.py
+|   |   |   |   |-- 0003_harvestrecord_poll.py
+|   |   |   |   |-- 0004_remove_weight_type_moisture.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_brgy_report.py
+|   |   |-- reports/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- templates_excel/
+|   |   |   |   |-- hybrid_masterlist.xlsx
+|   |   |   |   +-- planting_accomplishment_report.xlsx
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- seed_inventory/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_seeddelivery_final_seed.py
+|   |   |   |   |-- 0003_seeddelivery_status.py
+|   |   |   |   |-- 0004_alter_brgyallocation_allocated_bags.py
+|   |   |   |   |-- 0005_deliveryschedule_deliveryscheduleentry.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   +-- seed_poll/
+|   |       |-- management/
+|   |       |   |-- commands/
+|   |       |   |   |-- __init__.py
+|   |       |   |   +-- seed_seed_types.py
+|   |       |   +-- __init__.py
+|   |       |-- migrations/
+|   |       |   |-- 0001_initial.py
+|   |       |   |-- 0002_alter_seedtype_options_alter_pollvote_hybrid_choice_and_more.py
+|   |       |   |-- 0003_finalseed.py
+|   |       |   +-- __init__.py
+|   |       |-- __init__.py
+|   |       |-- admin.py
+|   |       |-- apps.py
+|   |       |-- models.py
+|   |       |-- serializers.py
+|   |       |-- tests.py
+|   |       |-- urls.py
+|   |       |-- utils.py
+|   |       +-- views.py
+|   |-- config/
+|   |   |-- settings/
+|   |   |   |-- __init__.py
+|   |   |   |-- base.py
+|   |   |   |-- dev.py
+|   |   |   +-- prod.py
+|   |   |-- __init__.py
+|   |   |-- asgi.py
+|   |   |-- urls.py
+|   |   +-- wsgi.py
+|   |-- fixtures/
+|   |   |-- data.json
+|   |   +-- data_fixed.json
+|   |-- media/
+|   |   +-- farmer_ids/
+|   |       |-- farmer_10_id.png
+|   |       |-- farmer_11_id.png
+|   |       |-- farmer_12_id.png
+|   |       |-- farmer_13_id.png
+|   |       |-- farmer_13_id_7zIyZFc.png
+|   |       |-- farmer_14_id.png
+|   |       |-- farmer_27_id.png
+|   |       |-- farmer_2_id.png
+|   |       |-- farmer_30_id.png
+|   |       |-- farmer_3_id.png
+|   |       |-- farmer_4_id.png
+|   |       |-- farmer_4_id_PTfi6Ao.png
+|   |       |-- farmer_5_id.png
+|   |       |-- farmer_5_id_BNMTuxW.png
+|   |       |-- farmer_5_id_tqJNbtX.png
+|   |       |-- farmer_6_id.png
+|   |       |-- farmer_6_id_9WKVQyI.png
+|   |       |-- farmer_6_id_kWPEhoF.png
+|   |       |-- farmer_7_id.png
+|   |       |-- farmer_7_id_CdL3rMq.png
+|   |       |-- farmer_8_id.png
+|   |       |-- farmer_8_id_49O4RWK.png
+|   |       |-- farmer_8_id_gk8Jk8R.png
+|   |       +-- farmer_9_id.png
+|   |-- static/
+|   |-- templates/
+|   |   |-- login.html
+|   |   +-- register.html
+|   |-- .env
+|   |-- .env.example
+|   |-- .gitignore
+|   |-- address.json
+|   |-- check_gis_data.py
+|   |-- db.sqlite3
+|   |-- db.sqlite3.backup
+|   |-- fix_encoding.py
+|   |-- generate_luzon.py
+|   |-- manage.py
+|   |-- README_ENV.md
+|   +-- requirements.txt
+|-- frontend/
+|   |-- public/
+|   |   |-- favicon.svg
+|   |   |-- icons.svg
+|   |   |-- logo.png
+|   |   |-- manifest.json
+|   |   +-- sw.js
+|   |-- src/
+|   |   |-- api/
+|   |   |   |-- adminDashboard.js
+|   |   |   +-- axios.js
+|   |   |-- assets/
+|   |   |   |-- hero.png
+|   |   |   |-- logo.png
+|   |   |   |-- react.svg
+|   |   |   +-- vite.svg
+|   |   |-- auth/
+|   |   |   |-- AuthContext.jsx
+|   |   |   +-- useInactivityTimeout.js
+|   |   |-- components/
+|   |   |   |-- admin/
+|   |   |   |   +-- dashboard/
+|   |   |   |       |-- DashBarangayChart.jsx
+|   |   |   |       |-- DashDamageChart.jsx
+|   |   |   |       |-- DashDelayChart.jsx
+|   |   |   |       |-- DashGanttSummary.jsx
+|   |   |   |       |-- DashInsights.jsx
+|   |   |   |       |-- DashKpiCards.jsx
+|   |   |   |       |-- DashPhaseChart.jsx
+|   |   |   |       +-- DashYieldChart.jsx
+|   |   |   |-- announcements/
+|   |   |   |   |-- AnnouncementCard.jsx
+|   |   |   |   |-- AnnouncementDetail.jsx
+|   |   |   |   +-- AnnouncementsListPage.jsx
+|   |   |   |-- app/
+|   |   |   |   |-- AppSplashScreen.jsx
+|   |   |   |   +-- OfflineBanner.jsx
+|   |   |   |-- gis/
+|   |   |   |   |-- GisLegend.jsx
+|   |   |   |   |-- LucbanGisMap.jsx
+|   |   |   |   +-- PublicGisMap.jsx
+|   |   |   |-- navigation/
+|   |   |   |   |-- BottomNav.jsx
+|   |   |   |   |-- MenuConfig.js
+|   |   |   |   |-- Sidebar.jsx
+|   |   |   |   +-- UserNavConfig.js
+|   |   |   |-- poll/
+|   |   |   |   |-- PollCard.jsx
+|   |   |   |   +-- VoteForm.jsx
+|   |   |   |-- production/
+|   |   |   |   |-- charts/
+|   |   |   |   |   |-- HarvestStatusDonut.jsx
+|   |   |   |   |   |-- ProductionBySeedChart.jsx
+|   |   |   |   |   |-- YieldBySeedChart.jsx
+|   |   |   |   |   +-- YieldGapChart.jsx
+|   |   |   |   |-- HarvestPerformanceTable.jsx
+|   |   |   |   |-- ProductionFilterBar.jsx
+|   |   |   |   |-- ProductionInsights.jsx
+|   |   |   |   |-- ProductionTiles.jsx
+|   |   |   |   |-- productionUtils.jsx
+|   |   |   |   +-- YieldGapTable.jsx
+|   |   |   |-- tables/
+|   |   |   |   +-- TableBase.jsx
+|   |   |   |-- AboutSection.jsx
+|   |   |   |-- AddressSelector.jsx
+|   |   |   |-- AnnouncementsSection.jsx
+|   |   |   |-- AreaMonitoring.jsx
+|   |   |   |-- AttentionPanel.jsx
+|   |   |   |-- AuthBox.jsx
+|   |   |   |-- ComplianceDonut.jsx
+|   |   |   |-- DamageChart.jsx
+|   |   |   |-- DelayChart.jsx
+|   |   |   |-- DocumentationSection.jsx
+|   |   |   |-- FooterSection.jsx
+|   |   |   |-- GanttChart.jsx
+|   |   |   |-- GisMapSection.jsx
+|   |   |   |-- Hero.jsx
+|   |   |   |-- InactivityWarningDialog.jsx
+|   |   |   |-- Input.jsx
+|   |   |   |-- KpiCards.jsx
+|   |   |   |-- Navbar.jsx
+|   |   |   |-- PhaseDistribution.jsx
+|   |   |   +-- SeasonalSowing.jsx
+|   |   |-- data/
+|   |   |   |-- address.json
+|   |   |   |-- LucbanGIS.json
+|   |   |   +-- luzon_formatted.json
+|   |   |-- hooks/
+|   |   |   |-- useAppDisplayMode.js
+|   |   |   |-- useNetworkStatus.js
+|   |   |   +-- usePwaInstall.js
+|   |   |-- layouts/
+|   |   |   |-- DashboardLayout.jsx
+|   |   |   |-- PublicLayout.jsx
+|   |   |   +-- UserLayout.jsx
+|   |   |-- pages/
+|   |   |   |-- admin/
+|   |   |   |   |-- users/
+|   |   |   |   |   |-- AdminSeedHistory.jsx
+|   |   |   |   |   |-- Archive.jsx
+|   |   |   |   |   |-- FarmerMasterlist.jsx
+|   |   |   |   |   |-- FarmerRecords.jsx
+|   |   |   |   |   |-- FarmerRequests.jsx
+|   |   |   |   |   |-- OfficialMasterlist.jsx
+|   |   |   |   |   |-- ResetRequests.jsx
+|   |   |   |   |   +-- SystemUsers.jsx
+|   |   |   |   |-- AdminBeneficiaries.jsx
+|   |   |   |   |-- AdminDashboard.jsx
+|   |   |   |   |-- AdminDistribution.jsx
+|   |   |   |   |-- AdminProfile.jsx
+|   |   |   |   |-- Announcement.jsx
+|   |   |   |   |-- CropPhase.jsx
+|   |   |   |   |-- GisMap.jsx
+|   |   |   |   |-- Production.jsx
+|   |   |   |   |-- Reports.jsx
+|   |   |   |   |-- ReportsAnalytics.jsx
+|   |   |   |   |-- SeedInventory.jsx
+|   |   |   |   |-- SeedPoll.jsx
+|   |   |   |   |-- Settings.jsx
+|   |   |   |   +-- UserManagement.jsx
+|   |   |   |-- at/
+|   |   |   |   |-- ATAnnouncements.jsx
+|   |   |   |   |-- ATDashboard.jsx
+|   |   |   |   |-- ATFarmers.jsx
+|   |   |   |   |-- ATGisMap.jsx
+|   |   |   |   |-- ATProfile.jsx
+|   |   |   |   |-- ATReports.jsx
+|   |   |   |   +-- CropMonitoring.jsx
+|   |   |   |-- brgy/
+|   |   |   |   |-- BPDashboard.jsx
+|   |   |   |   |-- BPProfile.jsx
+|   |   |   |   |-- BrgyAnnouncements.jsx
+|   |   |   |   |-- BrgyBeneficiaries.jsx
+|   |   |   |   |-- BrgyDistribution.jsx
+|   |   |   |   |-- BrgyFarmers.jsx
+|   |   |   |   |-- BrgyGisMap.jsx
+|   |   |   |   |-- BrgyHarvest.jsx
+|   |   |   |   |-- BrgyPoll.jsx
+|   |   |   |   +-- BrgyReports.jsx
+|   |   |   |-- farmer/
+|   |   |   |   |-- FarmerAnnouncements.jsx
+|   |   |   |   |-- FarmerDashboard.jsx
+|   |   |   |   |-- FarmerGisMap.jsx
+|   |   |   |   |-- FarmerPoll.jsx
+|   |   |   |   |-- FarmerProfile.jsx
+|   |   |   |   |-- FarmerSeedHistory.jsx
+|   |   |   |   +-- YieldEncode.jsx
+|   |   |   |-- AdminReset.jsx
+|   |   |   |-- ForgotPassword.jsx
+|   |   |   |-- Landing.jsx
+|   |   |   |-- NotFound.jsx
+|   |   |   |-- Offline.jsx
+|   |   |   |-- Register.jsx
+|   |   |   |-- ResetPassword.jsx
+|   |   |   +-- VerifyOTP.jsx
+|   |   |-- routes/
+|   |   |   |-- AppRoutes.jsx
+|   |   |   +-- ProtectedRoute.jsx
+|   |   |-- App.css
+|   |   |-- App.jsx
+|   |   |-- index.css
+|   |   +-- main.jsx
+|   |-- .gitignore
+|   |-- eslint.config.js
+|   |-- index.html
+|   |-- package-lock.json
+|   |-- package.json
+|   |-- postcss.config.js
+|   |-- README.md
+|   |-- tailwind.config.js
+|   +-- vite.config.js
+|-- .gitignore
+|-- CAPSTONE_SEED_UTILIZATION_PLAN.txt
+|-- CLAUDE.md
+|-- COMPLETE_UI_UX_SPECIFICATIONS.md
+|-- FarmerRecordsCode.txt
+|-- gen_tree.py
+|-- gen_tree_updated.py
+|-- LOGIN_VALIDATION_SUMMARY.md
+|-- SEASON_IMPLEMENTATION_SUMMARY.md
+|-- system_flow.txt
+|-- SYSTEM_FLOW_ANALYSIS.md
+|-- test_gis_api.py
+|-- tmp_tree_cleanup.py
+|-- tree.txt
+|-- tree_clean.txt
+|-- tree_full.txt
+|-- tree_structure.txt
+|-- try.py
++-- try.txt
+Backend/
+|-- .claude/
+|   +-- settings.json
+|-- backend/
+|   |-- apps/
+|   |   |-- accounts/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_user_status_farmerprofile.py
+|   |   |   |   |-- 0003_agriculturaltechnicianprofile_brgypresidentprofile.py
+|   |   |   |   |-- 0004_alter_user_email.py
+|   |   |   |   |-- 0005_passwordresetotp.py
+|   |   |   |   |-- 0006_user_password_reset_requested.py
+|   |   |   |   |-- 0007_passwordresetotp_is_used.py
+|   |   |   |   |-- 0008_barangay.py
+|   |   |   |   |-- 0009_remove_user_password_reset_requested_and_more.py
+|   |   |   |   |-- 0010_remove_agriculturaltechnicianprofile_assigned_barangay_and_more.py
+|   |   |   |   |-- 0011_remove_farmerprofile_contact_number_and_more.py
+|   |   |   |   |-- 0012_add_farmerprofile_hectares.py
+|   |   |   |   |-- 0013_add_farmerprofile_id_card.py
+|   |   |   |   |-- 0014_farmermasterrecord.py
+|   |   |   |   |-- 0015_farmerprofile_date_deceased_and_more.py
+|   |   |   |   |-- 0016_farmerprofile_predecessor_and_more.py
+|   |   |   |   |-- 0017_agriculturaltechnicianprofile_archived_barangays_snapshot_and_more.py
+|   |   |   |   |-- 0018_auditlog.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- authentication.py
+|   |   |   |-- choices.py
+|   |   |   |-- managers.py
+|   |   |   |-- models.py
+|   |   |   |-- permissions.py
+|   |   |   |-- rate_limit.py
+|   |   |   |-- serializers.py
+|   |   |   |-- signals.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- utils.py
+|   |   |   |-- views.py
+|   |   |   +-- views_dashboard.py
+|   |   |-- analytics/
+|   |   |   |-- migrations/
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_monthly.py
+|   |   |-- announcements/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_announcement_announced_date.py
+|   |   |   |   |-- 0003_announcement_action_title_announcement_action_url.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- sms_service.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_sms.py
+|   |   |-- crop_monitoring/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_barangaycropsummary_cropmonitoringrecord_and_more.py
+|   |   |   |   |-- 0003_add_phase_status_fields.py
+|   |   |   |   |-- 0004_cropmonitoringrecord_seed_source.py
+|   |   |   |   |-- 0005_barangaycropsummary_poll_cropmonitoringrecord_poll_and_more.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- date_validation.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- signals.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- crop_phase/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- distribution/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_distributionevent_seed_delivered_and_more.py
+|   |   |   |   |-- 0003_distributionevent_delete_request_note_and_more.py
+|   |   |   |   |-- 0004_add_entry_variety_data_sharing.py
+|   |   |   |   |-- 0005_add_expected_sowing_authorized.py
+|   |   |   |   |-- 0006_distributionevent_final_seed.py
+|   |   |   |   |-- 0007_distributionbatch_distribution_approved_at_and_more.py
+|   |   |   |   |-- 0008_alter_distributionentry_qty_bags.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- serializers_beneficiaries.py
+|   |   |   |-- serializers_distribution.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- urls_beneficiaries.py
+|   |   |   |-- urls_distribution.py
+|   |   |   |-- views.py
+|   |   |   |-- views_beneficiaries.py
+|   |   |   |-- views_distribution.py
+|   |   |   +-- views_history.py
+|   |   |-- gis_map/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_public.py
+|   |   |-- production/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_harvestrecord_moisture_content_pct_and_more.py
+|   |   |   |   |-- 0003_harvestrecord_poll.py
+|   |   |   |   |-- 0004_remove_weight_type_moisture.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   |-- views.py
+|   |   |   +-- views_brgy_report.py
+|   |   |-- reports/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- templates_excel/
+|   |   |   |   |-- hybrid_masterlist.xlsx
+|   |   |   |   +-- planting_accomplishment_report.xlsx
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   |-- seed_inventory/
+|   |   |   |-- migrations/
+|   |   |   |   |-- 0001_initial.py
+|   |   |   |   |-- 0002_seeddelivery_final_seed.py
+|   |   |   |   |-- 0003_seeddelivery_status.py
+|   |   |   |   |-- 0004_alter_brgyallocation_allocated_bags.py
+|   |   |   |   |-- 0005_deliveryschedule_deliveryscheduleentry.py
+|   |   |   |   +-- __init__.py
+|   |   |   |-- __init__.py
+|   |   |   |-- admin.py
+|   |   |   |-- apps.py
+|   |   |   |-- models.py
+|   |   |   |-- serializers.py
+|   |   |   |-- tests.py
+|   |   |   |-- urls.py
+|   |   |   +-- views.py
+|   |   +-- seed_poll/
+|   |       |-- management/
+|   |       |   |-- commands/
+|   |       |   |   |-- __init__.py
+|   |       |   |   +-- seed_seed_types.py
+|   |       |   +-- __init__.py
+|   |       |-- migrations/
+|   |       |   |-- 0001_initial.py
+|   |       |   |-- 0002_alter_seedtype_options_alter_pollvote_hybrid_choice_and_more.py
+|   |       |   |-- 0003_finalseed.py
+|   |       |   +-- __init__.py
+|   |       |-- __init__.py
+|   |       |-- admin.py
+|   |       |-- apps.py
+|   |       |-- models.py
+|   |       |-- serializers.py
+|   |       |-- tests.py
+|   |       |-- urls.py
+|   |       |-- utils.py
+|   |       +-- views.py
+|   |-- config/
+|   |   |-- settings/
+|   |   |   |-- __init__.py
+|   |   |   |-- base.py
+|   |   |   |-- dev.py
+|   |   |   +-- prod.py
+|   |   |-- __init__.py
+|   |   |-- asgi.py
+|   |   |-- urls.py
+|   |   +-- wsgi.py
+|   |-- fixtures/
+|   |   |-- data.json
+|   |   +-- data_fixed.json
+|   |-- media/
+|   |   +-- farmer_ids/
+|   |       |-- farmer_10_id.png
+|   |       |-- farmer_11_id.png
+|   |       |-- farmer_12_id.png
+|   |       |-- farmer_13_id.png
+|   |       |-- farmer_13_id_7zIyZFc.png
+|   |       |-- farmer_14_id.png
+|   |       |-- farmer_27_id.png
+|   |       |-- farmer_2_id.png
+|   |       |-- farmer_30_id.png
+|   |       |-- farmer_3_id.png
+|   |       |-- farmer_4_id.png
+|   |       |-- farmer_4_id_PTfi6Ao.png
+|   |       |-- farmer_5_id.png
+|   |       |-- farmer_5_id_BNMTuxW.png
+|   |       |-- farmer_5_id_tqJNbtX.png
+|   |       |-- farmer_6_id.png
+|   |       |-- farmer_6_id_9WKVQyI.png
+|   |       |-- farmer_6_id_kWPEhoF.png
+|   |       |-- farmer_7_id.png
+|   |       |-- farmer_7_id_CdL3rMq.png
+|   |       |-- farmer_8_id.png
+|   |       |-- farmer_8_id_49O4RWK.png
+|   |       |-- farmer_8_id_gk8Jk8R.png
+|   |       +-- farmer_9_id.png
+|   |-- static/
+|   |-- templates/
+|   |   |-- login.html
+|   |   +-- register.html
+|   |-- .env
+|   |-- .env.example
+|   |-- .gitignore
+|   |-- address.json
+|   |-- check_gis_data.py
+|   |-- db.sqlite3
+|   |-- db.sqlite3.backup
+|   |-- fix_encoding.py
+|   |-- generate_luzon.py
+|   |-- manage.py
+|   |-- README_ENV.md
+|   +-- requirements.txt
+|-- frontend/
+|   |-- public/
+|   |   |-- favicon.svg
+|   |   |-- icons.svg
+|   |   |-- logo.png
+|   |   |-- manifest.json
+|   |   +-- sw.js
+|   |-- src/
+|   |   |-- api/
+|   |   |   |-- adminDashboard.js
+|   |   |   +-- axios.js
+|   |   |-- assets/
+|   |   |   |-- hero.png
+|   |   |   |-- logo.png
+|   |   |   |-- react.svg
+|   |   |   +-- vite.svg
+|   |   |-- auth/
+|   |   |   |-- AuthContext.jsx
+|   |   |   +-- useInactivityTimeout.js
+|   |   |-- components/
+|   |   |   |-- admin/
+|   |   |   |   +-- dashboard/
+|   |   |   |       |-- DashBarangayChart.jsx
+|   |   |   |       |-- DashDamageChart.jsx
+|   |   |   |       |-- DashDelayChart.jsx
+|   |   |   |       |-- DashGanttSummary.jsx
+|   |   |   |       |-- DashInsights.jsx
+|   |   |   |       |-- DashKpiCards.jsx
+|   |   |   |       |-- DashPhaseChart.jsx
+|   |   |   |       +-- DashYieldChart.jsx
+|   |   |   |-- announcements/
+|   |   |   |   |-- AnnouncementCard.jsx
+|   |   |   |   |-- AnnouncementDetail.jsx
+|   |   |   |   +-- AnnouncementsListPage.jsx
+|   |   |   |-- app/
+|   |   |   |   |-- AppSplashScreen.jsx
+|   |   |   |   +-- OfflineBanner.jsx
+|   |   |   |-- gis/
+|   |   |   |   |-- GisLegend.jsx
+|   |   |   |   |-- LucbanGisMap.jsx
+|   |   |   |   +-- PublicGisMap.jsx
+|   |   |   |-- navigation/
+|   |   |   |   |-- BottomNav.jsx
+|   |   |   |   |-- MenuConfig.js
+|   |   |   |   |-- Sidebar.jsx
+|   |   |   |   +-- UserNavConfig.js
+|   |   |   |-- poll/
+|   |   |   |   |-- PollCard.jsx
+|   |   |   |   +-- VoteForm.jsx
+|   |   |   |-- production/
+|   |   |   |   |-- charts/
+|   |   |   |   |   |-- HarvestStatusDonut.jsx
+|   |   |   |   |   |-- ProductionBySeedChart.jsx
+|   |   |   |   |   |-- YieldBySeedChart.jsx
+|   |   |   |   |   +-- YieldGapChart.jsx
+|   |   |   |   |-- HarvestPerformanceTable.jsx
+|   |   |   |   |-- ProductionFilterBar.jsx
+|   |   |   |   |-- ProductionInsights.jsx
+|   |   |   |   |-- ProductionTiles.jsx
+|   |   |   |   |-- productionUtils.jsx
+|   |   |   |   +-- YieldGapTable.jsx
+|   |   |   |-- tables/
+|   |   |   |   +-- TableBase.jsx
+|   |   |   |-- AboutSection.jsx
+|   |   |   |-- AddressSelector.jsx
+|   |   |   |-- AnnouncementsSection.jsx
+|   |   |   |-- AreaMonitoring.jsx
+|   |   |   |-- AttentionPanel.jsx
+|   |   |   |-- AuthBox.jsx
+|   |   |   |-- ComplianceDonut.jsx
+|   |   |   |-- DamageChart.jsx
+|   |   |   |-- DelayChart.jsx
+|   |   |   |-- DocumentationSection.jsx
+|   |   |   |-- FooterSection.jsx
+|   |   |   |-- GanttChart.jsx
+|   |   |   |-- GisMapSection.jsx
+|   |   |   |-- Hero.jsx
+|   |   |   |-- InactivityWarningDialog.jsx
+|   |   |   |-- Input.jsx
+|   |   |   |-- KpiCards.jsx
+|   |   |   |-- Navbar.jsx
+|   |   |   |-- PhaseDistribution.jsx
+|   |   |   +-- SeasonalSowing.jsx
+|   |   |-- data/
+|   |   |   |-- address.json
+|   |   |   |-- LucbanGIS.json
+|   |   |   +-- luzon_formatted.json
+|   |   |-- hooks/
+|   |   |   |-- useAppDisplayMode.js
+|   |   |   |-- useNetworkStatus.js
+|   |   |   +-- usePwaInstall.js
+|   |   |-- layouts/
+|   |   |   |-- DashboardLayout.jsx
+|   |   |   |-- PublicLayout.jsx
+|   |   |   +-- UserLayout.jsx
+|   |   |-- pages/
+|   |   |   |-- admin/
+|   |   |   |   |-- users/
+|   |   |   |   |   |-- AdminSeedHistory.jsx
+|   |   |   |   |   |-- Archive.jsx
+|   |   |   |   |   |-- FarmerMasterlist.jsx
+|   |   |   |   |   |-- FarmerRecords.jsx
+|   |   |   |   |   |-- FarmerRequests.jsx
+|   |   |   |   |   |-- OfficialMasterlist.jsx
+|   |   |   |   |   |-- ResetRequests.jsx
+|   |   |   |   |   +-- SystemUsers.jsx
+|   |   |   |   |-- AdminBeneficiaries.jsx
+|   |   |   |   |-- AdminDashboard.jsx
+|   |   |   |   |-- AdminDistribution.jsx
+|   |   |   |   |-- AdminProfile.jsx
+|   |   |   |   |-- Announcement.jsx
+|   |   |   |   |-- CropPhase.jsx
+|   |   |   |   |-- GisMap.jsx
+|   |   |   |   |-- Production.jsx
+|   |   |   |   |-- Reports.jsx
+|   |   |   |   |-- ReportsAnalytics.jsx
+|   |   |   |   |-- SeedInventory.jsx
+|   |   |   |   |-- SeedPoll.jsx
+|   |   |   |   |-- Settings.jsx
+|   |   |   |   +-- UserManagement.jsx
+|   |   |   |-- at/
+|   |   |   |   |-- ATAnnouncements.jsx
+|   |   |   |   |-- ATDashboard.jsx
+|   |   |   |   |-- ATFarmers.jsx
+|   |   |   |   |-- ATGisMap.jsx
+|   |   |   |   |-- ATProfile.jsx
+|   |   |   |   |-- ATReports.jsx
+|   |   |   |   +-- CropMonitoring.jsx
+|   |   |   |-- brgy/
+|   |   |   |   |-- BPDashboard.jsx
+|   |   |   |   |-- BPProfile.jsx
+|   |   |   |   |-- BrgyAnnouncements.jsx
+|   |   |   |   |-- BrgyBeneficiaries.jsx
+|   |   |   |   |-- BrgyDistribution.jsx
+|   |   |   |   |-- BrgyFarmers.jsx
+|   |   |   |   |-- BrgyGisMap.jsx
+|   |   |   |   |-- BrgyHarvest.jsx
+|   |   |   |   |-- BrgyPoll.jsx
+|   |   |   |   +-- BrgyReports.jsx
+|   |   |   |-- farmer/
+|   |   |   |   |-- FarmerAnnouncements.jsx
+|   |   |   |   |-- FarmerDashboard.jsx
+|   |   |   |   |-- FarmerGisMap.jsx
+|   |   |   |   |-- FarmerPoll.jsx
+|   |   |   |   |-- FarmerProfile.jsx
+|   |   |   |   |-- FarmerSeedHistory.jsx
+|   |   |   |   +-- YieldEncode.jsx
+|   |   |   |-- AdminReset.jsx
+|   |   |   |-- ForgotPassword.jsx
+|   |   |   |-- Landing.jsx
+|   |   |   |-- NotFound.jsx
+|   |   |   |-- Offline.jsx
+|   |   |   |-- Register.jsx
+|   |   |   |-- ResetPassword.jsx
+|   |   |   +-- VerifyOTP.jsx
+|   |   |-- routes/
+|   |   |   |-- AppRoutes.jsx
+|   |   |   +-- ProtectedRoute.jsx
+|   |   |-- App.css
+|   |   |-- App.jsx
+|   |   |-- index.css
+|   |   +-- main.jsx
+|   |-- .gitignore
+|   |-- eslint.config.js
+|   |-- index.html
+|   |-- package-lock.json
+|   |-- package.json
+|   |-- postcss.config.js
+|   |-- README.md
+|   |-- tailwind.config.js
+|   +-- vite.config.js
+|-- .gitignore
+|-- CAPSTONE_SEED_UTILIZATION_PLAN.txt
+|-- CLAUDE.md
+|-- COMPLETE_UI_UX_SPECIFICATIONS.md
+|-- FarmerRecordsCode.txt
+|-- gen_tree.py
+|-- gen_tree_updated.py
+|-- LOGIN_VALIDATION_SUMMARY.md
+|-- SEASON_IMPLEMENTATION_SUMMARY.md
+|-- system_flow.txt
+|-- SYSTEM_FLOW_ANALYSIS.md
+|-- test_gis_api.py
+|-- tmp_tree_cleanup.py
+|-- tree.txt
+|-- tree_clean.txt
+|-- tree_full.txt
+|-- tree_structure.txt
+|-- try.py
++-- try.txt

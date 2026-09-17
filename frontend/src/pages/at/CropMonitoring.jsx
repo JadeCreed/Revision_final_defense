@@ -54,6 +54,28 @@ const SEED_SOURCES = [
 const ITEMS_PER_PAGE = 10;
 
 // ─────────────────────────────────────────
+// SEASON DATE VALIDATION (Date Observed)
+// Mirrors backend apps/crop_monitoring/date_validation.py.
+// Independent of crop-phase/timeline logic.
+// ─────────────────────────────────────────
+const getSeasonDateRange = (season, year) => {
+  if (!season || !year) return null;
+  if (season === 'DRY') {
+    return { start: `${year - 1}-11-01`, end: `${year}-04-30` };
+  }
+  if (season === 'WET') {
+    return { start: `${year}-05-01`, end: `${year}-10-31` };
+  }
+  return null;
+};
+
+const isDateInSeason = (dateStr, season, year) => {
+  const range = getSeasonDateRange(season, year);
+  if (!range || !dateStr) return true; // unknown season: don't block, backend is final authority
+  return dateStr >= range.start && dateStr <= range.end;
+};
+
+// ─────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────
 const getNextAllowedPhase = (seedRecords, seedSource) => {
@@ -103,7 +125,7 @@ const Toast = ({ toast }) => {
 // ─────────────────────────────────────────
 // ENCODE FORM — HINDI BINAGO, BUO PA RIN
 // ─────────────────────────────────────────
-const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) => {
+const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast, activeSeason, dateValidationError }) => {
   const [form, setForm] = useState({
     seed_source:       editRecord?.seed_source || '',
     crop_phase:        editRecord?.crop_phase || '',
@@ -120,22 +142,42 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
   const [modalToast, setModalToast] = useState(null);
   const modalToastTimer = useRef(null);
 
+
+  // Date Observed season-validation modal state
+  const [seasonModal, setSeasonModal] = useState(null);
+  const dateInputRef = useRef(null);
+
+  const seasonLabel = (code) => (code === 'WET' ? 'Wet Season' : code === 'DRY' ? 'Dry Season' : code);
+
+  // Surface a backend-rejected date (edit path, or a no-Poll historical
+  // record) in the same modal the frontend precheck uses.
+  useEffect(() => {
+    if (!dateValidationError) return;
+    setSeasonModal({
+      enteredDate: dateValidationError.entered_date || form.date_observed,
+      seasonLabel: seasonLabel(dateValidationError.season),
+      year: dateValidationError.year || null,
+      start: dateValidationError.start_date || null,
+      end: dateValidationError.end_date || null,
+      noPoll: dateValidationError.error_code === 'RECORD_HAS_NO_POLL',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateValidationError]);
+
   const showModalToast = (type, message) => {
     setModalToast({ type, message });
     if (modalToastTimer.current) clearTimeout(modalToastTimer.current);
     modalToastTimer.current = setTimeout(() => setModalToast(null), 3500);
   };
 
-  // Auto-fill area_monitored_ha from crop establishment record when phase is not ESTABLISHMENT
+    // Later-phase Area Monitored is LOCKED and always synced to the
+  // Establishment baseline (CHANGE 2 backend now sends the real value).
+  // Always overwrite — the field is read-only, so it must always show truth.
   useEffect(() => {
-    if (
-      form.seed_source &&
-      form.crop_phase &&
-      form.crop_phase !== 'ESTABLISHMENT'
-    ) {
-      const establishmentArea = farmer.seed_records?.[form.seed_source]?.area_monitored_ha;
-      if (establishmentArea && !form.area_monitored_ha) {
-        setForm(p => ({ ...p, area_monitored_ha: String(establishmentArea) }));
+    if (form.seed_source && form.crop_phase && form.crop_phase !== 'ESTABLISHMENT') {
+      const baseline = farmer.seed_records?.[form.seed_source]?.area_monitored_ha;
+      if (baseline != null) {
+        setForm(p => ({ ...p, area_monitored_ha: String(baseline) }));
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -179,12 +221,82 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         errs.crop_phase = `Cannot skip phases. Please encode "${expectedLabel}" next.`;
       }
     }
+
+
+    // ── Area Monitored — Establishment only. Frontend pre-check so an
+    // invalid/over-ceiling value never reaches the API. Backend remains
+    // authoritative and re-validates independently regardless. ──
+    if (form.crop_phase === 'ESTABLISHMENT') {
+      const raw = form.area_monitored_ha;
+      if (raw === '' || raw === null || raw === undefined) {
+        errs.area_monitored_ha = 'Area Monitored is required.';
+      } else {
+        const num = Number(raw);
+        if (Number.isNaN(num)) {
+          errs.area_monitored_ha = 'Enter a valid number.';
+        } else if (num <= 0) {
+          errs.area_monitored_ha = 'Area Monitored must be greater than zero.';
+        } else {
+          const farmerHa = farmer.farmer_hectares != null ? Number(farmer.farmer_hectares) : null;
+          if (farmerHa != null && Number.isFinite(farmerHa)) {
+            // Sum existing Establishment baselines from OTHER seed types
+            // only — the current seed type's own prior value is excluded,
+            // mirroring the backend's .exclude(pk=record.pk) on update.
+            const existingEstablished = SEED_SOURCES.reduce((sum, s) => {
+              if (s.key === form.seed_source) return sum;
+              const v = parseFloat(seedRecords?.[s.key]?.area_monitored_ha);
+              return sum + (Number.isFinite(v) ? v : 0);
+            }, 0);
+            const remaining = farmerHa - existingEstablished;
+            if (num > remaining) {
+              errs.area_monitored_ha = `Area Monitored (${num} ha) would exceed the farmer's total registered hectares of ${farmerHa} ha. Remaining available: ${Math.max(remaining, 0).toFixed(2)} ha.`;
+            }
+          }
+          if (!errs.area_monitored_ha && (form.seed_source === 'HYBRID' || form.seed_source === 'INBRED')) {
+            const distRaw = farmer.distribution_by_seed_type?.[form.seed_source]?.farm_area_ha;
+            const distArea = distRaw != null ? Number(distRaw) : null;
+            const seedLabel = form.seed_source === 'HYBRID' ? 'Hybrid' : 'Inbred';
+            if (distArea == null || !Number.isFinite(distArea)) {
+              errs.area_monitored_ha = `No ${seedLabel} seed distribution area found for this farmer.`;
+            } else if (num > distArea) {
+              errs.area_monitored_ha = `Area Monitored (${num} ha) cannot exceed the farmer's ${seedLabel} seed distribution area of ${distArea} ha.`;
+            }
+          }
+        }
+      }
+    }
+
     return errs;
   };
 
   const handleSubmit = () => {
     const errs = validate();
-    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      if (errs.area_monitored_ha) {
+        showModalToast('error', errs.area_monitored_ha);
+      }
+      return;
+    }
+
+    // Frontend pre-check applies only to NEW records (activeSeason = the
+    // finalized encoding cycle). Edits defer entirely to the backend,
+    // which validates against record.poll — this form has no reliable
+    // way to know that season client-side.
+    if (!editRecord && activeSeason?.season && activeSeason?.year && form.date_observed) {
+      if (!isDateInSeason(form.date_observed, activeSeason.season, activeSeason.year)) {
+        const range = getSeasonDateRange(activeSeason.season, activeSeason.year);
+        setSeasonModal({
+          enteredDate: form.date_observed,
+          seasonLabel: activeSeason.season_display || activeSeason.season,
+          year: activeSeason.year,
+          start: range?.start,
+          end: range?.end,
+        });
+        return;
+      }
+    }
+
     onSave({ ...form, farmer_id: farmer.id });
   };
 
@@ -205,18 +317,20 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         </div>
         <div style={{ marginTop: '0.9rem', color: '#475569', fontSize: '0.82rem' }}>
           {(() => {
+            const totalHaText = farmer.farmer_hectares != null ? `${farmer.farmer_hectares} ha` : 'not set';
             if (!form.seed_source) {
-              return 'Select a seed type to view distribution info.';
+              return `Select a seed type to view distribution info. Farmer total hectares: ${totalHaText}.`;
             }
             if (form.seed_source === 'OWN_SEED') {
-              return 'Own Seed — no distribution record needed.';
+              return `Own Seed — no government distribution record. Validated against the farmer's total registered hectares: ${totalHaText}.`;
             }
             // For HYBRID or INBRED — look up distribution data per seed type
             const distInfo = farmer.distribution_by_seed_type?.[form.seed_source];
             if (distInfo) {
-              return `Distributed: ${distInfo.seed_type_name} — ${distInfo.variety_name}`;
+              const areaText = distInfo.farm_area_ha != null ? ` — ${distInfo.farm_area_ha} ha distributed` : '';
+              return `Distributed: ${distInfo.seed_type_name} — ${distInfo.variety_name}${areaText}. Farmer total hectares: ${totalHaText}.`;
             }
-            return `No seed distribution record found for ${form.seed_source === 'HYBRID' ? 'Hybrid' : 'Inbred'}.`;
+            return `No seed distribution record found for ${form.seed_source === 'HYBRID' ? 'Hybrid' : 'Inbred'}. Farmer total hectares: ${totalHaText}.`;
           })()}
         </div>
       </div>
@@ -403,7 +517,7 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
         <div>
           <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>Date Observed <span style={{ color: '#dc2626' }}>*</span></label>
-          <input type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} style={inp(!!errors.date_observed)} />
+          <input  ref={dateInputRef} type="date" value={form.date_observed} onChange={e => { setForm(p => ({ ...p, date_observed: e.target.value })); setErrors(p => ({ ...p, date_observed: '' })); }} style={inp(!!errors.date_observed)} />
           {form.date_observed > new Date().toISOString().split('T')[0] && (
             <p style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: '#b45309', margin: '0.35rem 0 0' }}>
               <AlertCircle size={14} /> Future date — make sure this is intentional.
@@ -411,23 +525,43 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
           )}
           {errors.date_observed && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.date_observed}</p>}
         </div>
-        <div>
-          <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
-            Area Monitored (ha)
-            {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
-              <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 600, color: '#16a34a', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
-                auto-filled
-              </span>
-            )}
-          </label>
-          <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
-            onChange={e => setForm(p => ({ ...p, area_monitored_ha: e.target.value }))}
-            placeholder="e.g. 0.50" style={inp(false)} />
-          {form.crop_phase && form.crop_phase !== 'ESTABLISHMENT' && farmer.seed_records?.[form.seed_source]?.area_monitored_ha && (
-            <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>
-              Carried over from Crop Establishment. You can still edit if needed.
-            </p>
-          )}
+                <div>
+          {(() => {
+            const isLocked = form.crop_phase && form.crop_phase !== 'ESTABLISHMENT';
+            return (
+              <>
+                <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155', display: 'block', marginBottom: '0.375rem' }}>
+                  Area Monitored (ha) {form.crop_phase === 'ESTABLISHMENT' && <span style={{ color: '#dc2626' }}>*</span>}
+                  {isLocked && (
+                    <span style={{ marginLeft: '0.5rem', fontSize: '0.65rem', fontWeight: 600, color: '#6b7280', backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: '999px', padding: '0.1rem 0.45rem' }}>
+                      🔒 locked
+                    </span>
+                  )}
+                </label>
+                <input type="number" step="0.01" min="0.01" value={form.area_monitored_ha}
+                  onChange={e => {
+                    if (isLocked) return;
+                    setForm(p => ({ ...p, area_monitored_ha: e.target.value }));
+                    setErrors(p => ({ ...p, area_monitored_ha: '' }));
+                  }}
+                  readOnly={isLocked}
+                  disabled={isLocked}
+                  placeholder="e.g. 0.50"
+                  style={{
+                    ...inp(!!errors.area_monitored_ha),
+                    backgroundColor: isLocked ? '#f3f4f6' : 'white',
+                    color: isLocked ? '#6b7280' : undefined,
+                    cursor: isLocked ? 'not-allowed' : 'text',
+                  }} />
+                {isLocked && (
+                  <p style={{ fontSize: '0.68rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>
+                    Carried over from Crop Establishment. This value is locked and cannot be edited here.
+                  </p>
+                )}
+                {errors.area_monitored_ha && <p style={{ fontSize: '0.72rem', color: '#dc2626', margin: '0.25rem 0 0' }}>{errors.area_monitored_ha}</p>}
+              </>
+            );
+          })()}
         </div>
       </div>
 
@@ -447,6 +581,42 @@ const EncodeForm = ({ farmer, editRecord, onSave, onClose, saving, showToast }) 
         style={{ width: '100%', padding: '1rem', backgroundColor: saving ? '#d1d5db' : GREEN.primary, color: 'white', border: 'none', borderRadius: '1rem', fontWeight: 800, fontSize: '1rem', cursor: saving ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', boxShadow: saving ? 'none' : `0 10px 24px ${GREEN.primary}40`, transition: 'all 0.2s' }}>
         {saving ? 'Saving...' : <><CheckCircle size={18} /> {editRecord ? 'Update Record' : 'Save Observation'}</>}
       </button>
+
+      {/* Invalid Date Observed — blocking season-validation modal */}
+      {seasonModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 950, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', animation: 'fadeIn 0.2s ease' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '1.25rem', padding: '1.5rem', maxWidth: 400, width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.25)', animation: 'slideUp 0.25s cubic-bezier(0.34,1.56,0.64,1)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <AlertCircle size={20} color="#dc2626" />
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#111827' }}>Invalid Date Observed</h3>
+            </div>
+            <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#374151' }}>
+              {seasonModal.noPoll
+                ? 'This historical record has no associated season and cannot be date-validated. The date was not changed.'
+                : 'This date is outside the active season. Please correct the date.'}
+            </p>
+            <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.75rem', padding: '0.75rem 0.9rem', marginBottom: '1.25rem', fontSize: '0.78rem', color: '#7f1d1d', lineHeight: 1.6 }}>
+              <div><strong>Date entered:</strong> {seasonModal.enteredDate}</div>
+              {!seasonModal.noPoll && (
+                <>
+                  <div><strong>Active season:</strong> {seasonModal.seasonLabel} {seasonModal.year}</div>
+                  <div><strong>Valid dates:</strong> {seasonModal.start} to {seasonModal.end}</div>
+                </>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button type="button" onClick={() => setSeasonModal(null)}
+                style={{ flex: 1, padding: '0.7rem', borderRadius: '0.75rem', border: '1.5px solid #e5e7eb', backgroundColor: 'white', color: '#374151', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="button" onClick={() => { setSeasonModal(null); dateInputRef.current?.focus(); }}
+                style={{ flex: 1, padding: '0.7rem', borderRadius: '0.75rem', border: 'none', backgroundColor: GREEN.primary, color: 'white', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}>
+                Correct Date
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* In-modal toast — center bottom, fixed sa loob ng modal */}
       {modalToast && (
@@ -604,10 +774,14 @@ const CropMonitoring = () => {
   const handlePhaseFilter = (val) => { setPhaseFilter(val); setCurrentPage(1); };
   const handleBrgyFilter  = (val) => { setBrgyFilter(val);  setCurrentPage(1); };
 
+
+  const [dateValidationError, setDateValidationError] = useState(null);
+
   // ── ENCODE ──
   const openEncode = (farmer, record = null) => {
     setSelectedFarmer(farmer);
     setEditRecord(record);
+    setDateValidationError(null);
     setShowPanel(true);
   };
 
@@ -640,7 +814,12 @@ const CropMonitoring = () => {
       setEditRecord(null);
       await loadData(search, brgyFilter, 'load');
     } catch (err) {
-      showToast('error', err.response?.data?.error || 'Failed to save record.');
+      const data = err.response?.data;
+      if (data?.error_code === 'DATE_OUTSIDE_SEASON' || data?.error_code === 'RECORD_HAS_NO_POLL') {
+        setDateValidationError(data);
+      } else {
+        showToast('error', data?.error || 'Failed to save record.');
+      }
     } finally {
       setSaving(false);
     }
@@ -1182,6 +1361,8 @@ const CropMonitoring = () => {
               onClose={() => { setShowPanel(false); setSelectedFarmer(null); setEditRecord(null); }}
               saving={saving}
               showToast={showToast}
+              activeSeason={activeSeason}
+              dateValidationError={dateValidationError}
             />
           </div>
         </>
