@@ -1546,12 +1546,20 @@ class ReportFilterOptionsView(APIView):
         current_year   = None
         try:
             from apps.seed_poll.models import FinalSeed as FS
-            latest = FS.objects.order_by('-created_at').first()
+            latest = FS.objects.order_by('-confirmed_at', '-id').first()
             if latest:
                 current_season = latest.season
                 current_year   = latest.year
         except Exception:
             pass
+
+        # Keep all historical DistributionEvent filter values, then ensure
+        # the active FinalSeed season and year are selectable as well.
+        if current_season and current_season not in seasons:
+            seasons = sorted(set(seasons + [current_season]))
+
+        if current_year is not None and current_year not in years:
+            years = sorted(set(years + [current_year]), reverse=True)
 
         return Response({
             'seasons':        seasons,

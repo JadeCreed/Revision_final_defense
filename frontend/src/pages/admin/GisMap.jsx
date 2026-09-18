@@ -822,12 +822,17 @@ const BarangayPanel = ({ barangayName, plots, approvedCounts, harvestRecords, ac
   const totalApproved   = approvedCounts?.[barangayName] ?? brgyPlots[0]?.total_approved_in_brgy ?? 0;
   
   const totalHa = useMemo(() => {
-  // Sum area per farmer+seed_source combo at ESTABLISHMENT phase only
-  // A farmer with 0.5ha OWN_SEED + 0.5ha INBRED = 1.0ha total
+  // Sum area per farmer+seed_source combo using each combo's LATEST
+  // monitoring record, whatever phase it's currently in. GISPlotsView
+  // already dedupes to one row per farmer+seed_source picking the most
+  // recent record by date_observed (see backend combo_key logic), so
+  // `brgyPlots` here already contains at most one row per combo — this
+  // no longer needs to re-filter by phase, only sum what's present.
+  // A farmer with 0.5ha OWN_SEED + 0.5ha INBRED = 1.0ha total.
+  
   const seen = new Set();
   let total = 0;
   brgyPlots.forEach(p => {
-    if (p.crop_phase_key !== 'ESTABLISHMENT') return;
     const ha = parseFloat(p.area_ha) || 0;
     if (ha <= 0) return;
     const key = `${p.farmer}::${p.seed_source}`;

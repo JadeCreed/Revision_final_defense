@@ -873,17 +873,22 @@ export const RoleGisMap = ({ assignedBarangays = [], roleLabel = '', pollId = nu
                     // A farmer with 0.5ha OWN_SEED + 0.5ha INBRED = 1.0ha total
                     const seen = new Set();
                     let total = 0;
-                    brgyPlots.forEach(p => {
-                      if (p.crop_phase_key !== 'ESTABLISHMENT') return;
-                      const ha = parseFloat(p.area_ha) || 0;
-                      if (ha <= 0) return;
-                      const key = `${p.farmer}::${p.seed_source}`;
-                      if (seen.has(key)) return;
-                      seen.add(key);
-                      total += ha;
-                    });
-                    return total > 0 ? `${total.toFixed(1)} ha` : '—';
-                  })()}</p>
+
+                      brgyPlots.forEach(p => {
+                        const ha = parseFloat(p.area_ha) || 0;
+                        if (ha <= 0) return;
+
+                        const key = `${p.farmer}::${p.seed_source}`;
+                        if (seen.has(key)) return;
+
+                        seen.add(key);
+                        total += ha;
+                      });
+
+                      return total > 0 ? `${total.toFixed(1)} ha` : '—';
+                    })()}
+                  
+                  </p>
                   
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.6rem', color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', fontWeight: 700 }}>Area</p>
                 </div>

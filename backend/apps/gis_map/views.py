@@ -221,8 +221,8 @@ class GISPlotsView(APIView):
                     data['distributed_variety'] = entry.variety.name if entry.variety else None
                     data['distributed_seed_type'] = seed_type_name
                     data['distributed_area_ha'] = float(entry.farm_area_ha) if entry.farm_area_ha else None
-                    if not data['area_ha'] and data['distributed_area_ha']:
-                        data['area_ha'] = data['distributed_area_ha']
+                    # Distribution area is an allocation/reference value only.
+                    # must come only from AT CropMonitoringRecord.area_monitored_ha.
         except Exception as e:
             logger.warning(f'GIS plots: dist info error: {e}')
 
