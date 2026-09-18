@@ -158,6 +158,8 @@ const EMPTY_TAB_FORM = () => ({
 
 const HarvestForm = ({
   harvestingFarmers,   // array from new API — farmers with HARVESTING phase
+  existingHarvestRecords,
+  onDuplicateTabClick,
   onSave,
   onClose,
   saving,
@@ -326,6 +328,15 @@ const HarvestForm = ({
     return harvestingSeedTypes.includes(tabKey);
   };
 
+  const hasExistingHarvestRecord = (tabKey) => {
+  if (editData || !farmerId) return false;
+
+  return existingHarvestRecords.some(record =>
+    String(record.farmer) === String(farmerId) &&
+    record.seed_source === tabKey
+  );
+};
+
   const inp = (err) => ({
     padding: '0.625rem 0.875rem',
     border: `1.5px solid ${err ? '#dc2626' : '#d1d5db'}`,
@@ -359,6 +370,12 @@ const HarvestForm = ({
   };
 
   const handleSaveCurrentTab = () => {
+    if (hasExistingHarvestRecord(activeTab)) {
+    onDuplicateTabClick(
+      `${getSeedCfg(activeTab).label} already has a harvest record for this farmer. Use the Edit button to update it.`
+    );
+    return;
+  }
     const e = validateTab(activeTab);
     if (Object.keys(e).length) {
       setTabErrors(prev => ({ ...prev, [activeTab]: e }));
@@ -424,8 +441,40 @@ const HarvestForm = ({
             onFocus={() => setShowFarmerList(true)}
             onBlur={() => setTimeout(() => setShowFarmerList(false), 130)}
             placeholder='Search by name or RSBSA'
-            style={{ ...inp(!!tabErrors.HYBRID?.farmer_id), paddingLeft: '2.5rem' }}
+            style={{ ...inp(!!tabErrors.HYBRID?.farmer_id), paddingLeft: '2.5rem',paddingRight: farmerSearch ? '2.75rem' : '0.875rem' }}
           />
+
+          {farmerSearch && (
+            <button
+              type='button'
+              title='Clear selected farmer'
+              aria-label='Clear selected farmer'
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => {
+                setFarmerSearch('');
+                setFarmerId('');
+                setShowFarmerList(false);
+                setActiveTab('HYBRID');
+              }}
+              style={{
+                position: 'absolute',
+                right: '0.5rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                width: 28,
+                height: 28,
+                display: 'grid',
+                placeItems: 'center',
+                border: 'none',
+                borderRadius: '50%',
+                backgroundColor: '#f1f5f9',
+                color: '#64748b',
+                cursor: 'pointer',
+              }}
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
 
         {/* Farmer dropdown */}
@@ -502,12 +551,19 @@ const HarvestForm = ({
             const isEncoded  = !!encodedTabs[s.key];
             const hasData    = tabHasData(s.key);
             const isAllowed  = isTabAllowed(s.key);
+            const isAlreadySaved = hasExistingHarvestRecord(s.key);
             const isDisabled = farmerId && !isAllowed; // disabled only after farmer is selected
 
             return (
               <button key={s.key} type='button'
                 onClick={() => {
                   if (isDisabled) return;
+                  if (isAlreadySaved) {
+                    onDuplicateTabClick(
+                      `${s.label} already has a harvest record for this farmer. Use the Edit button to update it.`
+                    );
+                    return;
+                  }
                   setActiveTab(s.key);
                 }}
                 disabled={isDisabled}
@@ -534,7 +590,7 @@ const HarvestForm = ({
                   position: 'relative',
                   opacity: isDisabled ? 0.45 : 1,
                 }}>
-                {isEncoded && (
+                {(isEncoded || isAlreadySaved) && (
                   <div style={{
                     position: 'absolute', top: -8, right: -8,
                     backgroundColor: s.color, borderRadius: '999px',
@@ -557,9 +613,9 @@ const HarvestForm = ({
                 <p style={{ margin: '0.15rem 0 0', fontSize: '0.6rem', color: isDisabled ? '#d1d5db' : isActive ? s.color : '#94a3b8', fontWeight: 600 }}>
                   {isDisabled ? 'Not harvesting' : s.sublabel}
                 </p>
-                {isEncoded && (
+                {(isEncoded || isAlreadySaved) && (
                   <p style={{ margin: '0.2rem 0 0', fontSize: '0.58rem', color: s.color, fontWeight: 700 }}>
-                    ✓ Saved
+                    ✓ Already encoded
                   </p>
                 )}
               </button>
@@ -780,8 +836,9 @@ const HarvestForm = ({
                 <span style={{ fontSize: '0.65rem', fontWeight: 400, color: '#94a3b8' }}>(from distribution)</span>
               </label>
               <input type='number' step='1' min='0'
+                title='Auto-filled from confirmed seed distribution'
                 placeholder='bags received'
-                value={form.seed_bags_received}
+                value={form.seed_bags_received} readOnly
                 onChange={e => setField('seed_bags_received', e.target.value)}
                 style={inp(false)} />
             </div>
@@ -1643,6 +1700,8 @@ const BrgyHarvest = () => {
             </div>
             <HarvestForm
               harvestingFarmers={harvestingFarmers}
+              existingHarvestRecords={records}
+              onDuplicateTabClick={(message) => pushToast(message, 'warning')}
               editData={editData}
               onSave={handleSave}
               onClose={() => { setShowForm(false); setEditData(null); }}
