@@ -109,7 +109,7 @@ const REPORT_CATEGORIES = [
     // Harvesting accomplishment — placeholder
     key: 'HARVESTING_REPORT',
     label: 'Harvesting Report',
-    description: 'Harvest accomplishment summary. Harvest columns will be filled once Yield Encode data is available.',
+    description: 'Harvest accomplishment summary per barangay, sourced from encoded harvest records — area, volume, and weighted yield by seed source.',
     icon: BarChart2,
     color: '#9a3412',
     bg: '#fff7ed',
@@ -174,12 +174,24 @@ const PREVIEW_COLS = {
     { key: 'own_seed_area', label: 'Own Seed Area (ha)' },
     { key: 'own_seed_farmers', label: 'Own Seed Farmers' },
   ],
-  HARVESTING_REPORT: [
+    HARVESTING_REPORT: [
     { key: 'barangay', label: 'Barangay' },
-    { key: 'organization', label: 'Organization' },
-    { key: 'variety_name', label: 'Variety' },
-    { key: 'area_planted', label: 'Area Planted (ha)' },
-    { key: 'qty_bags', label: 'Bags Distributed' },
+
+    { key: 'all_area', label: 'All Area (ha)' },
+    { key: 'all_yield', label: 'All Yield (t/ha)' },
+    { key: 'all_volume', label: 'All Volume (MT)' },
+
+    { key: 'hybrid_area', label: 'Hybrid Area (ha)' },
+    { key: 'hybrid_yield', label: 'Hybrid Yield (t/ha)' },
+    { key: 'hybrid_volume', label: 'Hybrid Volume (MT)' },
+
+    { key: 'inbred_area', label: 'Inbred Area (ha)' },
+    { key: 'inbred_yield', label: 'Inbred Yield (t/ha)' },
+    { key: 'inbred_volume', label: 'Inbred Volume (MT)' },
+
+    { key: 'own_seed_area', label: 'Own Seed Area (ha)' },
+    { key: 'own_seed_yield', label: 'Own Seed Yield (t/ha)' },
+    { key: 'own_seed_volume', label: 'Own Seed Volume (MT)' },
   ],
 };
 
@@ -1083,8 +1095,8 @@ export default function Reports() {
                           ))}
                         </tr>
                       ))}
-                      {/* TOTAL + Remarks rows — Planting Report only */}
-                      {activeReportType === 'PLANTING_REPORT' && previewData?.totals && (
+                                            {/* TOTAL + Remarks rows — Planting Report and Harvesting Report */}
+                      {['PLANTING_REPORT', 'HARVESTING_REPORT'].includes(activeReportType) && previewData?.totals && (
                         <>
                           <tr style={{ backgroundColor: GREEN.soft, borderTop: '2px solid #166534' }}>
                             {previewCols.map((col, i) => (

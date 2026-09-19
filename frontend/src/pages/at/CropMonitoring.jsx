@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import {
   getATFarmers,
+  getATCropMonitoringStats,
   getATDashboardStats,
   createCropRecord,
   updateCropRecord,
@@ -712,7 +713,7 @@ const CropMonitoring = () => {
 
       const [farmersRes, statsRes, seedRes] = await Promise.all([
         getATFarmers({ search: searchTerm, barangay }),
-        getATDashboardStats(),
+        getATCropMonitoringStats(),
         getFinalSeeds().catch(() => ({ data: [] })),
       ]);
 

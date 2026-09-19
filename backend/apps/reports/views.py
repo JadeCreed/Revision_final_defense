@@ -1288,122 +1288,331 @@ def generate_planting_report(season, report_year, barangay=None, month_num=None)
 
     return wb
 
+
 # ─────────────────────────────────────────────────────────────
-# HARVESTING ACCOMPLISHMENT REPORT — Placeholder
-# Harvest data comes from YieldEncode (not yet built)
+# HARVESTING ACCOMPLISHMENT REPORT — DATA CALCULATOR
+# Source of truth: HarvestRecord ONLY (never DistributionEntry,
+# never CropMonitoringRecord). Filtered by the record's Poll
+# (season + year) — not harvest_date, since Dry Season spans two
+# calendar years and Poll is the system's season authority.
+#
+# ROUNDING RULE: all area/volume sums below (per barangay AND the
+# TOTAL row) are accumulated from raw, unrounded HarvestRecord
+# values. Yield is computed from those raw sums. Rounding to 2
+# decimals happens exactly once, at the very end, only on the
+# values actually written to the report. Never sum already-rounded
+# numbers.
 # ─────────────────────────────────────────────────────────────
 
-def generate_harvesting_report(entries_qs, season, year):
-    """
-    Generates the Harvesting Accomplishment Report structure.
-    Harvest columns are placeholders — they will be populated
-    once the Yield Encode feature is completed.
-    """
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = 'Harvest Accomplishment'
+HARVESTING_REPORT_BARANGAY_ORDER = [
+    'Abang', 'Aliliw', 'Atulinao', 'Ayuti', 'Igang', 'Kabatete', 'Kakawit',
+    'Kalangay', 'Kalyaat', 'Kilib', 'Kulapi', 'Mahabang Parang', 'Malupak',
+    'Manasa', 'May-it', 'Nagsimano', 'Nalunao', 'Palola', 'Piis', 'Samil',
+    'Tiawe', 'Tinamnan',
+]
+# NOTE: spelling differs from PLANTING_REPORT_BARANGAY_ORDER
+# ('May-It' / 'Nagsinamo') — intentional, verified against the
+# actual Harvesting template. Do not merge the two lists.
 
-    widths = {
-        'A': 5, 'B': 22, 'C': 18, 'D': 12, 'E': 12,
-        'F': 14, 'G': 16, 'H': 16, 'I': 16, 'J': 14,
+
+def _harvesting_report_title_lines(season, report_year):
+    season = (season or '').upper()
+    if season == 'DRY':
+        season_line = f'DRY SEASON {report_year - 1}-{report_year}'
+    elif season == 'WET':
+        season_line = f'WET SEASON {report_year}'
+    else:
+        season_line = f'{season} SEASON {report_year}'
+    return season_line, 'For the Whole Season'
+
+
+def _agg_seed_group(records):
+    """
+    Sums a list of HarvestRecord into RAW (unrounded) area_ha and
+    volume_mt. Returns (None, None) for an empty group — the report
+    must leave that group BLANK, not zero. No rounding happens here.
+    """
+    if not records:
+        return None, None
+    area = sum(float(r.harvest_area_ha or 0) for r in records)
+    volume = sum((float(r.harvest_bags or 0) * 50) / 1000 for r in records)
+    return area, volume
+
+
+def _yield_from_raw(area, volume):
+    """Weighted yield from raw (unrounded) area/volume. None if area is 0/missing."""
+    if area is None or volume is None or area <= 0:
+        return None
+    return volume / area
+
+
+def _round2(value):
+    return round(value, 2) if value is not None else None
+
+
+def _build_harvesting_accomplishment_data(season, report_year, barangay=None):
+    from apps.production.models import HarvestRecord
+
+    qs = HarvestRecord.objects.filter(
+        poll__isnull=False,
+        poll__season=(season or '').upper(),
+        poll__year=report_year,
+    ).only('barangay', 'seed_source', 'harvest_area_ha', 'harvest_bags')
+
+    if barangay:
+        qs = qs.filter(barangay=barangay)
+
+    records = list(qs)
+
+    # ── RAW (unrounded) per-barangay aggregates ──
+    raw_per_brgy = {}
+    for brgy in HARVESTING_REPORT_BARANGAY_ORDER:
+        brgy_records = [r for r in records if r.barangay == brgy]
+
+        hybrid = [r for r in brgy_records if r.seed_source == 'HYBRID']
+        inbred = [r for r in brgy_records if r.seed_source == 'INBRED']
+        own    = [r for r in brgy_records if r.seed_source == 'OWN_SEED']
+
+        h_area, h_vol = _agg_seed_group(hybrid)
+        i_area, i_vol = _agg_seed_group(inbred)
+        o_area, o_vol = _agg_seed_group(own)
+
+        # All Seed Type is populated only when at least one of the
+        # three recognized seed sources (HYBRID / INBRED / OWN_SEED)
+        # has a record for this barangay — checked explicitly here,
+        # not inferred from a generic "any records" truthiness check.
+        if hybrid or inbred or own:
+            all_area = (h_area or 0) + (i_area or 0) + (o_area or 0)
+            all_vol  = (h_vol or 0) + (i_vol or 0) + (o_vol or 0)
+        else:
+            all_area = all_vol = None
+
+        raw_per_brgy[brgy] = {
+            'all_area': all_area, 'all_volume': all_vol,
+            'hybrid_area': h_area, 'hybrid_volume': h_vol,
+            'inbred_area': i_area, 'inbred_volume': i_vol,
+            'own_seed_area': o_area, 'own_seed_volume': o_vol,
+        }
+
+    # ── RAW column TOTAL, summed from the raw per-barangay values
+    #    above — never from rounded display values ──
+    def _col_total_raw(area_key, vol_key):
+        areas = [v[area_key] for v in raw_per_brgy.values() if v[area_key] is not None]
+        vols  = [v[vol_key]  for v in raw_per_brgy.values() if v[vol_key]  is not None]
+        if not areas:
+            return None, None
+        return sum(areas), sum(vols)
+
+    raw_totals = {}
+    for prefix, area_k, vol_k in [
+        ('all', 'all_area', 'all_volume'),
+        ('hybrid', 'hybrid_area', 'hybrid_volume'),
+        ('inbred', 'inbred_area', 'inbred_volume'),
+        ('own_seed', 'own_seed_area', 'own_seed_volume'),
+    ]:
+        t_area, t_vol = _col_total_raw(area_k, vol_k)
+        raw_totals[f'{prefix}_area']   = t_area
+        raw_totals[f'{prefix}_volume'] = t_vol
+
+    # ── FINAL OUTPUT — rounding to 2 decimals happens ONLY here ──
+    per_brgy = {}
+    for brgy, raw in raw_per_brgy.items():
+        row = {}
+        for prefix in ('all', 'hybrid', 'inbred', 'own_seed'):
+            area = raw[f'{prefix}_area']
+            vol  = raw[f'{prefix}_volume']
+            row[f'{prefix}_area']   = _round2(area)
+            row[f'{prefix}_volume'] = _round2(vol)
+            row[f'{prefix}_yield']  = _round2(_yield_from_raw(area, vol))
+        per_brgy[brgy] = row
+
+    totals = {}
+    for prefix in ('all', 'hybrid', 'inbred', 'own_seed'):
+        area = raw_totals[f'{prefix}_area']
+        vol  = raw_totals[f'{prefix}_volume']
+        totals[f'{prefix}_area']   = _round2(area)
+        totals[f'{prefix}_volume'] = _round2(vol)
+        totals[f'{prefix}_yield']  = _round2(_yield_from_raw(area, vol))
+
+    season_line, period_label = _harvesting_report_title_lines(season, report_year)
+
+    return {
+        'season_line': season_line,
+        'period_label': period_label,
+        'per_barangay': per_brgy,
+        'totals': totals,
     }
-    for col, w in widths.items():
-        ws.column_dimensions[col].width = w
 
-    # Title
-    ws.merge_cells('A1:J1')
-    ws['A1'] = 'HARVESTING ACCOMPLISHMENT REPORT'
-    ws['A1'].font      = _bold_font(13)
-    ws['A1'].alignment = _center(False)
-    ws.row_dimensions[1].height = 22
 
-    ws.merge_cells('A2:J2')
-    ws['A2'] = (
-        f'Municipal Agriculture Office — Lucban, Quezon  |  '
-        f'{season} Season {year}'
+# ─────────────────────────────────────────────────────────────
+# HARVESTING ACCOMPLISHMENT REPORT — Excel generator
+# Loads the REAL client template. Only the active groups
+# (B:D, E:G, N:P, AI:AK) and row 37 TOTAL are written.
+# H:M / Q:Y / Z:AH stay untouched (template already blank).
+# Rows 42-48 (signatories) are static in the template — never touched.
+# ─────────────────────────────────────────────────────────────
+
+def generate_harvesting_report(season, report_year, barangay=None):
+    import os
+    from django.conf import settings
+
+    template_path = os.path.join(
+        settings.BASE_DIR, 'apps', 'reports', 'templates_excel',
+        'harvesting_accomplishment_report.xlsx'
     )
-    ws['A2'].font      = _normal_font(10)
-    ws['A2'].alignment = _center(False)
-    ws.row_dimensions[2].height = 16
+    wb = openpyxl.load_workbook(template_path)
+    ws = wb.active
 
-    # Notice banner
-    ws.merge_cells('A3:J3')
-    ws['A3'] = (
-        'NOTE: Harvest data will be populated from the Yield Encode menu '
-        'after the harvest season.'
-    )
-    ws['A3'].font      = _normal_font(9, '854D0E', italic=True)
-    ws['A3'].fill      = PatternFill('solid', start_color='FEF9C3')
-    ws['A3'].alignment = _left()
-    ws.row_dimensions[3].height = 28
+    data = _build_harvesting_accomplishment_data(season, report_year, barangay=barangay)
 
-    # Headers
-    headers = [
-        'No.', 'Barangay', 'Program',
-        'No. of\nBeneficiaries', 'Area\nPlanted (ha)',
-        'Variety',
-        'Area\nHarvested (ha)', 'Total\nProduction\n(bags)',
-        'Ave. Yield\n(bags/ha)', 'Remarks',
+    title_lines = (ws['A1'].value or '').split('\n')
+    while len(title_lines) < 5:
+        title_lines.append('')
+    title_lines[3] = data['season_line']
+    title_lines[4] = data['period_label']
+    ws['A1'] = '\n'.join(title_lines)
+
+    COLUMN_GROUPS = [
+        ('B', 'C', 'D', 'all'),
+        ('E', 'F', 'G', 'hybrid'),
+        ('N', 'O', 'P', 'inbred'),
+        ('AI', 'AJ', 'AK', 'own_seed'),
     ]
-    ws.row_dimensions[5].height = 36
-    for col_idx, header in enumerate(headers, start=1):
-        cell = ws.cell(row=5, column=col_idx, value=header)
-        cell.font      = _bold_font(9, 'FFFFFF')
-        cell.fill      = PatternFill('solid', start_color='1A4D1A')
-        cell.alignment = _center()
-        cell.border    = _thin_border()
 
-    brgy_groups = defaultdict(list)
-    for entry in entries_qs.select_related('batch__event', 'farmer', 'variety'):
-        brgy_groups[entry.batch.event.barangay].append(entry)
+    def _write(coord, value):
+        cell = ws[coord]
+        cell.value = value
+        if value is not None:
+            cell.number_format = '0.00'
 
-    current_row = 6
-    row_num = 1
+    for idx, brgy in enumerate(HARVESTING_REPORT_BARANGAY_ORDER):
+        row = 7 + idx
+        vals = data['per_barangay'][brgy]
+        for area_col, yield_col, vol_col, prefix in COLUMN_GROUPS:
+            _write(f'{area_col}{row}', vals[f'{prefix}_area'])
+            _write(f'{yield_col}{row}', vals[f'{prefix}_yield'])
+            _write(f'{vol_col}{row}', vals[f'{prefix}_volume'])
 
-    for brgy in sorted(brgy_groups.keys()):
-        brgy_entries = brgy_groups[brgy]
-        event_groups = defaultdict(list)
-        for e in brgy_entries:
-            event_groups[e.batch.event.id].append(e)
-
-        for ev_entries in event_groups.values():
-            ev = ev_entries[0].batch.event
-            program = (
-                'Hybrid (Region)' if _is_region(ev) else 'Inbred (PhilRice)'
-            )
-            area = sum(
-                float(e.area_planted or e.farm_area_ha or 0)
-                for e in ev_entries
-            )
-            varieties = ', '.join(
-                set(e.variety.name for e in ev_entries if e.variety)
-            ) or '—'
-
-            row_values = [
-                row_num, brgy, program,
-                len(ev_entries), round(area, 4),
-                varieties,
-                '—', '—', '—',
-                'Pending harvest data',
-            ]
-            ws.row_dimensions[current_row].height = 15
-
-            for col_idx, value in enumerate(row_values, start=1):
-                cell = ws.cell(row=current_row, column=col_idx, value=value)
-                cell.font      = _normal_font(9)
-                cell.alignment = _center(False)
-                cell.border    = _thin_border()
-                # Gray out the pending harvest columns
-                if col_idx in [7, 8, 9, 10]:
-                    cell.fill = PatternFill('solid', start_color='F9FAFB')
-                    cell.font = _normal_font(9, '9CA3AF', italic=True)
-                elif current_row % 2 == 0:
-                    cell.fill = PatternFill('solid', start_color='F0FDF4')
-
-            current_row += 1
-            row_num     += 1
+    totals = data['totals']
+    for area_col, yield_col, vol_col, prefix in COLUMN_GROUPS:
+        _write(f'{area_col}37', totals[f'{prefix}_area'])
+        _write(f'{yield_col}37', totals[f'{prefix}_yield'])
+        _write(f'{vol_col}37', totals[f'{prefix}_volume'])
 
     return wb
+
+
+# def generate_harvesting_report(entries_qs, season, year):
+#     """
+#     Generates the Harvesting Accomplishment Report structure.
+#     Harvest columns are placeholders — they will be populated
+#     once the Yield Encode feature is completed.
+#     """
+#     wb = openpyxl.Workbook()
+#     ws = wb.active
+#     ws.title = 'Harvest Accomplishment'
+
+#     widths = {
+#         'A': 5, 'B': 22, 'C': 18, 'D': 12, 'E': 12,
+#         'F': 14, 'G': 16, 'H': 16, 'I': 16, 'J': 14,
+#     }
+#     for col, w in widths.items():
+#         ws.column_dimensions[col].width = w
+
+#     # Title
+#     ws.merge_cells('A1:J1')
+#     ws['A1'] = 'HARVESTING ACCOMPLISHMENT REPORT'
+#     ws['A1'].font      = _bold_font(13)
+#     ws['A1'].alignment = _center(False)
+#     ws.row_dimensions[1].height = 22
+
+#     ws.merge_cells('A2:J2')
+#     ws['A2'] = (
+#         f'Municipal Agriculture Office — Lucban, Quezon  |  '
+#         f'{season} Season {year}'
+#     )
+#     ws['A2'].font      = _normal_font(10)
+#     ws['A2'].alignment = _center(False)
+#     ws.row_dimensions[2].height = 16
+
+#     # Notice banner
+#     ws.merge_cells('A3:J3')
+#     ws['A3'] = (
+#         'NOTE: Harvest data will be populated from the Yield Encode menu '
+#         'after the harvest season.'
+#     )
+#     ws['A3'].font      = _normal_font(9, '854D0E', italic=True)
+#     ws['A3'].fill      = PatternFill('solid', start_color='FEF9C3')
+#     ws['A3'].alignment = _left()
+#     ws.row_dimensions[3].height = 28
+
+#     # Headers
+#     headers = [
+#         'No.', 'Barangay', 'Program',
+#         'No. of\nBeneficiaries', 'Area\nPlanted (ha)',
+#         'Variety',
+#         'Area\nHarvested (ha)', 'Total\nProduction\n(bags)',
+#         'Ave. Yield\n(bags/ha)', 'Remarks',
+#     ]
+#     ws.row_dimensions[5].height = 36
+#     for col_idx, header in enumerate(headers, start=1):
+#         cell = ws.cell(row=5, column=col_idx, value=header)
+#         cell.font      = _bold_font(9, 'FFFFFF')
+#         cell.fill      = PatternFill('solid', start_color='1A4D1A')
+#         cell.alignment = _center()
+#         cell.border    = _thin_border()
+
+#     brgy_groups = defaultdict(list)
+#     for entry in entries_qs.select_related('batch__event', 'farmer', 'variety'):
+#         brgy_groups[entry.batch.event.barangay].append(entry)
+
+#     current_row = 6
+#     row_num = 1
+
+#     for brgy in sorted(brgy_groups.keys()):
+#         brgy_entries = brgy_groups[brgy]
+#         event_groups = defaultdict(list)
+#         for e in brgy_entries:
+#             event_groups[e.batch.event.id].append(e)
+
+#         for ev_entries in event_groups.values():
+#             ev = ev_entries[0].batch.event
+#             program = (
+#                 'Hybrid (Region)' if _is_region(ev) else 'Inbred (PhilRice)'
+#             )
+#             area = sum(
+#                 float(e.area_planted or e.farm_area_ha or 0)
+#                 for e in ev_entries
+#             )
+#             varieties = ', '.join(
+#                 set(e.variety.name for e in ev_entries if e.variety)
+#             ) or '—'
+
+#             row_values = [
+#                 row_num, brgy, program,
+#                 len(ev_entries), round(area, 4),
+#                 varieties,
+#                 '—', '—', '—',
+#                 'Pending harvest data',
+#             ]
+#             ws.row_dimensions[current_row].height = 15
+
+#             for col_idx, value in enumerate(row_values, start=1):
+#                 cell = ws.cell(row=current_row, column=col_idx, value=value)
+#                 cell.font      = _normal_font(9)
+#                 cell.alignment = _center(False)
+#                 cell.border    = _thin_border()
+#                 # Gray out the pending harvest columns
+#                 if col_idx in [7, 8, 9, 10]:
+#                     cell.fill = PatternFill('solid', start_color='F9FAFB')
+#                     cell.font = _normal_font(9, '9CA3AF', italic=True)
+#                 elif current_row % 2 == 0:
+#                     cell.fill = PatternFill('solid', start_color='F0FDF4')
+
+#             current_row += 1
+#             row_num     += 1
+
+#     return wb
 
 
 # ─────────────────────────────────────────────────────────────
@@ -1636,6 +1845,49 @@ class ReportPreviewView(APIView):
                 'totals': data['totals'],
             })
 
+        # HARVESTING_REPORT uses its own aggregated barangay-level data
+        # (HarvestRecord ONLY, filtered by Poll season/year) — the exact
+        # same builder function the Excel generator calls, so preview
+        # and download always agree on the numbers.
+        if report_type == 'HARVESTING_REPORT':
+            try:
+                report_year = int(year)
+            except (TypeError, ValueError):
+                return Response({'error': 'A valid year is required.'}, status=400)
+
+            data = _build_harvesting_accomplishment_data(
+                season, report_year, barangay=barangay or None
+            )
+
+            rows = []
+            for brgy in HARVESTING_REPORT_BARANGAY_ORDER:
+                if barangay and brgy != barangay:
+                    continue
+                vals = data['per_barangay'][brgy]
+                rows.append({
+                    'barangay': brgy,
+                    'all_area': vals['all_area'],
+                    'all_yield': vals['all_yield'],
+                    'all_volume': vals['all_volume'],
+                    'hybrid_area': vals['hybrid_area'],
+                    'hybrid_yield': vals['hybrid_yield'],
+                    'hybrid_volume': vals['hybrid_volume'],
+                    'inbred_area': vals['inbred_area'],
+                    'inbred_yield': vals['inbred_yield'],
+                    'inbred_volume': vals['inbred_volume'],
+                    'own_seed_area': vals['own_seed_area'],
+                    'own_seed_yield': vals['own_seed_yield'],
+                    'own_seed_volume': vals['own_seed_volume'],
+                })
+
+            return Response({
+                'count': len(rows),
+                'rows': rows,
+                'season_line': data['season_line'],
+                'period_label': data['period_label'],
+                'totals': data['totals'],
+            })
+
         qs = _build_entry_qs(report_type, season, year, barangay)
 
         rows = []
@@ -1716,7 +1968,7 @@ class ReportDownloadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if report_type != 'PLANTING_REPORT':
+        if report_type not in ('PLANTING_REPORT', 'HARVESTING_REPORT'):
             qs = _build_entry_qs(report_type, season, year, barangay)
             if not qs.exists():
                 return Response(
@@ -1747,8 +1999,29 @@ class ReportDownloadView(APIView):
             wb       = generate_planting_report(season, report_year, barangay=barangay, month_num=month_num)
             filename = f'Planting_Report_{season}_{report_year}'
         elif report_type == 'HARVESTING_REPORT':
-            wb       = generate_harvesting_report(qs, season, year)
-            filename = f'Harvesting_Report_{season}_{year}'
+            from apps.production.models import HarvestRecord
+
+            try:
+                report_year = int(year)
+            except (TypeError, ValueError):
+                return Response({'error': 'A valid year is required.'}, status=400)
+
+            hr_qs = HarvestRecord.objects.filter(
+                poll__isnull=False,
+                poll__season=(season or '').upper(),
+                poll__year=report_year,
+            )
+            if barangay:
+                hr_qs = hr_qs.filter(barangay=barangay)
+
+            if not hr_qs.exists():
+                return Response(
+                    {'error': 'No harvest records found for the selected filters.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            wb       = generate_harvesting_report(season, report_year, barangay=barangay)
+            filename = f'Harvesting_Report_{season}_{report_year}'
         else:
             return Response(
                 {'error': f'Unknown report type: {report_type}'},

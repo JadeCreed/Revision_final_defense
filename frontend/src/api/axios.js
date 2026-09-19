@@ -194,6 +194,7 @@ export const saveSignature    = (id, data)      => API.post(`/distribution/entri
 // Crop monitoring
 export const getATFarmers         = (params) => API.get('/crop-monitoring/at/farmers/', { params });
 export const getATDashboardStats  = ()       => API.get('/accounts/at/dashboard-stats/');
+export const getATCropMonitoringStats = ()   => API.get('/crop-monitoring/at/stats/');
 export const createCropRecord     = (data)   => API.post('/crop-monitoring/records/', data);
 export const updateCropRecord     = (id, data) => API.put(`/crop-monitoring/records/${id}/`, data);
 export const getFarmerCropHistory = (farmerId, params = {}) => API.get(`/crop-monitoring/farmers/${farmerId}/history/`, { params });
